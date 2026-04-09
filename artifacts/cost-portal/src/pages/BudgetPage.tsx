@@ -83,6 +83,7 @@ export default function BudgetPage() {
   const [filterProveedor, setFilterProveedor] = useState("ALL");
   const [filterProductora, setFilterProductora] = useState("ALL");
   const [filterFeeEnCotiz, setFilterFeeEnCotiz] = useState("ALL");
+  const [filterCotizacion, setFilterCotizacion] = useState("ALL");
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set(["MAIN EVENT_INGRESO ESEN Y PARQUEO", "MAIN EVENT_AUDITORIO/MAIN STAGE", "BEFORE/AFTER MAIN EVENT_HOSPITALITY"]));
   const [showAddModal, setShowAddModal] = useState(false);
   const [newItem, setNewItem] = useState<Partial<BudgetItem>>({
@@ -109,6 +110,11 @@ export default function BudgetPage() {
     return ["ALL", ...Array.from(set).sort()];
   }, [items]);
 
+  const cotizaciones = useMemo(() => {
+    const set = new Set(items.map(i => (i.cotizacion || "").trim()).filter(v => v.length > 0));
+    return ["ALL", ...Array.from(set).sort()];
+  }, [items]);
+
   const filtered = useMemo(() => {
     let out = items;
     if (filterEvento !== "ALL") out = out.filter(i => i.evento === filterEvento);
@@ -119,6 +125,7 @@ export default function BudgetPage() {
     else if (filterProductora === "NO") out = out.filter(i => !i.agencyFee);
     if (filterFeeEnCotiz === "SI") out = out.filter(i => i.aplicaFee === "SI");
     else if (filterFeeEnCotiz === "NO") out = out.filter(i => i.aplicaFee !== "SI");
+    if (filterCotizacion !== "ALL") out = out.filter(i => (i.cotizacion || "").trim() === filterCotizacion);
     if (search.trim()) {
       const q = search.toLowerCase();
       out = out.filter(i =>
@@ -132,7 +139,7 @@ export default function BudgetPage() {
       );
     }
     return out;
-  }, [items, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, search]);
+  }, [items, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, search]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, { evento: string; area: string; items: BudgetItem[] }>();
@@ -335,9 +342,13 @@ export default function BudgetPage() {
               <SelectItem value="NO">Fee adicional (20%)</SelectItem>
             </SelectContent>
           </Select>
-          {(filterProveedor !== "ALL" || filterProductora !== "ALL" || filterFeeEnCotiz !== "ALL") && (
+          <Select value={filterCotizacion} onValueChange={setFilterCotizacion}>
+            <SelectTrigger className="w-[180px] bg-card border-card-border text-xs"><SelectValue placeholder="Cotizacion" /></SelectTrigger>
+            <SelectContent>{cotizaciones.map(c => <SelectItem key={c} value={c}>{c === "ALL" ? "All Cotizaciones" : c}</SelectItem>)}</SelectContent>
+          </Select>
+          {(filterProveedor !== "ALL" || filterProductora !== "ALL" || filterFeeEnCotiz !== "ALL" || filterCotizacion !== "ALL") && (
             <button
-              onClick={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); }}
+              onClick={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); }}
               className="text-xs text-primary hover:underline"
             >Clear filters</button>
           )}
