@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight,
@@ -35,9 +35,9 @@ function CotizacionBadge({ value }: { value: string }) {
   if (v === "VOLUNTARIO") return <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 border border-violet-500/20 whitespace-nowrap">VOLUNTARIO</span>;
   if (v === "PROVEE ESEN") return <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-600 border border-teal-500/20 whitespace-nowrap">PROVEE ESEN</span>;
   if (v === "NA") return <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-500/10 text-gray-500 border border-gray-500/20 whitespace-nowrap">N/A</span>;
-  if (v.startsWith("A") && /^A\d+$/.test(v)) return <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 whitespace-nowrap font-mono">{v}</span>;
+  if (/^A\d+$/.test(v)) return <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 whitespace-nowrap font-mono">{v}</span>;
   if (v.startsWith("HTTP")) return <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 border border-blue-500/20 whitespace-nowrap truncate max-w-[100px] block">Link</span>;
-  return <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 whitespace-nowrap truncate max-w-[110px] block">{value.length > 18 ? value.slice(0, 18) + "..." : value}</span>;
+  return <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 whitespace-nowrap truncate max-w-[110px] block" title={value}>{value.length > 18 ? value.slice(0, 18) + "..." : value}</span>;
 }
 
 function ToggleCell({ value, onToggle, labelOn, labelOff }: { value: boolean | string; onToggle: () => void; labelOn?: string; labelOff?: string }) {
@@ -57,8 +57,28 @@ function ToggleCell({ value, onToggle, labelOn, labelOff }: { value: boolean | s
   );
 }
 
+function getInitialItems(): BudgetItem[] {
+  try {
+    const v3Raw = localStorage.getItem("budget-items-v3");
+    if (v3Raw) return JSON.parse(v3Raw);
+    const v2Raw = localStorage.getItem("budget-items-v2");
+    if (v2Raw) {
+      const v2Items = JSON.parse(v2Raw) as any[];
+      const migrated = v2Items.map((item: any) => ({
+        ...item,
+        proveedor: item.proveedor || "",
+      }));
+      localStorage.setItem("budget-items-v3", JSON.stringify(migrated));
+      return migrated;
+    }
+  } catch {}
+  return INITIAL_BUDGET_ITEMS;
+}
+
+const MIGRATED_ITEMS = getInitialItems();
+
 export default function BudgetPage() {
-  const [items, setItems] = useLocalStorage<BudgetItem[]>("budget-items-v2", INITIAL_BUDGET_ITEMS);
+  const [items, setItems] = useLocalStorage<BudgetItem[]>("budget-items-v3", MIGRATED_ITEMS);
   const [search, setSearch] = useState("");
   const [filterEvento, setFilterEvento] = useState("ALL");
   const [filterArea, setFilterArea] = useState("ALL");
@@ -69,7 +89,7 @@ export default function BudgetPage() {
     evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "",
     inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1,
     precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0,
-    cotizacion: "", documento: "",
+    cotizacion: "", documento: "", proveedor: "",
   });
 
   const eventos = useMemo(() => ["ALL", ...Array.from(new Set(items.map(i => i.evento).filter(Boolean)))], [items]);
@@ -97,7 +117,8 @@ export default function BudgetPage() {
         i.area.toLowerCase().includes(q) ||
         i.centroCosto.toLowerCase().includes(q) ||
         i.notas.toLowerCase().includes(q) ||
-        i.cotizacion.toLowerCase().includes(q)
+        i.cotizacion.toLowerCase().includes(q) ||
+        (i.proveedor || "").toLowerCase().includes(q)
       );
     }
     return out;
@@ -176,10 +197,11 @@ export default function BudgetPage() {
       fee: 0, subtotalConFee: 0, iva: 0, total: 0,
       cotizacion: newItem.cotizacion || "",
       documento: newItem.documento || "",
+      proveedor: newItem.proveedor || "",
     };
     setItems(prev => [...prev, recalc(base)]);
     setShowAddModal(false);
-    setNewItem({ evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", documento: "" });
+    setNewItem({ evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", documento: "", proveedor: "" });
   }, [newItem, setItems]);
 
   const toggleArea = (key: string) => {
@@ -199,15 +221,16 @@ export default function BudgetPage() {
   const exportCSV = () => {
     const headers = [
       "EVENTO", "AREA/ZONA", "CENTRO DE COSTO", "ITEM", "DESCRIPCION", "NOTAS/OBSERVACIONES",
-      "IN-KIND?", "PRODUCTION AGENCY FEE?", "QTY", "UoM", "CONTRATACION POR DIAS?", "QTY DIAS",
-      "PRECIO UNITARIO", "SUBTOTAL", "APLICA FEE DE PRODUCCION?", "FEE", "SUBTOTAL CON FEE",
-      "IVA", "TOTAL", "COTIZACION", "DOCUMENTO DE DETALLE"
+      "IN-KIND?", "AURORA 360?", "QTY", "UoM", "CONTRATACION POR DIAS?", "QTY DIAS",
+      "PRECIO UNITARIO", "SUBTOTAL", "APLICA FEE (AURORA 360)?", "FEE", "SUBTOTAL CON FEE",
+      "IVA", "TOTAL", "COTIZACION", "DOCUMENTO DE DETALLE", "PROVEEDOR"
     ];
     const rows = filtered.map(i => [
       i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
       i.inKind ? "SI" : "NO", i.agencyFee ? "SI" : "NO", i.qty, i.uom,
       i.porDias, i.qtyDias, i.precioUnitario, i.subtotal, i.aplicaFee,
-      i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.documento
+      i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.documento,
+      i.proveedor || ""
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -230,7 +253,7 @@ export default function BudgetPage() {
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search items, notes, cotizacion..." className="pl-9 bg-card border-card-border" />
+          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search items, notes, proveedor..." className="pl-9 bg-card border-card-border" />
         </div>
         <Select value={filterEvento} onValueChange={v => { setFilterEvento(v); setFilterArea("ALL"); setFilterCentro("ALL"); }}>
           <SelectTrigger className="w-[200px] bg-card border-card-border"><SelectValue placeholder="Event" /></SelectTrigger>
@@ -257,23 +280,23 @@ export default function BudgetPage() {
               <tr className="border-b border-border bg-muted/50 text-[10px] uppercase tracking-wider">
                 <th className="px-2 py-2.5 w-6"></th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[180px]">Item</th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[140px]">Descripcion</th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[130px]">Notas</th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[100px]">Centro Costo</th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-12">In-Kind</th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[130px]">Descripcion</th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[120px]">Notas</th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px]">Centro Costo</th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-14">In-Kind</th>
                 <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-10">Qty</th>
                 <th className="text-left px-1 py-2.5 font-semibold text-muted-foreground w-16">UoM</th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-12">Dias?</th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16">Tipo</th>
                 <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-10">Dias</th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20">P. Unit.</th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20">Subtotal</th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-12">Fee?</th>
-                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16">Fee</th>
-                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20">Sub+Fee</th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16">Aurora 360</th>
+                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16">Fee 20%</th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16">IVA</th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-24">Total</th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px]">Cotizacion</th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px]">Documento</th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px]">Proveedor</th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[80px]">Documento</th>
                 <th className="w-8 px-1 py-2.5"></th>
               </tr>
             </thead>
@@ -294,7 +317,7 @@ export default function BudgetPage() {
                         <ChevronRight className="w-3.5 h-3.5" />
                       </motion.div>
                     </td>
-                    <td className="px-2 py-2" colSpan={12}>
+                    <td className="px-2 py-2" colSpan={11}>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-foreground text-xs">{group.area}</span>
                         <Badge variant="secondary" className="text-[10px] font-normal py-0">{group.evento === "MAIN EVENT" ? "Main Event" : group.evento === "MAIN EVENT VIP DINNER" ? "VIP Dinner" : "Pre/Post"}</Badge>
@@ -302,7 +325,7 @@ export default function BudgetPage() {
                         {hasInKind && <Badge className="text-[10px] bg-amber-500/15 text-amber-600 border-amber-500/20 font-normal py-0">In-Kind</Badge>}
                       </div>
                     </td>
-                    <td className="px-2 py-2 text-right font-semibold" colSpan={7}>
+                    <td className="px-2 py-2 text-right font-semibold" colSpan={8}>
                       {groupTotal > 0 ? <span className="text-primary text-xs">{formatUSD(groupTotal)}</span> : <span className="text-muted-foreground text-[10px]">In-Kind / $0</span>}
                     </td>
                   </tr>,
@@ -342,10 +365,24 @@ export default function BudgetPage() {
                         <EditableCell value={item.uom} onSave={v => updateItem(item.id, "uom", v)} className="text-muted-foreground text-xs" />
                       </td>
                       <td className="px-1 py-1.5 text-center align-top">
-                        <ToggleCell value={item.porDias} onToggle={() => toggleStringField(item.id, "porDias")} />
+                        <button
+                          onClick={() => toggleStringField(item.id, "porDias")}
+                          className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded border font-medium transition-colors whitespace-nowrap",
+                            item.porDias === "SI"
+                              ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
+                              : "bg-gray-500/10 text-gray-500 border-gray-500/20"
+                          )}
+                        >
+                          {item.porDias === "SI" ? "Por Dia" : "One-Time"}
+                        </button>
                       </td>
                       <td className="px-1 py-1.5 text-center align-top">
-                        <EditableCell value={String(item.qtyDias)} onSave={v => updateItem(item.id, "qtyDias", v)} className="text-center font-mono text-xs" type="number" />
+                        {item.porDias === "SI" ? (
+                          <EditableCell value={String(item.qtyDias)} onSave={v => updateItem(item.id, "qtyDias", v)} className="text-center font-mono text-xs" type="number" />
+                        ) : (
+                          <span className="text-muted-foreground/30 text-xs">--</span>
+                        )}
                       </td>
                       <td className="px-2 py-1.5 text-right align-top font-mono">
                         <EditableCell value={String(item.precioUnitario)} onSave={v => updateItem(item.id, "precioUnitario", parseFloat(v) || 0)} className="text-right font-mono text-xs" type="number" />
@@ -354,13 +391,20 @@ export default function BudgetPage() {
                         {item.subtotal > 0 ? formatUSD(item.subtotal) : "--"}
                       </td>
                       <td className="px-1 py-1.5 text-center align-top">
-                        <ToggleCell value={item.aplicaFee} onToggle={() => toggleStringField(item.id, "aplicaFee")} />
+                        <button
+                          onClick={() => toggleStringField(item.id, "aplicaFee")}
+                          className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded border font-medium transition-colors whitespace-nowrap",
+                            item.aplicaFee === "SI"
+                              ? "bg-primary/10 text-primary border-primary/20"
+                              : "bg-muted/50 text-muted-foreground/40 border-border/50 hover:border-border"
+                          )}
+                        >
+                          {item.aplicaFee === "SI" ? "A360" : "--"}
+                        </button>
                       </td>
                       <td className="px-2 py-1.5 text-right align-top font-mono text-muted-foreground">
                         {item.fee > 0 ? formatUSD(item.fee) : "--"}
-                      </td>
-                      <td className="px-2 py-1.5 text-right align-top font-mono text-muted-foreground">
-                        {item.subtotalConFee > 0 ? formatUSD(item.subtotalConFee) : "--"}
                       </td>
                       <td className="px-2 py-1.5 text-right align-top font-mono text-muted-foreground">
                         {item.iva > 0 ? formatUSD(item.iva) : "--"}
@@ -375,10 +419,13 @@ export default function BudgetPage() {
                         )}
                       </td>
                       <td className="px-2 py-1.5 align-top">
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-0.5">
                           <CotizacionBadge value={item.cotizacion} />
                           <EditableCell value={item.cotizacion} onSave={v => updateItem(item.id, "cotizacion", v)} className="text-muted-foreground text-[10px]" placeholder="cotizacion..." />
                         </div>
+                      </td>
+                      <td className="px-2 py-1.5 align-top">
+                        <EditableCell value={item.proveedor || ""} onSave={v => updateItem(item.id, "proveedor", v)} className="text-muted-foreground text-xs" placeholder="proveedor..." />
                       </td>
                       <td className="px-2 py-1.5 align-top">
                         <EditableCell value={item.documento} onSave={v => updateItem(item.id, "documento", v)} className="text-muted-foreground text-[10px]" placeholder="doc..." />
@@ -400,13 +447,13 @@ export default function BudgetPage() {
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-border bg-muted/30">
-                <td colSpan={16} className="px-3 py-3 font-semibold text-muted-foreground text-xs">
+                <td colSpan={15} className="px-3 py-3 font-semibold text-muted-foreground text-xs">
                   TOTAL -- {filtered.length} items
                 </td>
                 <td className="px-2 py-3 text-right font-bold text-sm text-primary font-mono">
                   {formatUSD(totalBudget)}
                 </td>
-                <td colSpan={3}></td>
+                <td colSpan={4}></td>
               </tr>
             </tfoot>
           </table>
@@ -463,12 +510,12 @@ export default function BudgetPage() {
               <Input type="number" step="0.01" value={newItem.precioUnitario} onChange={e => setNewItem(p => ({ ...p, precioUnitario: parseFloat(e.target.value) || 0 }))} />
             </div>
             <div>
-              <label className="text-xs font-medium mb-1 block">Contratacion por Dias?</label>
+              <label className="text-xs font-medium mb-1 block">Tipo de Contratacion</label>
               <Select value={newItem.porDias} onValueChange={v => setNewItem(p => ({ ...p, porDias: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="SI">SI</SelectItem>
-                  <SelectItem value="NO">NO</SelectItem>
+                  <SelectItem value="SI">Por Dia</SelectItem>
+                  <SelectItem value="NO">One-Time</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -477,23 +524,23 @@ export default function BudgetPage() {
               <Input type="number" value={newItem.qtyDias} onChange={e => setNewItem(p => ({ ...p, qtyDias: parseFloat(e.target.value) || 1 }))} />
             </div>
             <div>
-              <label className="text-xs font-medium mb-1 block">Aplica Fee?</label>
+              <label className="text-xs font-medium mb-1 block">Fee Aurora 360?</label>
               <Select value={newItem.aplicaFee} onValueChange={v => setNewItem(p => ({ ...p, aplicaFee: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="SI">SI</SelectItem>
+                  <SelectItem value="SI">SI (A360)</SelectItem>
                   <SelectItem value="NO">NO</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Proveedor</label>
+              <Input value={newItem.proveedor} onChange={e => setNewItem(p => ({ ...p, proveedor: e.target.value }))} placeholder="e.g. AURORA 360" />
             </div>
             <div className="flex items-end gap-4">
               <label className="flex items-center gap-2 text-xs">
                 <input type="checkbox" checked={newItem.inKind || false} onChange={e => setNewItem(p => ({ ...p, inKind: e.target.checked }))} className="rounded border-border" />
                 In-Kind?
-              </label>
-              <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" checked={newItem.agencyFee || false} onChange={e => setNewItem(p => ({ ...p, agencyFee: e.target.checked }))} className="rounded border-border" />
-                Agency Fee?
               </label>
             </div>
             <div>

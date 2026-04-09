@@ -12,7 +12,7 @@ import { TrendingUp, DollarSign, Package, AlertCircle, CheckCircle, Clock, Hands
 const COLORS = ["#d97706", "#ea8c00", "#f59e0b", "#fbbf24", "#fcd34d", "#fde68a", "#1a1a1a", "#525252"];
 
 export default function DashboardPage() {
-  const [items] = useLocalStorage<BudgetItem[]>("budget-items-v2", INITIAL_BUDGET_ITEMS);
+  const [items] = useLocalStorage<BudgetItem[]>("budget-items-v3", INITIAL_BUDGET_ITEMS);
 
   const stats = useMemo(() => {
     const total = items.reduce((s, i) => s + i.total, 0);
