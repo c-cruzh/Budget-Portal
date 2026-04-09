@@ -29,6 +29,7 @@ export interface BudgetItem {
   assignedTo?: string;
   soloPresupuestado?: boolean;
   accionRequerida?: boolean;
+  reviewedBy?: string;
 }
 
 export const INITIAL_BUDGET_ITEMS: BudgetItem[] = [
