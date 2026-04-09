@@ -214,7 +214,7 @@ export default function BudgetPage() {
       "EVENTO", "AREA/ZONA", "CENTRO DE COSTO", "ITEM", "DESCRIPCION", "NOTAS/OBSERVACIONES",
       "IN-KIND?", "AURORA 360?", "QTY", "UoM", "CONTRATACION POR DIAS?", "QTY DIAS",
       "PRECIO UNITARIO", "SUBTOTAL", "VIA PRODUCTORA (AURORA 360)?", "FEE INCL. EN COTIZACION?",
-      "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "DOCUMENTO DE DETALLE", "PROVEEDOR",
+      "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "IMAGEN DE REFERENCIA", "PROVEEDOR",
       "VALIDAR COSTO?", "CONTRATAR APARTE?", "COTIZACION LINK", "EXENTO IVA?"
     ];
     const rows = filtered.map(i => [
@@ -323,7 +323,7 @@ export default function BudgetPage() {
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-24">Total</th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px]">Cotizacion</th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px]">Proveedor</th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[80px]">Documento</th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[80px]">Img. Ref.</th>
                 <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16">Validar</th>
                 <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16">Aparte</th>
                 <th className="w-8 px-1 py-2.5"></th>
@@ -524,7 +524,17 @@ export default function BudgetPage() {
                         <EditableCell value={item.proveedor || ""} onSave={v => updateItem(item.id, "proveedor", v)} className="text-muted-foreground text-xs" placeholder="proveedor..." />
                       </td>
                       <td className="px-2 py-1.5 align-top">
-                        <EditableCell value={item.documento} onSave={v => updateItem(item.id, "documento", v)} className="text-muted-foreground text-[10px]" placeholder="doc..." />
+                        {item.documento ? (
+                          <div className="flex flex-col gap-0.5">
+                            <a href={item.documento} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-[10px] text-blue-500 hover:text-blue-600 truncate max-w-[100px]">
+                              <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
+                              <span className="truncate">Ver imagen</span>
+                            </a>
+                            <EditableCell value={item.documento} onSave={v => updateItem(item.id, "documento", v)} className="text-blue-400/40 text-[9px]" placeholder="editar link..." />
+                          </div>
+                        ) : (
+                          <EditableCell value="" onSave={v => updateItem(item.id, "documento", v)} className="text-blue-400/40 text-[9px]" placeholder="+ link img" />
+                        )}
                       </td>
                       <td className="px-1 py-1.5 text-center align-top">
                         <Tooltip>
@@ -694,8 +704,8 @@ export default function BudgetPage() {
               <Input value={newItem.cotizacion} onChange={e => setNewItem(p => ({ ...p, cotizacion: e.target.value }))} placeholder="A2, PENDING..." />
             </div>
             <div>
-              <label className="text-xs font-medium mb-1 block">Documento</label>
-              <Input value={newItem.documento} onChange={e => setNewItem(p => ({ ...p, documento: e.target.value }))} placeholder="Document ref..." />
+              <label className="text-xs font-medium mb-1 block">Imagen de Referencia</label>
+              <Input value={newItem.documento} onChange={e => setNewItem(p => ({ ...p, documento: e.target.value }))} placeholder="URL de imagen..." />
             </div>
           </div>
           <div className="flex justify-end gap-2 mt-4">
