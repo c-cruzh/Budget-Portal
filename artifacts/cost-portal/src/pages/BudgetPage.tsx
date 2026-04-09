@@ -92,20 +92,20 @@ export default function BudgetPage() {
     cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false,
   });
 
-  const eventos = useMemo(() => ["ALL", ...Array.from(new Set(items.map(i => i.evento).filter(Boolean)))], [items]);
+  const eventos = useMemo(() => ["ALL", ...Array.from(new Set(items.map(i => i.evento).filter(v => v && v.trim())))], [items]);
   const areas = useMemo(() => {
     const src = filterEvento === "ALL" ? items : items.filter(i => i.evento === filterEvento);
-    return ["ALL", ...Array.from(new Set(src.map(i => i.area).filter(Boolean)))];
+    return ["ALL", ...Array.from(new Set(src.map(i => i.area).filter(v => v && v.trim())))];
   }, [items, filterEvento]);
   const centros = useMemo(() => {
     let src = items;
     if (filterEvento !== "ALL") src = src.filter(i => i.evento === filterEvento);
     if (filterArea !== "ALL") src = src.filter(i => i.area === filterArea);
-    return ["ALL", ...Array.from(new Set(src.map(i => i.centroCosto).filter(Boolean)))];
+    return ["ALL", ...Array.from(new Set(src.map(i => i.centroCosto).filter(v => v && v.trim())))];
   }, [items, filterEvento, filterArea]);
 
   const proveedores = useMemo(() => {
-    const set = new Set(items.map(i => (i.proveedor || "").trim()).filter(Boolean));
+    const set = new Set(items.map(i => (i.proveedor || "").trim()).filter(v => v.length > 0));
     return ["ALL", ...Array.from(set).sort()];
   }, [items]);
 
