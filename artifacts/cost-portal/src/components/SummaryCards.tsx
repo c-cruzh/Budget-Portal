@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { DollarSign, Package, AlertCircle, CheckCircle2, FileText, AlertTriangle } from "lucide-react";
+import { DollarSign, Package, AlertCircle, CheckCircle2, FileText, AlertTriangle, ShieldAlert } from "lucide-react";
 import { formatUSD } from "@/lib/utils";
 
 interface SummaryCardsProps {
@@ -9,9 +9,10 @@ interface SummaryCardsProps {
   pendingCount: number;
   itemCount: number;
   validarCount: number;
+  contratarAparteCount: number;
 }
 
-export function SummaryCards({ totalBudget, totalPaid, totalInKind, pendingCount, itemCount, validarCount }: SummaryCardsProps) {
+export function SummaryCards({ totalBudget, totalPaid, totalInKind, pendingCount, itemCount, validarCount, contratarAparteCount }: SummaryCardsProps) {
   const cards = [
     {
       label: "Total Budget",
@@ -44,30 +45,37 @@ export function SummaryCards({ totalBudget, totalPaid, totalInKind, pendingCount
     {
       label: "Costos a Validar",
       value: String(validarCount),
-      sub: "Revisar / cotizar aparte",
+      sub: "Posible costo inflado",
       icon: AlertTriangle,
       color: validarCount > 0 ? "bg-red-500/10 text-red-500" : "bg-emerald-500/10 text-emerald-500",
+    },
+    {
+      label: "Contratar Aparte",
+      value: String(contratarAparteCount),
+      sub: "Cotizar con otros",
+      icon: ShieldAlert,
+      color: contratarAparteCount > 0 ? "bg-amber-500/10 text-amber-600" : "bg-emerald-500/10 text-emerald-500",
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
       {cards.map((card, idx) => (
         <motion.div
           key={card.label}
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: idx * 0.05, duration: 0.3 }}
-          className="rounded-xl border border-card-border bg-card p-5 shadow-sm"
+          className="rounded-xl border border-card-border bg-card p-4 shadow-sm"
         >
-          <div className="flex items-center gap-3 mb-3">
-            <div className={`w-9 h-9 rounded-lg ${card.color} flex items-center justify-center flex-shrink-0`}>
-              <card.icon className="w-5 h-5" />
+          <div className="flex items-center gap-2 mb-2">
+            <div className={`w-8 h-8 rounded-lg ${card.color} flex items-center justify-center flex-shrink-0`}>
+              <card.icon className="w-4 h-4" />
             </div>
-            <p className="text-sm text-muted-foreground font-medium leading-tight">{card.label}</p>
+            <p className="text-xs text-muted-foreground font-medium leading-tight">{card.label}</p>
           </div>
-          <p className="text-2xl font-bold text-foreground">{card.value}</p>
-          <p className="text-xs text-muted-foreground mt-1">{card.sub}</p>
+          <p className="text-xl font-bold text-foreground">{card.value}</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">{card.sub}</p>
         </motion.div>
       ))}
     </div>

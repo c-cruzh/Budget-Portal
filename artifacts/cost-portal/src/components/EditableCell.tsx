@@ -73,7 +73,7 @@ export function EditableCell({ value, onSave, className, type = "text", prefix, 
       )}
       title="Click to edit"
     >
-      {prefix && !value && <span className="text-muted-foreground text-xs">{prefix}</span>}
+      {prefix && value && <span className="text-muted-foreground text-xs">{prefix}</span>}
       <span>{value || <span className="text-muted-foreground/40 italic text-xs">{placeholder || "—"}</span>}</span>
       <Edit3 className="w-2.5 h-2.5 opacity-0 group-hover:opacity-40 transition-opacity flex-shrink-0" />
     </button>

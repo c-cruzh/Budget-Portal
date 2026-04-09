@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight,
-  Tag, Trash2, AlertTriangle
+  Tag, Trash2, AlertTriangle, ShieldAlert
 } from "lucide-react";
 import { INITIAL_BUDGET_ITEMS, type BudgetItem } from "@/data/budgetData";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -73,16 +73,17 @@ function recalcItem(item: BudgetItem): BudgetItem {
 
 function getInitialItems(): BudgetItem[] {
   try {
-    const v5Raw = localStorage.getItem("budget-items-v5");
-    if (v5Raw) return JSON.parse(v5Raw);
-    const prev = localStorage.getItem("budget-items-v4") || localStorage.getItem("budget-items-v3") || localStorage.getItem("budget-items-v2");
+    const v6Raw = localStorage.getItem("budget-items-v6");
+    if (v6Raw) return JSON.parse(v6Raw);
+    const prev = localStorage.getItem("budget-items-v5") || localStorage.getItem("budget-items-v4") || localStorage.getItem("budget-items-v3") || localStorage.getItem("budget-items-v2");
     if (prev) {
       const items = (JSON.parse(prev) as any[]).map((item: any) => recalcItem({
         ...item,
         proveedor: item.proveedor || "",
         validarCosto: item.validarCosto ?? false,
+        contratarAparte: item.contratarAparte ?? false,
       }));
-      localStorage.setItem("budget-items-v5", JSON.stringify(items));
+      localStorage.setItem("budget-items-v6", JSON.stringify(items));
       return items;
     }
   } catch {}
@@ -92,7 +93,7 @@ function getInitialItems(): BudgetItem[] {
 const MIGRATED_ITEMS = getInitialItems();
 
 export default function BudgetPage() {
-  const [items, setItems] = useLocalStorage<BudgetItem[]>("budget-items-v5", MIGRATED_ITEMS);
+  const [items, setItems] = useLocalStorage<BudgetItem[]>("budget-items-v6", MIGRATED_ITEMS);
   const [search, setSearch] = useState("");
   const [filterEvento, setFilterEvento] = useState("ALL");
   const [filterArea, setFilterArea] = useState("ALL");
@@ -103,7 +104,7 @@ export default function BudgetPage() {
     evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "",
     inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1,
     precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0,
-    cotizacion: "", documento: "", proveedor: "", validarCosto: false,
+    cotizacion: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false,
   });
 
   const eventos = useMemo(() => ["ALL", ...Array.from(new Set(items.map(i => i.evento).filter(Boolean)))], [items]);
@@ -220,6 +221,7 @@ export default function BudgetPage() {
   const totalInKind = useMemo(() => filtered.filter(i => i.inKind).length, [filtered]);
   const pendingCount = useMemo(() => filtered.filter(i => i.cotizacion === "PENDING").length, [filtered]);
   const validarCount = useMemo(() => filtered.filter(i => i.validarCosto).length, [filtered]);
+  const contratarAparteCount = useMemo(() => filtered.filter(i => i.contratarAparte).length, [filtered]);
 
   const exportCSV = () => {
     const headers = [
@@ -227,14 +229,14 @@ export default function BudgetPage() {
       "IN-KIND?", "AURORA 360?", "QTY", "UoM", "CONTRATACION POR DIAS?", "QTY DIAS",
       "PRECIO UNITARIO", "SUBTOTAL", "VIA PRODUCTORA (AURORA 360)?", "FEE INCL. EN COTIZACION?",
       "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "DOCUMENTO DE DETALLE", "PROVEEDOR",
-      "VALIDAR COSTO?"
+      "VALIDAR COSTO?", "CONTRATAR APARTE?"
     ];
     const rows = filtered.map(i => [
       i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
       i.inKind ? "SI" : "NO", i.agencyFee ? "SI" : "NO", i.qty, i.uom,
       i.porDias, i.qtyDias, i.precioUnitario, i.subtotal, i.agencyFee ? "SI" : "NO",
       i.aplicaFee, i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.documento,
-      i.proveedor || "", i.validarCosto ? "SI" : "NO"
+      i.proveedor || "", i.validarCosto ? "SI" : "NO", i.contratarAparte ? "SI" : "NO"
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -253,6 +255,7 @@ export default function BudgetPage() {
         pendingCount={pendingCount}
         itemCount={filtered.length}
         validarCount={validarCount}
+        contratarAparteCount={contratarAparteCount}
       />
 
       <div className="flex flex-wrap gap-3 items-center">
@@ -304,6 +307,7 @@ export default function BudgetPage() {
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px]">Proveedor</th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[80px]">Documento</th>
                 <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16">Validar</th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16">Aparte</th>
                 <th className="w-8 px-1 py-2.5"></th>
               </tr>
             </thead>
@@ -324,7 +328,7 @@ export default function BudgetPage() {
                         <ChevronRight className="w-3.5 h-3.5" />
                       </motion.div>
                     </td>
-                    <td className="px-2 py-2" colSpan={13}>
+                    <td className="px-2 py-2" colSpan={14}>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-foreground text-xs">{group.area}</span>
                         <Badge variant="secondary" className="text-[10px] font-normal py-0">{group.evento === "MAIN EVENT" ? "Main Event" : group.evento === "MAIN EVENT VIP DINNER" ? "VIP Dinner" : "Pre/Post"}</Badge>
@@ -332,7 +336,7 @@ export default function BudgetPage() {
                         {hasInKind && <Badge className="text-[10px] bg-amber-500/15 text-amber-600 border-amber-500/20 font-normal py-0">In-Kind</Badge>}
                       </div>
                     </td>
-                    <td className="px-2 py-2 text-right font-semibold" colSpan={9}>
+                    <td className="px-2 py-2 text-right font-semibold" colSpan={10}>
                       {groupTotal > 0 ? <span className="text-primary text-xs">{formatUSD(groupTotal)}</span> : <span className="text-muted-foreground text-[10px]">In-Kind / $0</span>}
                     </td>
                   </tr>,
@@ -392,7 +396,11 @@ export default function BudgetPage() {
                         )}
                       </td>
                       <td className="px-2 py-1.5 text-right align-top font-mono">
-                        <EditableCell value={String(item.precioUnitario)} onSave={v => updateItem(item.id, "precioUnitario", parseFloat(v) || 0)} className="text-right font-mono text-xs" type="number" />
+                        {item.precioUnitario > 0 ? (
+                          <EditableCell value={String(item.precioUnitario)} onSave={v => updateItem(item.id, "precioUnitario", parseFloat(v) || 0)} className="text-right font-mono text-xs" type="number" prefix="$" />
+                        ) : (
+                          <EditableCell value="0" onSave={v => updateItem(item.id, "precioUnitario", parseFloat(v) || 0)} className="text-right font-mono text-xs text-muted-foreground/40" type="number" />
+                        )}
                       </td>
                       <td className="px-2 py-1.5 text-right align-top font-mono text-muted-foreground">
                         {item.subtotal > 0 ? formatUSD(item.subtotal) : "--"}
@@ -476,6 +484,28 @@ export default function BudgetPage() {
                           </TooltipContent>
                         </Tooltip>
                       </td>
+                      <td className="px-1 py-1.5 text-center align-top">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => toggleField(item.id, "contratarAparte")}
+                              className={cn(
+                                "inline-flex items-center justify-center w-6 h-6 rounded transition-colors",
+                                item.contratarAparte
+                                  ? "bg-amber-500/15 text-amber-600 border border-amber-500/30"
+                                  : "bg-muted/30 text-muted-foreground/25 border border-transparent hover:border-border/50"
+                              )}
+                            >
+                              <ShieldAlert className="w-3.5 h-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-[200px] text-xs">
+                            {item.contratarAparte
+                              ? "Marcado: contratar por aparte para evitar costos inflados"
+                              : "Click para marcar como contratar por aparte"}
+                          </TooltipContent>
+                        </Tooltip>
+                      </td>
                       <td className="px-1 py-1.5 align-top">
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -493,13 +523,13 @@ export default function BudgetPage() {
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-border bg-muted/30">
-                <td colSpan={17} className="px-3 py-3 font-semibold text-muted-foreground text-xs">
+                <td colSpan={18} className="px-3 py-3 font-semibold text-muted-foreground text-xs">
                   TOTAL -- {filtered.length} items
                 </td>
                 <td className="px-2 py-3 text-right font-bold text-sm text-primary font-mono">
                   {formatUSD(totalBudget)}
                 </td>
-                <td colSpan={5}></td>
+                <td colSpan={6}></td>
               </tr>
             </tfoot>
           </table>
