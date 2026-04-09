@@ -11,7 +11,7 @@ version = "1.0.0"
 
 [[services]]
 name = "web"
-paths = [ "/" ]
+paths = [ "/", "/api" ]
 localPort = 18761
 
 [services.development]
@@ -19,12 +19,13 @@ run = "pnpm --filter @workspace/cost-portal run dev"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/cost-portal", "run", "build" ]
-publicDir = "artifacts/cost-portal/dist/public"
-serve = "static"
 
-[[services.production.rewrites]]
-from = "/*"
-to = "/index.html"
+[services.production.run]
+args = ["node", "artifacts/cost-portal/dist/server.mjs"]
+
+[services.production.run.env]
+PORT = "18761"
+NODE_ENV = "production"
 
 [services.env]
 PORT = "18761"
