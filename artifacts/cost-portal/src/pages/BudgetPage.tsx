@@ -106,13 +106,17 @@ export default function BudgetPage() {
   }, [items, filterEvento, filterArea]);
 
   const proveedores = useMemo(() => {
+    const hasBlank = items.some(i => !(i.proveedor || "").trim());
     const set = new Set(items.map(i => (i.proveedor || "").trim()).filter(v => v.length > 0));
-    return ["ALL", ...Array.from(set).sort()];
+    const sorted = Array.from(set).sort();
+    return hasBlank ? ["ALL", "(Sin proveedor)", ...sorted] : ["ALL", ...sorted];
   }, [items]);
 
   const cotizaciones = useMemo(() => {
+    const hasBlank = items.some(i => !(i.cotizacion || "").trim());
     const set = new Set(items.map(i => (i.cotizacion || "").trim()).filter(v => v.length > 0));
-    return ["ALL", ...Array.from(set).sort()];
+    const sorted = Array.from(set).sort();
+    return hasBlank ? ["ALL", "(Sin cotizacion)", ...sorted] : ["ALL", ...sorted];
   }, [items]);
 
   const filtered = useMemo(() => {
@@ -120,12 +124,14 @@ export default function BudgetPage() {
     if (filterEvento !== "ALL") out = out.filter(i => i.evento === filterEvento);
     if (filterArea !== "ALL") out = out.filter(i => i.area === filterArea);
     if (filterCentro !== "ALL") out = out.filter(i => i.centroCosto === filterCentro);
-    if (filterProveedor !== "ALL") out = out.filter(i => (i.proveedor || "").trim() === filterProveedor);
+    if (filterProveedor === "(Sin proveedor)") out = out.filter(i => !(i.proveedor || "").trim());
+    else if (filterProveedor !== "ALL") out = out.filter(i => (i.proveedor || "").trim() === filterProveedor);
     if (filterProductora === "SI") out = out.filter(i => i.agencyFee);
     else if (filterProductora === "NO") out = out.filter(i => !i.agencyFee);
     if (filterFeeEnCotiz === "SI") out = out.filter(i => i.aplicaFee === "SI");
     else if (filterFeeEnCotiz === "NO") out = out.filter(i => i.aplicaFee !== "SI");
-    if (filterCotizacion !== "ALL") out = out.filter(i => (i.cotizacion || "").trim() === filterCotizacion);
+    if (filterCotizacion === "(Sin cotizacion)") out = out.filter(i => !(i.cotizacion || "").trim());
+    else if (filterCotizacion !== "ALL") out = out.filter(i => (i.cotizacion || "").trim() === filterCotizacion);
     if (search.trim()) {
       const q = search.toLowerCase();
       out = out.filter(i =>
