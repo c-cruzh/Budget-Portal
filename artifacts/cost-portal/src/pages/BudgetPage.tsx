@@ -80,6 +80,9 @@ export default function BudgetPage() {
   const [filterEvento, setFilterEvento] = useState("ALL");
   const [filterArea, setFilterArea] = useState("ALL");
   const [filterCentro, setFilterCentro] = useState("ALL");
+  const [filterProveedor, setFilterProveedor] = useState("ALL");
+  const [filterProductora, setFilterProductora] = useState("ALL");
+  const [filterFeeEnCotiz, setFilterFeeEnCotiz] = useState("ALL");
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set(["MAIN EVENT_INGRESO ESEN Y PARQUEO", "MAIN EVENT_AUDITORIO/MAIN STAGE", "BEFORE/AFTER MAIN EVENT_HOSPITALITY"]));
   const [showAddModal, setShowAddModal] = useState(false);
   const [newItem, setNewItem] = useState<Partial<BudgetItem>>({
@@ -101,11 +104,21 @@ export default function BudgetPage() {
     return ["ALL", ...Array.from(new Set(src.map(i => i.centroCosto).filter(Boolean)))];
   }, [items, filterEvento, filterArea]);
 
+  const proveedores = useMemo(() => {
+    const set = new Set(items.map(i => (i.proveedor || "").trim()).filter(Boolean));
+    return ["ALL", ...Array.from(set).sort()];
+  }, [items]);
+
   const filtered = useMemo(() => {
     let out = items;
     if (filterEvento !== "ALL") out = out.filter(i => i.evento === filterEvento);
     if (filterArea !== "ALL") out = out.filter(i => i.area === filterArea);
     if (filterCentro !== "ALL") out = out.filter(i => i.centroCosto === filterCentro);
+    if (filterProveedor !== "ALL") out = out.filter(i => (i.proveedor || "").trim() === filterProveedor);
+    if (filterProductora === "SI") out = out.filter(i => i.agencyFee);
+    else if (filterProductora === "NO") out = out.filter(i => !i.agencyFee);
+    if (filterFeeEnCotiz === "SI") out = out.filter(i => i.aplicaFee === "SI");
+    else if (filterFeeEnCotiz === "NO") out = out.filter(i => i.aplicaFee !== "SI");
     if (search.trim()) {
       const q = search.toLowerCase();
       out = out.filter(i =>
@@ -119,7 +132,7 @@ export default function BudgetPage() {
       );
     }
     return out;
-  }, [items, filterEvento, filterArea, filterCentro, search]);
+  }, [items, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, search]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, { evento: string; area: string; items: BudgetItem[] }>();
@@ -278,26 +291,57 @@ export default function BudgetPage() {
         contratarAparteCount={contratarAparteCount}
       />
 
-      <div className="flex flex-wrap gap-3 items-center">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search items, notes, proveedor..." className="pl-9 bg-card border-card-border" />
+      <div className="space-y-3">
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search items, notes, proveedor..." className="pl-9 bg-card border-card-border" />
+          </div>
+          <Select value={filterEvento} onValueChange={v => { setFilterEvento(v); setFilterArea("ALL"); setFilterCentro("ALL"); }}>
+            <SelectTrigger className="w-[200px] bg-card border-card-border"><SelectValue placeholder="Event" /></SelectTrigger>
+            <SelectContent>{eventos.map(e => <SelectItem key={e} value={e}>{e === "ALL" ? "All Events" : e}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={filterArea} onValueChange={v => { setFilterArea(v); setFilterCentro("ALL"); }}>
+            <SelectTrigger className="w-[220px] bg-card border-card-border"><SelectValue placeholder="Area" /></SelectTrigger>
+            <SelectContent>{areas.map(a => <SelectItem key={a} value={a}>{a === "ALL" ? "All Areas" : a}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={filterCentro} onValueChange={setFilterCentro}>
+            <SelectTrigger className="w-[200px] bg-card border-card-border"><SelectValue placeholder="Cost Center" /></SelectTrigger>
+            <SelectContent>{centros.map(c => <SelectItem key={c} value={c}>{c === "ALL" ? "All Centers" : c}</SelectItem>)}</SelectContent>
+          </Select>
+          <div className="flex gap-2 ml-auto">
+            <Button variant="outline" size="sm" onClick={exportCSV} className="gap-2"><Download className="w-4 h-4" />Export CSV</Button>
+            <Button size="sm" onClick={() => setShowAddModal(true)} className="gap-2"><Plus className="w-4 h-4" />Add Item</Button>
+          </div>
         </div>
-        <Select value={filterEvento} onValueChange={v => { setFilterEvento(v); setFilterArea("ALL"); setFilterCentro("ALL"); }}>
-          <SelectTrigger className="w-[200px] bg-card border-card-border"><SelectValue placeholder="Event" /></SelectTrigger>
-          <SelectContent>{eventos.map(e => <SelectItem key={e} value={e}>{e === "ALL" ? "All Events" : e}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select value={filterArea} onValueChange={v => { setFilterArea(v); setFilterCentro("ALL"); }}>
-          <SelectTrigger className="w-[220px] bg-card border-card-border"><SelectValue placeholder="Area" /></SelectTrigger>
-          <SelectContent>{areas.map(a => <SelectItem key={a} value={a}>{a === "ALL" ? "All Areas" : a}</SelectItem>)}</SelectContent>
-        </Select>
-        <Select value={filterCentro} onValueChange={setFilterCentro}>
-          <SelectTrigger className="w-[200px] bg-card border-card-border"><SelectValue placeholder="Cost Center" /></SelectTrigger>
-          <SelectContent>{centros.map(c => <SelectItem key={c} value={c}>{c === "ALL" ? "All Centers" : c}</SelectItem>)}</SelectContent>
-        </Select>
-        <div className="flex gap-2 ml-auto">
-          <Button variant="outline" size="sm" onClick={exportCSV} className="gap-2"><Download className="w-4 h-4" />Export CSV</Button>
-          <Button size="sm" onClick={() => setShowAddModal(true)} className="gap-2"><Plus className="w-4 h-4" />Add Item</Button>
+        <div className="flex flex-wrap gap-3 items-center">
+          <Select value={filterProveedor} onValueChange={setFilterProveedor}>
+            <SelectTrigger className="w-[200px] bg-card border-card-border text-xs"><SelectValue placeholder="Provider" /></SelectTrigger>
+            <SelectContent>{proveedores.map(p => <SelectItem key={p} value={p}>{p === "ALL" ? "All Providers" : p}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={filterProductora} onValueChange={setFilterProductora}>
+            <SelectTrigger className="w-[180px] bg-card border-card-border text-xs"><SelectValue placeholder="Via Productora" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Via Productora: All</SelectItem>
+              <SelectItem value="SI">Via Productora</SelectItem>
+              <SelectItem value="NO">Directo (sin productora)</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterFeeEnCotiz} onValueChange={setFilterFeeEnCotiz}>
+            <SelectTrigger className="w-[180px] bg-card border-card-border text-xs"><SelectValue placeholder="Fee en Cotiz." /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Fee en Cotiz.: All</SelectItem>
+              <SelectItem value="SI">Fee incluido</SelectItem>
+              <SelectItem value="NO">Fee adicional (20%)</SelectItem>
+            </SelectContent>
+          </Select>
+          {(filterProveedor !== "ALL" || filterProductora !== "ALL" || filterFeeEnCotiz !== "ALL") && (
+            <button
+              onClick={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); }}
+              className="text-xs text-primary hover:underline"
+            >Clear filters</button>
+          )}
+          <span className="text-xs text-muted-foreground ml-auto">{filtered.length} of {items.length} items</span>
         </div>
       </div>
 
