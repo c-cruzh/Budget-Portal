@@ -88,6 +88,75 @@ router.put("/budget-items", async (req, res) => {
   }
 });
 
+router.patch("/budget-items", async (req, res) => {
+  try {
+    const session = req.session as any;
+    const userOrg = session?.userOrg || "";
+    const userName = session?.userName || "Unknown";
+    const userEmail = session?.userEmail || "";
+
+    const perms = ORG_PERMISSIONS[userOrg] || { canEdit: false, canComment: false };
+
+    const { id, field, value, commentOnly } = req.body;
+    if (!id || !field) {
+      res.status(400).json({ error: "id and field are required" });
+      return;
+    }
+
+    if (!perms.canEdit && !perms.canComment) {
+      res.status(403).json({ error: "You do not have permission to make changes" });
+      return;
+    }
+
+    if (!perms.canEdit && !commentOnly) {
+      res.status(403).json({ error: "You only have comment permissions. Value edits are not allowed." });
+      return;
+    }
+
+    const [row] = await db.select().from(appState).where(eq(appState.key, BUDGET_KEY)).limit(1);
+    if (!row || !Array.isArray(row.value)) {
+      res.status(404).json({ error: "No budget data found" });
+      return;
+    }
+
+    const items = row.value as any[];
+    const idx = items.findIndex((i: any) => i.id === id);
+    if (idx === -1) {
+      res.status(404).json({ error: `Item ${id} not found` });
+      return;
+    }
+
+    items[idx] = { ...items[idx], [field]: value };
+
+    const meta = {
+      lastEditedBy: userName,
+      lastEditedByEmail: userEmail,
+      lastEditedByOrg: userOrg,
+      lastEditedAt: new Date().toISOString(),
+    };
+
+    await Promise.all([
+      db.insert(appState)
+        .values({ key: BUDGET_KEY, value: items, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: appState.key,
+          set: { value: items, updatedAt: new Date() },
+        }),
+      db.insert(appState)
+        .values({ key: BUDGET_META_KEY, value: meta as any, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: appState.key,
+          set: { value: meta as any, updatedAt: new Date() },
+        }),
+    ]);
+
+    res.json({ ok: true, meta });
+  } catch (err) {
+    console.error("Failed to patch budget item:", err);
+    res.status(500).json({ error: "Failed to patch budget item" });
+  }
+});
+
 router.get("/users", async (_req, res) => {
   try {
     const allUsers = await db

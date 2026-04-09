@@ -84,7 +84,7 @@ function recalcItem(item: BudgetItem): BudgetItem {
 const SEED_ITEMS = INITIAL_BUDGET_ITEMS.map(recalcItem);
 
 export default function BudgetPage() {
-  const { items, setItems, loading, saving, lastSaved, error, meta, saveCommentOnly } = useBudgetApi(SEED_ITEMS);
+  const { items, setItems, loading, saving, lastSaved, error, meta, saveCommentOnly, patchItem, saveFull } = useBudgetApi(SEED_ITEMS);
   const { permissions, user } = useAuth();
   const canEdit = permissions.canEdit;
   const canComment = permissions.canComment;
@@ -187,32 +187,70 @@ export default function BudgetPage() {
   const recalc = recalcItem;
 
   const updateItem = useCallback((id: string, field: keyof BudgetItem, value: BudgetItem[keyof BudgetItem]) => {
-    setItems(prev => prev.map(item => {
-      if (item.id !== id) return item;
-      const updated = { ...item, [field]: value };
-      return recalc(updated);
-    }));
-  }, [setItems]);
+    setItems(prev => {
+      const next = prev.map(item => {
+        if (item.id !== id) return item;
+        const updated = { ...item, [field]: value };
+        return recalc(updated);
+      });
+      const changed = next.find(i => i.id === id);
+      if (changed) {
+        const recalcFields = ["qty", "qtyDias", "precioUnitario", "porDias", "aplicaFee", "agencyFee", "inKind", "exentoIva"] as const;
+        if (recalcFields.includes(field as any)) {
+          const { id: _id, ...rest } = changed;
+          Object.entries(rest).forEach(([k, v]) => patchItem(id, k, v));
+        } else {
+          patchItem(id, field, changed[field]);
+        }
+      }
+      return next;
+    });
+  }, [setItems, patchItem]);
 
   const toggleField = useCallback((id: string, field: "inKind" | "agencyFee" | "validarCosto" | "contratarAparte" | "soloPresupuestado") => {
-    setItems(prev => prev.map(item => {
-      if (item.id !== id) return item;
-      const updated = { ...item, [field]: !item[field] };
-      return recalc(updated);
-    }));
-  }, [setItems]);
+    setItems(prev => {
+      const next = prev.map(item => {
+        if (item.id !== id) return item;
+        const updated = { ...item, [field]: !item[field] };
+        return recalc(updated);
+      });
+      const changed = next.find(i => i.id === id);
+      if (changed) {
+        const recalcFields = ["inKind", "agencyFee"];
+        if (recalcFields.includes(field)) {
+          const { id: _id, ...rest } = changed;
+          Object.entries(rest).forEach(([k, v]) => patchItem(id, k, v));
+        } else {
+          patchItem(id, field, changed[field]);
+        }
+      }
+      return next;
+    });
+  }, [setItems, patchItem]);
 
   const toggleStringField = useCallback((id: string, field: "porDias" | "aplicaFee") => {
-    setItems(prev => prev.map(item => {
-      if (item.id !== id) return item;
-      const updated = { ...item, [field]: item[field] === "SI" ? "NO" : "SI" };
-      return recalc(updated);
-    }));
-  }, [setItems]);
+    setItems(prev => {
+      const next = prev.map(item => {
+        if (item.id !== id) return item;
+        const updated = { ...item, [field]: item[field] === "SI" ? "NO" : "SI" };
+        return recalc(updated);
+      });
+      const changed = next.find(i => i.id === id);
+      if (changed) {
+        const { id: _id, ...rest } = changed;
+        Object.entries(rest).forEach(([k, v]) => patchItem(id, k, v));
+      }
+      return next;
+    });
+  }, [setItems, patchItem]);
 
   const deleteItem = useCallback((id: string) => {
-    setItems(prev => prev.filter(i => i.id !== id));
-  }, [setItems]);
+    setItems(prev => {
+      const next = prev.filter(i => i.id !== id);
+      saveFull(next);
+      return next;
+    });
+  }, [setItems, saveFull]);
 
   const openEditModal = useCallback((item: BudgetItem) => {
     setEditItem({ ...item });
@@ -221,33 +259,37 @@ export default function BudgetPage() {
 
   const saveEditItem = useCallback(() => {
     if (!editItem.id) return;
-    setItems(prev => prev.map(i => {
-      if (i.id !== editItem.id) return i;
-      const updated: BudgetItem = {
-        ...i,
-        evento: editItem.evento || i.evento,
-        area: editItem.area ?? i.area,
-        centroCosto: editItem.centroCosto ?? i.centroCosto,
-        item: editItem.item || i.item,
-        descripcion: editItem.descripcion ?? i.descripcion,
-        notas: editItem.notas ?? i.notas,
-        inKind: editItem.inKind ?? i.inKind,
-        agencyFee: editItem.agencyFee ?? i.agencyFee,
-        qty: Number(editItem.qty) || i.qty,
-        uom: editItem.uom ?? i.uom,
-        porDias: editItem.porDias ?? i.porDias,
-        qtyDias: Number(editItem.qtyDias) || i.qtyDias,
-        precioUnitario: Number(editItem.precioUnitario) ?? i.precioUnitario,
-        aplicaFee: editItem.aplicaFee ?? i.aplicaFee,
-        cotizacion: editItem.cotizacion ?? i.cotizacion,
-        documento: editItem.documento ?? i.documento,
-        proveedor: editItem.proveedor ?? i.proveedor,
-        exentoIva: editItem.exentoIva ?? i.exentoIva,
-      };
-      return recalcItem(updated);
-    }));
+    setItems(prev => {
+      const next = prev.map(i => {
+        if (i.id !== editItem.id) return i;
+        const updated: BudgetItem = {
+          ...i,
+          evento: editItem.evento || i.evento,
+          area: editItem.area ?? i.area,
+          centroCosto: editItem.centroCosto ?? i.centroCosto,
+          item: editItem.item || i.item,
+          descripcion: editItem.descripcion ?? i.descripcion,
+          notas: editItem.notas ?? i.notas,
+          inKind: editItem.inKind ?? i.inKind,
+          agencyFee: editItem.agencyFee ?? i.agencyFee,
+          qty: Number(editItem.qty) || i.qty,
+          uom: editItem.uom ?? i.uom,
+          porDias: editItem.porDias ?? i.porDias,
+          qtyDias: Number(editItem.qtyDias) || i.qtyDias,
+          precioUnitario: Number(editItem.precioUnitario) ?? i.precioUnitario,
+          aplicaFee: editItem.aplicaFee ?? i.aplicaFee,
+          cotizacion: editItem.cotizacion ?? i.cotizacion,
+          documento: editItem.documento ?? i.documento,
+          proveedor: editItem.proveedor ?? i.proveedor,
+          exentoIva: editItem.exentoIva ?? i.exentoIva,
+        };
+        return recalcItem(updated);
+      });
+      saveFull(next);
+      return next;
+    });
     setShowEditModal(false);
-  }, [editItem, setItems]);
+  }, [editItem, setItems, saveFull]);
 
   const addItem = useCallback(() => {
     const id = `custom-${Date.now()}`;
@@ -277,18 +319,22 @@ export default function BudgetPage() {
       exentoIva: false,
       soloPresupuestado: false,
     };
-    setItems(prev => [...prev, recalc(base)]);
+    setItems(prev => {
+      const next = [...prev, recalc(base)];
+      saveFull(next);
+      return next;
+    });
     setShowAddModal(false);
     setNewItem({ evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, exentoIva: false, soloPresupuestado: false });
-  }, [newItem, setItems]);
+  }, [newItem, setItems, saveFull]);
 
   const updateComment = useCallback((id: string, field: "notas" | "descripcion", value: string) => {
-    const updated = items.map(item => {
+    setItems(prev => prev.map(item => {
       if (item.id !== id) return item;
       return { ...item, [field]: value };
-    });
-    saveCommentOnly(updated);
-  }, [items, saveCommentOnly]);
+    }));
+    patchItem(id, field, value, true);
+  }, [setItems, patchItem]);
 
   const toggleArea = (key: string) => {
     setExpandedAreas(prev => {
