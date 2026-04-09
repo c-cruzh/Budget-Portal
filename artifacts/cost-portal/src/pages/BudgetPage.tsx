@@ -282,6 +282,7 @@ export default function BudgetPage() {
           documento: editItem.documento ?? i.documento,
           proveedor: editItem.proveedor ?? i.proveedor,
           exentoIva: editItem.exentoIva ?? i.exentoIva,
+          accionRequerida: editItem.accionRequerida ?? i.accionRequerida ?? false,
         };
         return recalcItem(updated);
       });
@@ -359,15 +360,15 @@ export default function BudgetPage() {
       "IN-KIND?", "AURORA 360?", "QTY", "UoM", "CONTRATACION POR DIAS?", "QTY DIAS",
       "PRECIO UNITARIO", "SUBTOTAL", "VIA PRODUCTORA (AURORA 360)?", "FEE INCL. EN COTIZACION?",
       "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "SOLO PRESUPUESTADO?", "IMAGEN DE REFERENCIA", "PROVEEDOR",
-      "VALIDAR COSTO?", "CONTRATAR APARTE?", "ACCION REQUERIDA?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO"
+      "VALIDAR COSTO?", "CONTRATAR APARTE?", "ACCIÓN REQUERIDA?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO"
     ];
     const rows = filtered.map(i => [
       i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
       i.inKind ? "SI" : "NO", i.agencyFee ? "SI" : "NO", i.qty, i.uom,
       i.porDias, i.qtyDias, i.precioUnitario, i.subtotal, i.agencyFee ? "SI" : "NO",
       i.aplicaFee, i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.soloPresupuestado ? "SI" : "NO", i.documento,
-      i.proveedor || "", i.validarCosto ? "SI" : "NO", i.contratarAparte ? "SI" : "NO", i.accionRequerida ? "SI" : "NO",
-      i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || ""
+      i.proveedor || "", i.validarCosto ? "SI" : "NO", i.contratarAparte ? "SI" : "NO",
+      i.accionRequerida ? "SI" : "NO", i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || ""
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -524,7 +525,7 @@ export default function BudgetPage() {
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[80px] bg-[hsl(var(--muted))] border-b border-border">Img. Ref.</th>
                 <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">Validar</th>
                 <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">Aparte</th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">Accion Req.</th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">Acción Req.</th>
                 {canEdit && <th className="w-8 px-1 py-2.5 bg-[hsl(var(--muted))] border-b border-border"></th>}
               </tr>
             </thead>
@@ -545,7 +546,7 @@ export default function BudgetPage() {
                         <ChevronRight className="w-3.5 h-3.5" />
                       </motion.div>
                     </td>
-                    <td className="px-2 py-2" colSpan={13}>
+                    <td className="px-2 py-2" colSpan={14}>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-foreground text-xs">{group.area}</span>
                         <Badge variant="secondary" className="text-[10px] font-normal py-0">{group.evento === "MAIN EVENT" ? "Main Event" : group.evento === "MAIN EVENT VIP DINNER" ? "VIP Dinner" : "Pre/Post"}</Badge>
@@ -862,8 +863,8 @@ export default function BudgetPage() {
                           </TooltipTrigger>
                           <TooltipContent className="max-w-[200px] text-xs">
                             {item.accionRequerida
-                              ? "Accion requerida para este item"
-                              : canEdit ? "Click para marcar como accion requerida" : "Accion requerida"}
+                              ? "Acción requerida — este item necesita seguimiento"
+                              : canEdit ? "Click para marcar como acción requerida" : "Acción requerida"}
                           </TooltipContent>
                         </Tooltip>
                       </td>
@@ -902,7 +903,7 @@ export default function BudgetPage() {
                 <td className="px-2 py-3 text-right font-bold text-sm text-primary font-mono">
                   {formatUSD(totalBudget)}
                 </td>
-                <td colSpan={7}></td>
+                <td colSpan={8}></td>
               </tr>
             </tfoot>
           </table>
