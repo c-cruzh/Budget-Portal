@@ -222,14 +222,14 @@ export default function BudgetPage() {
     const headers = [
       "EVENTO", "AREA/ZONA", "CENTRO DE COSTO", "ITEM", "DESCRIPCION", "NOTAS/OBSERVACIONES",
       "IN-KIND?", "AURORA 360?", "QTY", "UoM", "CONTRATACION POR DIAS?", "QTY DIAS",
-      "PRECIO UNITARIO", "SUBTOTAL", "APLICA FEE (AURORA 360)?", "FEE", "SUBTOTAL CON FEE",
-      "IVA", "TOTAL", "COTIZACION", "DOCUMENTO DE DETALLE", "PROVEEDOR"
+      "PRECIO UNITARIO", "SUBTOTAL", "VIA PRODUCTORA (AURORA 360)?", "INCLUYE FEE?",
+      "FEE", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "DOCUMENTO DE DETALLE", "PROVEEDOR"
     ];
     const rows = filtered.map(i => [
       i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
       i.inKind ? "SI" : "NO", i.agencyFee ? "SI" : "NO", i.qty, i.uom,
-      i.porDias, i.qtyDias, i.precioUnitario, i.subtotal, i.aplicaFee,
-      i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.documento,
+      i.porDias, i.qtyDias, i.precioUnitario, i.subtotal, i.agencyFee ? "SI" : "NO",
+      i.aplicaFee, i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.documento,
       i.proveedor || ""
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -290,7 +290,8 @@ export default function BudgetPage() {
                 <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-10">Dias</th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20">P. Unit.</th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20">Subtotal</th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16">Aurora 360</th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20">Via Productora</th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16">Incl. Fee?</th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16">Fee 20%</th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16">IVA</th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-24">Total</th>
@@ -317,7 +318,7 @@ export default function BudgetPage() {
                         <ChevronRight className="w-3.5 h-3.5" />
                       </motion.div>
                     </td>
-                    <td className="px-2 py-2" colSpan={11}>
+                    <td className="px-2 py-2" colSpan={12}>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-foreground text-xs">{group.area}</span>
                         <Badge variant="secondary" className="text-[10px] font-normal py-0">{group.evento === "MAIN EVENT" ? "Main Event" : group.evento === "MAIN EVENT VIP DINNER" ? "VIP Dinner" : "Pre/Post"}</Badge>
@@ -392,16 +393,19 @@ export default function BudgetPage() {
                       </td>
                       <td className="px-1 py-1.5 text-center align-top">
                         <button
-                          onClick={() => toggleStringField(item.id, "aplicaFee")}
+                          onClick={() => toggleField(item.id, "agencyFee")}
                           className={cn(
                             "text-[10px] px-1.5 py-0.5 rounded border font-medium transition-colors whitespace-nowrap",
-                            item.aplicaFee === "SI"
+                            item.agencyFee
                               ? "bg-primary/10 text-primary border-primary/20"
                               : "bg-muted/50 text-muted-foreground/40 border-border/50 hover:border-border"
                           )}
                         >
-                          {item.aplicaFee === "SI" ? "A360" : "--"}
+                          {item.agencyFee ? "Aurora 360" : "--"}
                         </button>
+                      </td>
+                      <td className="px-1 py-1.5 text-center align-top">
+                        <ToggleCell value={item.aplicaFee} onToggle={() => toggleStringField(item.id, "aplicaFee")} labelOn="SI" labelOff="NO" />
                       </td>
                       <td className="px-2 py-1.5 text-right align-top font-mono text-muted-foreground">
                         {item.fee > 0 ? formatUSD(item.fee) : "--"}
@@ -447,7 +451,7 @@ export default function BudgetPage() {
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-border bg-muted/30">
-                <td colSpan={15} className="px-3 py-3 font-semibold text-muted-foreground text-xs">
+                <td colSpan={16} className="px-3 py-3 font-semibold text-muted-foreground text-xs">
                   TOTAL -- {filtered.length} items
                 </td>
                 <td className="px-2 py-3 text-right font-bold text-sm text-primary font-mono">
@@ -523,12 +527,18 @@ export default function BudgetPage() {
               <label className="text-xs font-medium mb-1 block">Qty Dias</label>
               <Input type="number" value={newItem.qtyDias} onChange={e => setNewItem(p => ({ ...p, qtyDias: parseFloat(e.target.value) || 1 }))} />
             </div>
+            <div className="flex items-end gap-4">
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={newItem.agencyFee || false} onChange={e => setNewItem(p => ({ ...p, agencyFee: e.target.checked }))} className="rounded border-border" />
+                Via Aurora 360?
+              </label>
+            </div>
             <div>
-              <label className="text-xs font-medium mb-1 block">Fee Aurora 360?</label>
+              <label className="text-xs font-medium mb-1 block">Incluye Fee?</label>
               <Select value={newItem.aplicaFee} onValueChange={v => setNewItem(p => ({ ...p, aplicaFee: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="SI">SI (A360)</SelectItem>
+                  <SelectItem value="SI">SI</SelectItem>
                   <SelectItem value="NO">NO</SelectItem>
                 </SelectContent>
               </Select>
