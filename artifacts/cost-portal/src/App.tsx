@@ -5,7 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard, TableProperties, Plane, Menu, X, ChevronRight,
-  Wine, Coffee, Sandwich, LogOut
+  Wine, Coffee, Sandwich, LogOut, Info, Eye, MessageSquare, Pencil
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -49,8 +49,103 @@ function NavLink({ item }: { item: typeof NAV_ITEMS[number] }) {
   );
 }
 
+const ROLE_DEFINITIONS = [
+  {
+    org: "C2 LABS",
+    label: "Editor",
+    icon: Pencil,
+    color: "text-emerald-400",
+    bgColor: "bg-emerald-500/10",
+    borderColor: "border-emerald-500/20",
+    description: "Full access: edit all budget fields, add/delete items, toggle flags",
+  },
+  {
+    org: "OPINNO",
+    label: "Commenter",
+    icon: MessageSquare,
+    color: "text-blue-400",
+    bgColor: "bg-blue-500/10",
+    borderColor: "border-blue-500/20",
+    description: "View all data and add comments to descriptions and notes",
+  },
+  {
+    org: "AURORA360",
+    label: "Viewer",
+    icon: Eye,
+    color: "text-amber-400",
+    bgColor: "bg-amber-500/10",
+    borderColor: "border-amber-500/20",
+    description: "View-only access to all budget data and reports",
+  },
+];
+
+function RolesInfoCard({ currentOrg }: { currentOrg: string }) {
+  const [dismissed, setDismissed] = useState(() => {
+    try { return localStorage.getItem("emtech-roles-dismissed") === "1"; } catch { return false; }
+  });
+  const [visible, setVisible] = useState(!dismissed);
+
+  if (!visible) {
+    return (
+      <button
+        onClick={() => { setVisible(true); try { localStorage.removeItem("emtech-roles-dismissed"); } catch {} }}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] text-sidebar-foreground/40 hover:text-sidebar-foreground/70 transition-colors"
+      >
+        <Info className="w-3 h-3" />
+        <span>User roles info</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="mx-3 mb-2 rounded-lg border border-sidebar-border bg-sidebar-accent/30 overflow-hidden">
+      <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-sidebar-border/50">
+        <span className="text-[10px] font-semibold text-sidebar-foreground/70 uppercase tracking-wider">User Roles</span>
+        <button
+          onClick={() => {
+            setVisible(false);
+            setDismissed(true);
+            try { localStorage.setItem("emtech-roles-dismissed", "1"); } catch {}
+          }}
+          className="text-sidebar-foreground/30 hover:text-sidebar-foreground/60 transition-colors"
+        >
+          <X className="w-3 h-3" />
+        </button>
+      </div>
+      <div className="px-2.5 py-2 space-y-1.5">
+        {ROLE_DEFINITIONS.map(role => {
+          const isCurrent = role.org === currentOrg;
+          return (
+            <div
+              key={role.org}
+              className={cn(
+                "flex items-start gap-2 px-2 py-1.5 rounded-md border transition-colors",
+                isCurrent
+                  ? `${role.bgColor} ${role.borderColor}`
+                  : "border-transparent"
+              )}
+            >
+              <role.icon className={cn("w-3 h-3 mt-0.5 flex-shrink-0", role.color)} />
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className={cn("text-[10px] font-semibold", role.color)}>{role.label}</span>
+                  <span className="text-[9px] text-sidebar-foreground/40">{role.org}</span>
+                  {isCurrent && (
+                    <span className="text-[8px] px-1 py-0.5 rounded bg-primary/20 text-primary font-medium">YOU</span>
+                  )}
+                </div>
+                <p className="text-[9px] text-sidebar-foreground/50 leading-snug mt-0.5">{role.description}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => void }) {
-  const { user, logout } = useAuth();
+  const { user, permissions, logout } = useAuth();
 
   return (
     <>
@@ -85,11 +180,13 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
           <p className="text-[10px] text-sidebar-foreground/40 mt-2 uppercase tracking-widest">Organizers Portal</p>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {NAV_ITEMS.map(item => (
             <NavLink key={item.path} item={item} />
           ))}
         </nav>
+
+        {user && <RolesInfoCard currentOrg={user.organization} />}
 
         {user && (
           <div className="px-3 py-3 border-t border-sidebar-border">
@@ -99,7 +196,19 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-sidebar-foreground truncate">{user.name}</p>
-                <p className="text-[10px] text-sidebar-foreground/50 truncate">{user.organization}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-[10px] text-sidebar-foreground/50 truncate">{user.organization}</p>
+                  <span className={cn(
+                    "text-[9px] px-1.5 py-0.5 rounded-full font-medium border",
+                    permissions.canEdit
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                      : permissions.canComment
+                        ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                        : "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                  )}>
+                    {permissions.label}
+                  </span>
+                </div>
               </div>
             </div>
             <button
