@@ -1,4 +1,22 @@
-# Workspace
+# EmTech Digital El Salvador 2026 — Cost Portal
+
+## Overview
+
+A fully-editable cost management portal for the MIT Technology Review EmTech Digital El Salvador 2026 event. Built as a React + Vite SPA with local browser persistence.
+
+## Features
+
+- **Overview Dashboard**: KPI cards (total budget, cash spend, in-kind, pending quotes), charts by area/event phase/cost center, top items
+- **Budget Items**: Expandable grouped table (by event + area), inline editable cells (click any cell to edit), filter by event/area/cost center, CSV export, add/delete items
+- **Flights & Transfers**: Avianca flight block by route group, ground transfers (arrivals, in-city, departures) with editable costs
+- **Persistent**: All edits saved in localStorage, survive page refreshes
+- **Link management**: Quote/document URLs open in new tab, inline edit UI for links
+
+## Data Source
+
+Imported from: `attached_assets/MITTR_EmTech_Digital_El_Salvador_2026_Budget_[COSTS]_1775694259858.xlsx`
+
+## Stack
 
 ## Overview
 

@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "EmTech Digital El Salvador 2026 — Cost Portal"
+version = "1.0.0"
+id = "artifacts/cost-portal"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18761
+
+[services.development]
+run = "pnpm --filter @workspace/cost-portal run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/cost-portal", "run", "build" ]
+publicDir = "artifacts/cost-portal/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18761"
+BASE_PATH = "/"
