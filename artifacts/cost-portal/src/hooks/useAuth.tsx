@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 
 interface AuthUser {
   id: number;
@@ -8,13 +8,36 @@ interface AuthUser {
   organization: string;
 }
 
+export interface Permissions {
+  canEdit: boolean;
+  canComment: boolean;
+  canView: boolean;
+  label: string;
+}
+
+function getPermissions(org: string): Permissions {
+  switch (org) {
+    case "C2 LABS":
+      return { canEdit: true, canComment: true, canView: true, label: "Editor" };
+    case "OPINNO":
+      return { canEdit: false, canComment: true, canView: true, label: "Commenter" };
+    case "AURORA360":
+      return { canEdit: false, canComment: false, canView: true, label: "Viewer" };
+    default:
+      return { canEdit: false, canComment: false, canView: true, label: "Viewer" };
+  }
+}
+
 interface AuthContextType {
   user: AuthUser | null;
+  permissions: Permissions;
   loading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
 }
+
+const defaultPermissions: Permissions = { canEdit: false, canComment: false, canView: true, label: "Viewer" };
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
@@ -22,6 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const permissions = useMemo(() => user ? getPermissions(user.organization) : defaultPermissions, [user]);
 
   useEffect(() => {
     (async () => {
@@ -71,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, logout }}>
+    <AuthContext.Provider value={{ user, permissions, loading, error, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

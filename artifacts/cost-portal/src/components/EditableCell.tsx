@@ -9,9 +9,10 @@ interface EditableCellProps {
   type?: "text" | "number";
   prefix?: string;
   placeholder?: string;
+  disabled?: boolean;
 }
 
-export function EditableCell({ value, onSave, className, type = "text", prefix, placeholder }: EditableCellProps) {
+export function EditableCell({ value, onSave, className, type = "text", prefix, placeholder, disabled }: EditableCellProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -36,6 +37,15 @@ export function EditableCell({ value, onSave, className, type = "text", prefix, 
     setDraft(value);
     setEditing(false);
   };
+
+  if (disabled) {
+    return (
+      <span className={cn("px-0.5", className)}>
+        {prefix && value && <span className="text-muted-foreground text-xs">{prefix}</span>}
+        {value || <span className="text-muted-foreground/40 italic text-xs">{placeholder || "—"}</span>}
+      </span>
+    );
+  }
 
   if (editing) {
     return (

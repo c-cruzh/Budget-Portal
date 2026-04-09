@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { INITIAL_BUDGET_ITEMS, type BudgetItem } from "@/data/budgetData";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
+import { useAuth } from "@/hooks/useAuth";
 import { formatUSD } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -76,7 +77,10 @@ function recalcItem(item: BudgetItem): BudgetItem {
 const SEED_ITEMS = INITIAL_BUDGET_ITEMS.map(recalcItem);
 
 export default function BudgetPage() {
-  const { items, setItems, loading, saving, lastSaved, error } = useBudgetApi(SEED_ITEMS);
+  const { items, setItems, loading, saving, lastSaved, error, meta, saveCommentOnly } = useBudgetApi(SEED_ITEMS);
+  const { permissions, user } = useAuth();
+  const canEdit = permissions.canEdit;
+  const canComment = permissions.canComment;
   const [search, setSearch] = useState("");
   const [filterEvento, setFilterEvento] = useState("ALL");
   const [filterArea, setFilterArea] = useState("ALL");
@@ -257,6 +261,14 @@ export default function BudgetPage() {
     setNewItem({ evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, exentoIva: false });
   }, [newItem, setItems]);
 
+  const updateComment = useCallback((id: string, field: "notas" | "descripcion", value: string) => {
+    const updated = items.map(item => {
+      if (item.id !== id) return item;
+      return { ...item, [field]: value };
+    });
+    saveCommentOnly(updated);
+  }, [items, saveCommentOnly]);
+
   const toggleArea = (key: string) => {
     setExpandedAreas(prev => {
       const next = new Set(prev);
@@ -311,7 +323,7 @@ export default function BudgetPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {saving ? (
             <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
               <Loader2 className="w-3 h-3 animate-spin" /> Saving...
@@ -329,7 +341,22 @@ export default function BudgetPage() {
               <Cloud className="w-3 h-3" /> Cloud sync active
             </span>
           )}
+          {meta?.lastEditedBy && (
+            <span className="text-[10px] text-muted-foreground/60">
+              Last edit by {meta.lastEditedBy} ({meta.lastEditedByOrg}) {meta.lastEditedAt ? new Date(meta.lastEditedAt).toLocaleString() : ""}
+            </span>
+          )}
         </div>
+        <span className={cn(
+          "text-[10px] px-2 py-0.5 rounded-full border font-medium",
+          canEdit
+            ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+            : canComment
+              ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
+              : "bg-zinc-500/10 text-zinc-500 border-zinc-500/20"
+        )}>
+          {permissions.label}
+        </span>
       </div>
 
       <SummaryCards
@@ -362,7 +389,9 @@ export default function BudgetPage() {
           </Select>
           <div className="flex gap-2 ml-auto">
             <Button variant="outline" size="sm" onClick={exportCSV} className="gap-2"><Download className="w-4 h-4" />Export CSV</Button>
-            <Button size="sm" onClick={() => setShowAddModal(true)} className="gap-2"><Plus className="w-4 h-4" />Add Item</Button>
+            {canEdit && (
+              <Button size="sm" onClick={() => setShowAddModal(true)} className="gap-2"><Plus className="w-4 h-4" />Add Item</Button>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap gap-3 items-center">
@@ -425,7 +454,7 @@ export default function BudgetPage() {
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[80px]">Img. Ref.</th>
                 <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16">Validar</th>
                 <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16">Aparte</th>
-                <th className="w-8 px-1 py-2.5"></th>
+                {canEdit && <th className="w-8 px-1 py-2.5"></th>}
               </tr>
             </thead>
             <tbody>
@@ -473,7 +502,7 @@ export default function BudgetPage() {
                         )}
                       </td>
                       <td className="px-2 py-1.5 align-top max-w-[260px]">
-                        <EditableCell value={item.item} onSave={v => updateItem(item.id, "item", v)} className="font-medium text-foreground text-xs" />
+                        <EditableCell value={item.item} onSave={v => updateItem(item.id, "item", v)} className="font-medium text-foreground text-xs" disabled={!canEdit} />
                         {(item.descripcion || item.notas) && (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -485,32 +514,37 @@ export default function BudgetPage() {
                             <TooltipContent side="bottom" className="max-w-[350px] text-xs space-y-1 p-3">
                               {item.descripcion && <div><span className="font-semibold text-foreground">Desc:</span> {item.descripcion}</div>}
                               {item.notas && <div className="italic text-muted-foreground"><span className="font-semibold not-italic text-foreground">Notas:</span> {item.notas}</div>}
-                              <div className="text-[10px] text-muted-foreground/50 pt-1">Click item name to edit. Desc/Notas editable below.</div>
+                              {(canEdit || canComment) && <div className="text-[10px] text-muted-foreground/50 pt-1">Click to edit desc/notas below.</div>}
                             </TooltipContent>
                           </Tooltip>
                         )}
                         <div className="flex gap-1 mt-0.5">
-                          <EditableCell value={item.descripcion} onSave={v => updateItem(item.id, "descripcion", v)} className="text-muted-foreground/40 text-[9px] truncate max-w-[120px]" placeholder="+ desc" />
-                          <EditableCell value={item.notas} onSave={v => updateItem(item.id, "notas", v)} className="text-muted-foreground/30 text-[9px] italic truncate max-w-[120px]" placeholder="+ nota" />
+                          <EditableCell value={item.descripcion} onSave={v => canEdit ? updateItem(item.id, "descripcion", v) : updateComment(item.id, "descripcion", v)} className="text-muted-foreground/40 text-[9px] truncate max-w-[120px]" placeholder="+ desc" disabled={!canEdit && !canComment} />
+                          <EditableCell value={item.notas} onSave={v => canEdit ? updateItem(item.id, "notas", v) : updateComment(item.id, "notas", v)} className="text-muted-foreground/30 text-[9px] italic truncate max-w-[120px]" placeholder="+ nota" disabled={!canEdit && !canComment} />
                         </div>
                       </td>
                       <td className="px-2 py-1.5 align-top">
-                        <EditableCell value={item.centroCosto} onSave={v => updateItem(item.id, "centroCosto", v)} className="text-muted-foreground text-xs" />
+                        <EditableCell value={item.centroCosto} onSave={v => updateItem(item.id, "centroCosto", v)} className="text-muted-foreground text-xs" disabled={!canEdit} />
                       </td>
                       <td className="px-1 py-1.5 text-center align-top">
-                        <ToggleCell value={item.inKind} onToggle={() => toggleField(item.id, "inKind")} labelOn="SI" labelOff="NO" />
+                        {canEdit ? (
+                          <ToggleCell value={item.inKind} onToggle={() => toggleField(item.id, "inKind")} labelOn="SI" labelOff="NO" />
+                        ) : (
+                          <span className={cn("text-[10px] px-2 py-0.5 rounded border font-medium", item.inKind ? "bg-primary/10 text-primary border-primary/20" : "bg-muted/50 text-muted-foreground/50 border-border/50")}>{item.inKind ? "SI" : "NO"}</span>
+                        )}
                       </td>
                       <td className="px-1 py-1.5 text-center align-top">
-                        <EditableCell value={String(item.qty)} onSave={v => updateItem(item.id, "qty", v)} className="text-center font-mono text-xs" type="number" />
+                        <EditableCell value={String(item.qty)} onSave={v => updateItem(item.id, "qty", v)} className="text-center font-mono text-xs" type="number" disabled={!canEdit} />
                       </td>
                       <td className="px-1 py-1.5 align-top">
-                        <EditableCell value={item.uom} onSave={v => updateItem(item.id, "uom", v)} className="text-muted-foreground text-xs" />
+                        <EditableCell value={item.uom} onSave={v => updateItem(item.id, "uom", v)} className="text-muted-foreground text-xs" disabled={!canEdit} />
                       </td>
                       <td className="px-1 py-1.5 text-center align-top">
                         <button
-                          onClick={() => toggleStringField(item.id, "porDias")}
+                          onClick={canEdit ? () => toggleStringField(item.id, "porDias") : undefined}
                           className={cn(
                             "text-[10px] px-1.5 py-0.5 rounded border font-medium transition-colors whitespace-nowrap",
+                            !canEdit && "cursor-default",
                             item.porDias === "SI"
                               ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
                               : "bg-gray-500/10 text-gray-500 border-gray-500/20"
@@ -521,16 +555,16 @@ export default function BudgetPage() {
                       </td>
                       <td className="px-1 py-1.5 text-center align-top">
                         {item.porDias === "SI" ? (
-                          <EditableCell value={String(item.qtyDias)} onSave={v => updateItem(item.id, "qtyDias", v)} className="text-center font-mono text-xs" type="number" />
+                          <EditableCell value={String(item.qtyDias)} onSave={v => updateItem(item.id, "qtyDias", v)} className="text-center font-mono text-xs" type="number" disabled={!canEdit} />
                         ) : (
                           <span className="text-muted-foreground/30 text-xs">--</span>
                         )}
                       </td>
                       <td className="px-2 py-1.5 text-right align-top font-mono">
                         {item.precioUnitario > 0 ? (
-                          <EditableCell value={String(item.precioUnitario)} onSave={v => updateItem(item.id, "precioUnitario", parseFloat(v) || 0)} className="text-right font-mono text-xs" type="number" prefix="$" />
+                          <EditableCell value={String(item.precioUnitario)} onSave={v => updateItem(item.id, "precioUnitario", parseFloat(v) || 0)} className="text-right font-mono text-xs" type="number" prefix="$" disabled={!canEdit} />
                         ) : (
-                          <EditableCell value="0" onSave={v => updateItem(item.id, "precioUnitario", parseFloat(v) || 0)} className="text-right font-mono text-xs text-muted-foreground/40" type="number" />
+                          <EditableCell value="0" onSave={v => updateItem(item.id, "precioUnitario", parseFloat(v) || 0)} className="text-right font-mono text-xs text-muted-foreground/40" type="number" disabled={!canEdit} />
                         )}
                       </td>
                       <td className="px-2 py-1.5 text-right align-top font-mono text-muted-foreground">
@@ -538,12 +572,13 @@ export default function BudgetPage() {
                       </td>
                       <td className="px-1 py-1.5 text-center align-top">
                         <button
-                          onClick={() => toggleField(item.id, "agencyFee")}
+                          onClick={canEdit ? () => toggleField(item.id, "agencyFee") : undefined}
                           className={cn(
                             "text-[10px] px-1.5 py-0.5 rounded border font-medium transition-colors whitespace-nowrap",
+                            !canEdit && "cursor-default",
                             item.agencyFee
                               ? "bg-primary/10 text-primary border-primary/20"
-                              : "bg-muted/50 text-muted-foreground/40 border-border/50 hover:border-border"
+                              : "bg-muted/50 text-muted-foreground/40 border-border/50"
                           )}
                         >
                           {item.agencyFee ? "Aurora 360" : "No"}
@@ -552,9 +587,10 @@ export default function BudgetPage() {
                       <td className="px-1 py-1.5 text-center align-top">
                         {item.agencyFee ? (
                           <button
-                            onClick={() => toggleStringField(item.id, "aplicaFee")}
+                            onClick={canEdit ? () => toggleStringField(item.id, "aplicaFee") : undefined}
                             className={cn(
                               "text-[10px] px-1.5 py-0.5 rounded border font-medium transition-colors whitespace-nowrap",
+                              !canEdit && "cursor-default",
                               item.aplicaFee === "SI"
                                 ? "bg-green-500/10 text-green-600 border-green-500/20"
                                 : "bg-red-500/10 text-red-600 border-red-500/20"
@@ -572,20 +608,20 @@ export default function BudgetPage() {
                       <td className="px-2 py-1.5 text-right align-top">
                         {item.exentoIva ? (
                           <button
-                            onClick={() => { updateItem(item.id, "exentoIva", false); }}
-                            className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/20 hover:bg-amber-500/20 transition-colors font-medium"
+                            onClick={canEdit ? () => { updateItem(item.id, "exentoIva", false); } : undefined}
+                            className={cn("text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/20 font-medium", canEdit && "hover:bg-amber-500/20 transition-colors", !canEdit && "cursor-default")}
                           >EXENTO</button>
                         ) : item.iva > 0 ? (
                           <span
-                            className="font-mono text-muted-foreground cursor-pointer hover:text-amber-600 transition-colors"
-                            title="Click para marcar exento de IVA"
-                            onClick={() => { updateItem(item.id, "exentoIva", true); }}
+                            className={cn("font-mono text-muted-foreground", canEdit && "cursor-pointer hover:text-amber-600 transition-colors")}
+                            title={canEdit ? "Click para marcar exento de IVA" : undefined}
+                            onClick={canEdit ? () => { updateItem(item.id, "exentoIva", true); } : undefined}
                           >{formatUSD(item.iva)}</span>
                         ) : (
                           <span
-                            className="text-muted-foreground/30 cursor-pointer hover:text-amber-600 transition-colors"
-                            title="Click para marcar exento de IVA"
-                            onClick={() => { updateItem(item.id, "exentoIva", true); }}
+                            className={cn("text-muted-foreground/30", canEdit && "cursor-pointer hover:text-amber-600 transition-colors")}
+                            title={canEdit ? "Click para marcar exento de IVA" : undefined}
+                            onClick={canEdit ? () => { updateItem(item.id, "exentoIva", true); } : undefined}
                           >--</span>
                         )}
                       </td>
@@ -607,20 +643,20 @@ export default function BudgetPage() {
                         ) : (
                           <div className="flex flex-col gap-0.5">
                             <CotizacionBadge value={item.cotizacion} />
-                            <EditableCell value={item.cotizacion} onSave={v => updateItem(item.id, "cotizacion", v)} className="text-muted-foreground text-[10px]" placeholder="cotizacion..." />
+                            <EditableCell value={item.cotizacion} onSave={v => updateItem(item.id, "cotizacion", v)} className="text-muted-foreground text-[10px]" placeholder="cotizacion..." disabled={!canEdit} />
                             {item.cotizacionLink ? (
                               <a href={item.cotizacionLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-[9px] text-blue-500 hover:text-blue-600 truncate max-w-[120px]">
                                 <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
                                 <span className="truncate">{item.cotizacion || "Ver doc"}</span>
                               </a>
                             ) : (
-                              <EditableCell value={item.cotizacionLink || ""} onSave={v => updateItem(item.id, "cotizacionLink", v)} className="text-blue-400/40 text-[9px]" placeholder="+ link" />
+                              <EditableCell value={item.cotizacionLink || ""} onSave={v => updateItem(item.id, "cotizacionLink", v)} className="text-blue-400/40 text-[9px]" placeholder="+ link" disabled={!canEdit} />
                             )}
                           </div>
                         )}
                       </td>
                       <td className="px-2 py-1.5 align-top">
-                        <EditableCell value={item.proveedor || ""} onSave={v => updateItem(item.id, "proveedor", v)} className="text-muted-foreground text-xs" placeholder="proveedor..." />
+                        <EditableCell value={item.proveedor || ""} onSave={v => updateItem(item.id, "proveedor", v)} className="text-muted-foreground text-xs" placeholder="proveedor..." disabled={!canEdit} />
                       </td>
                       <td className="px-2 py-1.5 align-top">
                         {item.documento ? (
@@ -629,22 +665,23 @@ export default function BudgetPage() {
                               <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
                               <span className="truncate">Ver imagen</span>
                             </a>
-                            <EditableCell value={item.documento} onSave={v => updateItem(item.id, "documento", v)} className="text-blue-400/40 text-[9px]" placeholder="editar link..." />
+                            <EditableCell value={item.documento} onSave={v => updateItem(item.id, "documento", v)} className="text-blue-400/40 text-[9px]" placeholder="editar link..." disabled={!canEdit} />
                           </div>
                         ) : (
-                          <EditableCell value="" onSave={v => updateItem(item.id, "documento", v)} className="text-blue-400/40 text-[9px]" placeholder="+ link img" />
+                          <EditableCell value="" onSave={v => updateItem(item.id, "documento", v)} className="text-blue-400/40 text-[9px]" placeholder="+ link img" disabled={!canEdit} />
                         )}
                       </td>
                       <td className="px-1 py-1.5 text-center align-top">
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
-                              onClick={() => toggleField(item.id, "validarCosto")}
+                              onClick={canEdit ? () => toggleField(item.id, "validarCosto") : undefined}
                               className={cn(
                                 "inline-flex items-center justify-center w-6 h-6 rounded transition-colors",
+                                !canEdit && "cursor-default",
                                 item.validarCosto
                                   ? "bg-red-500/15 text-red-500 border border-red-500/30"
-                                  : "bg-muted/30 text-muted-foreground/25 border border-transparent hover:border-border/50"
+                                  : "bg-muted/30 text-muted-foreground/25 border border-transparent"
                               )}
                             >
                               <AlertTriangle className="w-3.5 h-3.5" />
@@ -653,7 +690,7 @@ export default function BudgetPage() {
                           <TooltipContent className="max-w-[200px] text-xs">
                             {item.validarCosto
                               ? "Marcado: validar costo / cotizar con otros proveedores"
-                              : "Click para marcar como costo a validar"}
+                              : canEdit ? "Click para marcar como costo a validar" : "Validar costo"}
                           </TooltipContent>
                         </Tooltip>
                       </td>
@@ -661,12 +698,13 @@ export default function BudgetPage() {
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
-                              onClick={() => toggleField(item.id, "contratarAparte")}
+                              onClick={canEdit ? () => toggleField(item.id, "contratarAparte") : undefined}
                               className={cn(
                                 "inline-flex items-center justify-center w-6 h-6 rounded transition-colors",
+                                !canEdit && "cursor-default",
                                 item.contratarAparte
                                   ? "bg-amber-500/15 text-amber-600 border border-amber-500/30"
-                                  : "bg-muted/30 text-muted-foreground/25 border border-transparent hover:border-border/50"
+                                  : "bg-muted/30 text-muted-foreground/25 border border-transparent"
                               )}
                             >
                               <ShieldAlert className="w-3.5 h-3.5" />
@@ -675,30 +713,32 @@ export default function BudgetPage() {
                           <TooltipContent className="max-w-[200px] text-xs">
                             {item.contratarAparte
                               ? "Marcado: contratar por aparte para evitar costos inflados"
-                              : "Click para marcar como contratar por aparte"}
+                              : canEdit ? "Click para marcar como contratar por aparte" : "Contratar aparte"}
                           </TooltipContent>
                         </Tooltip>
                       </td>
-                      <td className="px-1 py-1.5 align-top">
-                        <div className="flex items-center gap-0.5">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => openEditModal(item)}>
-                                <Pencil className="w-3 h-3" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Edit item</TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-destructive" onClick={() => deleteItem(item.id)}>
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Delete item</TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </td>
+                      {canEdit && (
+                        <td className="px-1 py-1.5 align-top">
+                          <div className="flex items-center gap-0.5">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => openEditModal(item)}>
+                                  <Pencil className="w-3 h-3" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Edit item</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-destructive" onClick={() => deleteItem(item.id)}>
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Delete item</TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   )) : [])
                 ];
