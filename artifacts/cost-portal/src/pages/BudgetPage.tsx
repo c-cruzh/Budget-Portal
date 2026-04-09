@@ -3,11 +3,18 @@ import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
-  Cloud, CloudOff, Loader2, Pencil
+  Cloud, CloudOff, Loader2, Pencil, UserCircle
 } from "lucide-react";
 import { INITIAL_BUDGET_ITEMS, type BudgetItem } from "@/data/budgetData";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useAuth } from "@/hooks/useAuth";
+
+interface PortalUser {
+  id: number;
+  name: string;
+  email: string;
+  organization: string;
+}
 import { formatUSD } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -82,6 +89,19 @@ export default function BudgetPage() {
   const canEdit = permissions.canEdit;
   const canComment = permissions.canComment;
   const [search, setSearch] = useState("");
+  const [portalUsers, setPortalUsers] = useState<PortalUser[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/users", { credentials: "include" });
+        if (res.ok) {
+          const data = await res.json();
+          setPortalUsers(data.users || []);
+        }
+      } catch {}
+    })();
+  }, []);
   const [filterEvento, setFilterEvento] = useState("ALL");
   const [filterArea, setFilterArea] = useState("ALL");
   const [filterCentro, setFilterCentro] = useState("ALL");
@@ -291,7 +311,7 @@ export default function BudgetPage() {
       "IN-KIND?", "AURORA 360?", "QTY", "UoM", "CONTRATACION POR DIAS?", "QTY DIAS",
       "PRECIO UNITARIO", "SUBTOTAL", "VIA PRODUCTORA (AURORA 360)?", "FEE INCL. EN COTIZACION?",
       "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "IMAGEN DE REFERENCIA", "PROVEEDOR",
-      "VALIDAR COSTO?", "CONTRATAR APARTE?", "COTIZACION LINK", "EXENTO IVA?"
+      "VALIDAR COSTO?", "CONTRATAR APARTE?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO"
     ];
     const rows = filtered.map(i => [
       i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
@@ -299,7 +319,7 @@ export default function BudgetPage() {
       i.porDias, i.qtyDias, i.precioUnitario, i.subtotal, i.agencyFee ? "SI" : "NO",
       i.aplicaFee, i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.documento,
       i.proveedor || "", i.validarCosto ? "SI" : "NO", i.contratarAparte ? "SI" : "NO",
-      i.cotizacionLink || "", i.exentoIva ? "SI" : "NO"
+      i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || ""
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -451,6 +471,7 @@ export default function BudgetPage() {
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-24">Total</th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px]">Cotizacion</th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px]">Proveedor</th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[100px]">Assigned</th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[80px]">Img. Ref.</th>
                 <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16">Validar</th>
                 <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16">Aparte</th>
@@ -474,7 +495,7 @@ export default function BudgetPage() {
                         <ChevronRight className="w-3.5 h-3.5" />
                       </motion.div>
                     </td>
-                    <td className="px-2 py-2" colSpan={12}>
+                    <td className="px-2 py-2" colSpan={13}>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-foreground text-xs">{group.area}</span>
                         <Badge variant="secondary" className="text-[10px] font-normal py-0">{group.evento === "MAIN EVENT" ? "Main Event" : group.evento === "MAIN EVENT VIP DINNER" ? "VIP Dinner" : "Pre/Post"}</Badge>
@@ -659,6 +680,39 @@ export default function BudgetPage() {
                         <EditableCell value={item.proveedor || ""} onSave={v => updateItem(item.id, "proveedor", v)} className="text-muted-foreground text-xs" placeholder="proveedor..." disabled={!canEdit} />
                       </td>
                       <td className="px-2 py-1.5 align-top">
+                        {canEdit ? (
+                          <Select
+                            value={item.assignedTo || "__none__"}
+                            onValueChange={v => updateItem(item.id, "assignedTo", v === "__none__" ? "" : v)}
+                          >
+                            <SelectTrigger className="h-6 text-[10px] border-dashed min-w-[90px] px-1.5 gap-1">
+                              <SelectValue placeholder="Assign..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">
+                                <span className="text-muted-foreground">Unassigned</span>
+                              </SelectItem>
+                              {portalUsers.map(u => (
+                                <SelectItem key={u.id} value={u.name}>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="w-4 h-4 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[8px] font-bold flex-shrink-0">{u.name.charAt(0)}</span>
+                                    <span>{u.name}</span>
+                                    <span className="text-muted-foreground text-[9px]">{u.organization}</span>
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : item.assignedTo ? (
+                          <div className="flex items-center gap-1">
+                            <span className="w-4 h-4 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[8px] font-bold flex-shrink-0">{item.assignedTo.charAt(0)}</span>
+                            <span className="text-[10px] text-muted-foreground truncate max-w-[80px]">{item.assignedTo}</span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground/30">--</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 align-top">
                         {item.documento ? (
                           <div className="flex flex-col gap-0.5">
                             <a href={item.documento} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-[10px] text-blue-500 hover:text-blue-600 truncate max-w-[100px]">
@@ -752,7 +806,7 @@ export default function BudgetPage() {
                 <td className="px-2 py-3 text-right font-bold text-sm text-primary font-mono">
                   {formatUSD(totalBudget)}
                 </td>
-                <td colSpan={6}></td>
+                <td colSpan={7}></td>
               </tr>
             </tfoot>
           </table>

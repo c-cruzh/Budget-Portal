@@ -26,6 +26,7 @@ export interface BudgetItem {
   validarCosto: boolean;
   contratarAparte: boolean;
   exentoIva?: boolean;
+  assignedTo?: string;
 }
 
 export const INITIAL_BUDGET_ITEMS: BudgetItem[] = [

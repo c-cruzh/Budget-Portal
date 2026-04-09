@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, appState } from "@workspace/db";
+import { users } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
@@ -84,6 +85,19 @@ router.put("/budget-items", async (req, res) => {
   } catch (err) {
     console.error("Failed to save budget items:", err);
     res.status(500).json({ error: "Failed to save budget items" });
+  }
+});
+
+router.get("/users", async (_req, res) => {
+  try {
+    const allUsers = await db
+      .select({ id: users.id, name: users.name, email: users.email, organization: users.organization })
+      .from(users)
+      .where(eq(users.active, true));
+    res.json({ users: allUsers });
+  } catch (err) {
+    console.error("Failed to load users:", err);
+    res.status(500).json({ error: "Failed to load users" });
   }
 });
 
