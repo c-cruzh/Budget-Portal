@@ -21,7 +21,7 @@ export interface BudgetItem {
   total: number;
   cotizacion: string;
   cotizacionLink: string;
-  cotizacionLink: "", documento: string;
+  documento: string;
   proveedor: string;
   validarCosto: boolean;
   contratarAparte: boolean;

@@ -2,15 +2,34 @@
 
 ## Overview
 
-A fully-editable cost management portal for the MIT Technology Review EmTech Digital El Salvador 2026 event. Built as a React + Vite SPA with local browser persistence.
+A fully-editable cost management portal for the MIT Technology Review EmTech Digital El Salvador 2026 event. Built as a React + Vite SPA with server-side PostgreSQL persistence via an Express API.
 
 ## Features
 
 - **Overview Dashboard**: KPI cards (total budget, cash spend, in-kind, pending quotes), charts by area/event phase/cost center, top items
-- **Budget Items**: Full Excel-parity table with all 21 columns (EVENTO, AREA/ZONA, CENTRO DE COSTO, ITEM, DESCRIPCION, NOTAS/OBSERVACIONES, IN-KIND, AGENCY FEE, QTY, UoM, POR DIAS, QTY DIAS, PRECIO UNITARIO, SUBTOTAL, APLICA FEE, FEE, SUBTOTAL CON FEE, IVA, TOTAL, COTIZACION, DOCUMENTO). Every field is inline-editable. Toggle buttons for boolean fields (In-Kind, Por Dias, Aplica Fee). Cotizacion column shows identifier badges (A2=Aurora360, PENDING, VOLUNTARIO, etc.). Grouped by event+area with expand/collapse. Filters, search, CSV export with all columns, add/delete items.
-- **Flights & Transfers**: Avianca flight block by route group, ground transfers (arrivals, in-city, departures) with editable costs
-- **Persistent**: All edits saved in localStorage, survive page refreshes
+- **Budget Items**: Full Excel-parity table with inline-editable fields. Item cell merges Descripcion/Notas as tooltip. Toggle buttons for boolean fields (In-Kind, Por Dias, Aplica Fee, Validar Costo, Contratar Aparte). Cotizacion column shows identifier badges and link support. Grouped by event+area with expand/collapse. Filters, search, CSV export, add/delete items.
+- **Flights & Transfers**: Avianca flight block by route group, ground transfers with editable costs
+- **Persistent**: All edits synced to PostgreSQL database via API (auto-save with 800ms debounce). Cloud sync indicator shows save status.
 - **Link management**: Quote/document URLs open in new tab, inline edit UI for links
+- **Summary Cards (6)**: Total Budget, Cash Expenditure, In-Kind Items, Pending Quotes, Costos a Validar, Contratar Aparte
+
+## Architecture
+
+### Data Flow
+- Frontend loads budget items from `GET /api/budget-items` on mount
+- Every edit triggers a debounced `PUT /api/budget-items` (800ms) to save the full items array
+- Data stored as JSONB in `app_state` table with key `budget-items`
+- Falls back to seed data (`INITIAL_BUDGET_ITEMS`) if database is empty
+
+### Fee Logic
+- `agencyFee` (Via Productora) drives the 20% fee
+- `aplicaFee: "SI"` means fee is already included in quote (no double-counting)
+- `feeApplies = agencyFee === true AND aplicaFee !== "SI"`
+- IVA 13% on subtotal + fee
+
+### Special Rules
+- Avianca: $56,980.03 final all-inclusive (no IVA added)
+- VOLUNTARIO/NA/PROVEE ESEN items: Cotizacion shows "N/A" (not editable)
 
 ## Data Source
 
@@ -18,21 +37,27 @@ Imported from: `attached_assets/MITTR_EmTech_Digital_El_Salvador_2026_Budget_[CO
 
 ## Stack
 
-## Overview
-
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
-
-## Stack
 
 - **Monorepo tool**: pnpm workspaces
 - **Node.js version**: 24
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
+- **Frontend**: React + Vite + Tailwind CSS + shadcn/ui
 - **API framework**: Express 5
 - **Database**: PostgreSQL + Drizzle ORM
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
+
+## Key Files
+
+- `artifacts/cost-portal/src/pages/BudgetPage.tsx` — Main budget table with all CRUD operations
+- `artifacts/cost-portal/src/data/budgetData.ts` — BudgetItem interface and seed data (179 items)
+- `artifacts/cost-portal/src/hooks/useBudgetApi.ts` — API hook for server persistence
+- `artifacts/cost-portal/src/components/SummaryCards.tsx` — 6 summary KPI cards
+- `artifacts/api-server/src/routes/budget.ts` — Budget CRUD API endpoints
+- `lib/db/src/schema/index.ts` — Database schema (app_state table)
 
 ## Key Commands
 
@@ -41,5 +66,3 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
-
-See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.

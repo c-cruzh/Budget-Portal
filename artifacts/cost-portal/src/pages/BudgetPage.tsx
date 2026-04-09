@@ -2,10 +2,11 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight,
-  Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink
+  Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
+  Cloud, CloudOff, Loader2
 } from "lucide-react";
 import { INITIAL_BUDGET_ITEMS, type BudgetItem } from "@/data/budgetData";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { formatUSD } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -71,34 +72,10 @@ function recalcItem(item: BudgetItem): BudgetItem {
   return item;
 }
 
-function getInitialItems(): BudgetItem[] {
-  const STORAGE_KEY = "budget-items-v7";
-  try {
-    const current = localStorage.getItem(STORAGE_KEY);
-    if (current) return JSON.parse(current);
-    for (const k of ["budget-items-v6", "budget-items-v5", "budget-items-v4", "budget-items-v3", "budget-items-v2"]) {
-      const raw = localStorage.getItem(k);
-      if (raw) {
-        const items = (JSON.parse(raw) as any[]).map((item: any) => recalcItem({
-          ...item,
-          proveedor: item.proveedor || "",
-          validarCosto: item.validarCosto ?? false,
-          contratarAparte: item.contratarAparte ?? false,
-          cotizacionLink: item.cotizacionLink ?? "",
-        }));
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-        return items;
-      }
-    }
-  } catch {}
-  return INITIAL_BUDGET_ITEMS.map(recalcItem);
-}
-
-const STORAGE_KEY = "budget-items-v7";
-const MIGRATED_ITEMS = getInitialItems();
+const SEED_ITEMS = INITIAL_BUDGET_ITEMS.map(recalcItem);
 
 export default function BudgetPage() {
-  const [items, setItems] = useLocalStorage<BudgetItem[]>(STORAGE_KEY, MIGRATED_ITEMS);
+  const { items, setItems, loading, saving, lastSaved, error } = useBudgetApi(SEED_ITEMS);
   const [search, setSearch] = useState("");
   const [filterEvento, setFilterEvento] = useState("ALL");
   const [filterArea, setFilterArea] = useState("ALL");
@@ -206,10 +183,13 @@ export default function BudgetPage() {
       cotizacion: newItem.cotizacion || "",
       documento: newItem.documento || "",
       proveedor: newItem.proveedor || "",
+      validarCosto: false,
+      contratarAparte: false,
+      cotizacionLink: "",
     };
     setItems(prev => [...prev, recalc(base)]);
     setShowAddModal(false);
-    setNewItem({ evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", documento: "", proveedor: "" });
+    setNewItem({ evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false });
   }, [newItem, setItems]);
 
   const toggleArea = (key: string) => {
@@ -252,8 +232,41 @@ export default function BudgetPage() {
     URL.revokeObjectURL(url);
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <span className="text-muted-foreground text-sm">Loading budget data...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {saving ? (
+            <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <Loader2 className="w-3 h-3 animate-spin" /> Saving...
+            </span>
+          ) : error ? (
+            <span className="flex items-center gap-1.5 text-[10px] text-destructive">
+              <CloudOff className="w-3 h-3" /> {error}
+            </span>
+          ) : lastSaved ? (
+            <span className="flex items-center gap-1.5 text-[10px] text-emerald-600">
+              <Cloud className="w-3 h-3" /> Saved {lastSaved.toLocaleTimeString()}
+            </span>
+          ) : (
+            <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <Cloud className="w-3 h-3" /> Cloud sync active
+            </span>
+          )}
+        </div>
+      </div>
+
       <SummaryCards
         totalBudget={totalBudget}
         totalPaid={totalPaid}

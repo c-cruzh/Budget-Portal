@@ -91,7 +91,7 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
             className="w-full max-w-[190px] h-auto opacity-80"
           />
           <p className="text-[10px] text-sidebar-foreground/30 leading-relaxed">
-            Edits saved locally. Export CSV to share.
+            Data synced to cloud. Share the link with your team.
           </p>
         </div>
       </aside>
