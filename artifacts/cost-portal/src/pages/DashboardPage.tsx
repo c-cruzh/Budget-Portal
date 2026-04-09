@@ -9,7 +9,7 @@ import { INITIAL_BUDGET_ITEMS, AVIANCA_ROUTES, type BudgetItem } from "@/data/bu
 import { formatUSD } from "@/lib/utils";
 import { TrendingUp, DollarSign, Package, AlertCircle, CheckCircle, Clock, Handshake } from "lucide-react";
 
-const COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#ddd6fe", "#ede9fe", "#f5f3ff", "#4f46e5"];
+const COLORS = ["#d97706", "#ea8c00", "#f59e0b", "#fbbf24", "#fcd34d", "#fde68a", "#1a1a1a", "#525252"];
 
 export default function DashboardPage() {
   const [items] = useLocalStorage<BudgetItem[]>("budget-items-v2", INITIAL_BUDGET_ITEMS);
@@ -117,7 +117,7 @@ export default function DashboardPage() {
           <div className="flex items-start gap-2">
             <Handshake className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
             <div>
-              <p className="font-semibold text-amber-700">Avianca / Kinstitute Convention</p>
+              <p className="font-semibold text-amber-700">Avianca / Key Institute Convention</p>
               <p className="text-muted-foreground text-xs mt-1">$22,500 cash + $22,500 in-kind commitment pending formal documentation. In-kind covers a PR dinner/event. Once signed, Avianca covers the full flight block.</p>
             </div>
           </div>
@@ -188,7 +188,7 @@ export default function DashboardPage() {
                   contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
                 />
                 <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                  {byEvento.map((_, i) => <Cell key={i} fill={i === 0 ? "#6366f1" : "#a78bfa"} />)}
+                  {byEvento.map((_, i) => <Cell key={i} fill={i === 0 ? "#d97706" : i === 1 ? "#f59e0b" : "#fbbf24"} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

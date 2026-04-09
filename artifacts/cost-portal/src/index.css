@@ -64,7 +64,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* LIGHT MODE — Indigo/slate professional finance palette */
+/* LIGHT MODE — EmTech Digital black/orange branding */
 :root {
   --button-outline: rgba(0,0,0, .10);
   --badge-outline: rgba(0,0,0, .05);
@@ -72,50 +72,41 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  /* Backgrounds */
-  --background: 220 20% 97%;
-  --foreground: 222 47% 11%;
-  --border: 220 13% 90%;
-  --input: 220 13% 85%;
-  --ring: 243 75% 59%;
+  --background: 40 10% 96%;
+  --foreground: 0 0% 9%;
+  --border: 35 8% 88%;
+  --input: 35 8% 83%;
+  --ring: 33 90% 50%;
 
-  /* Cards — slightly off-white, slightly elevated */
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 220 13% 92%;
+  --card-foreground: 0 0% 9%;
+  --card-border: 35 8% 90%;
 
-  /* Sidebar — dark slate */
-  --sidebar: 222 47% 11%;
-  --sidebar-foreground: 210 40% 96%;
-  --sidebar-border: 222 40% 18%;
-  --sidebar-primary: 243 75% 59%;
+  --sidebar: 0 0% 5%;
+  --sidebar-foreground: 40 20% 95%;
+  --sidebar-border: 0 0% 14%;
+  --sidebar-primary: 33 90% 50%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 222 40% 18%;
-  --sidebar-accent-foreground: 210 40% 96%;
-  --sidebar-ring: 243 75% 59%;
+  --sidebar-accent: 0 0% 14%;
+  --sidebar-accent-foreground: 40 20% 95%;
+  --sidebar-ring: 33 90% 50%;
 
-  /* Popover */
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --popover-border: 220 13% 90%;
+  --popover-foreground: 0 0% 9%;
+  --popover-border: 35 8% 88%;
 
-  /* Primary — Indigo */
-  --primary: 243 75% 59%;
+  --primary: 33 90% 50%;
   --primary-foreground: 0 0% 100%;
 
-  /* Secondary */
-  --secondary: 220 14% 96%;
-  --secondary-foreground: 222 47% 25%;
+  --secondary: 35 10% 95%;
+  --secondary-foreground: 0 0% 20%;
 
-  /* Muted */
-  --muted: 220 14% 96%;
-  --muted-foreground: 220 9% 46%;
+  --muted: 35 10% 95%;
+  --muted-foreground: 0 0% 40%;
 
-  /* Accent */
-  --accent: 243 75% 96%;
-  --accent-foreground: 243 75% 40%;
+  --accent: 33 90% 95%;
+  --accent-foreground: 33 90% 35%;
 
-  /* Destructive */
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
 
@@ -135,10 +126,10 @@
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 
-  --chart-1: 243 75% 59%;
-  --chart-2: 258 67% 60%;
-  --chart-3: 212 92% 45%;
-  --chart-4: 16 80% 58%;
+  --chart-1: 33 90% 50%;
+  --chart-2: 25 85% 55%;
+  --chart-3: 0 0% 25%;
+  --chart-4: 45 90% 50%;
   --chart-5: 142 71% 45%;
 
   /* Border utilities */

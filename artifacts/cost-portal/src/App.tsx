@@ -58,26 +58,23 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
         "transition-transform duration-200",
         mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       )}>
-        {/* Logo area */}
-        <div className="px-5 pt-6 pb-5 border-b border-sidebar-border">
-          <div className="flex items-center justify-between">
-            <div>
-              <Link href="/" className="flex items-center gap-2 mb-1 hover:opacity-80 transition-opacity">
-                <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
-                  <span className="text-primary-foreground text-xs font-bold">MIT</span>
-                </div>
-                <span className="font-bold text-sm text-sidebar-foreground">EmTech Digital</span>
-              </Link>
-              <p className="text-xs text-sidebar-foreground/50 leading-tight">El Salvador 2026</p>
-              <p className="text-xs text-sidebar-foreground/40 mt-0.5">Cost Portal</p>
-            </div>
+        <div className="px-4 pt-5 pb-4 border-b border-sidebar-border">
+          <div className="flex items-start justify-between">
+            <Link href="/" className="block hover:opacity-90 transition-opacity">
+              <img
+                src={`${import.meta.env.BASE_URL}emtech-logo.png`}
+                alt="EmTech Digital LATAM El Salvador 2026"
+                className="w-full max-w-[180px] h-auto"
+              />
+            </Link>
             <button
               onClick={onClose}
-              className="lg:hidden text-sidebar-foreground/50 hover:text-sidebar-foreground"
+              className="lg:hidden text-sidebar-foreground/50 hover:text-sidebar-foreground mt-1"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
+          <p className="text-[10px] text-sidebar-foreground/40 mt-2 uppercase tracking-widest">Cost Portal</p>
         </div>
 
         {/* Nav */}
@@ -87,10 +84,14 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
           ))}
         </nav>
 
-        {/* Footer */}
-        <div className="px-4 py-4 border-t border-sidebar-border">
-          <p className="text-xs text-sidebar-foreground/40 leading-relaxed">
-            All edits are saved locally in your browser. Export CSV to share.
+        <div className="px-4 py-4 border-t border-sidebar-border space-y-3">
+          <img
+            src={`${import.meta.env.BASE_URL}presenting-partners.png`}
+            alt="Presenting Partners: MIT Technology Review (Publicado por Opinno) and C2 Labs"
+            className="w-full max-w-[190px] h-auto opacity-80"
+          />
+          <p className="text-[10px] text-sidebar-foreground/30 leading-relaxed">
+            Edits saved locally. Export CSV to share.
           </p>
         </div>
       </aside>

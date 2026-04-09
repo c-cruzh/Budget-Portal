@@ -131,8 +131,8 @@ export default function AviancaPage() {
             <div className="flex items-start gap-2">
               <Handshake className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
               <div>
-                <p className="font-semibold text-amber-700">Avianca / Kinstitute Sponsorship Convention — Pending Documentation</p>
-                <p className="mt-1">Avianca will commit $22,500 cash + $22,500 in-kind through a convention agreement with Kinstitute. The in-kind portion covers a PR dinner/event during the event launch period (not directly for the main event). Once the documentation and agreement process is complete, Avianca will cover the full requested flight block under the negotiated terms and conditions.</p>
+                <p className="font-semibold text-amber-700">Avianca / Key Institute Sponsorship Convention — Pending Documentation</p>
+                <p className="mt-1">Avianca will commit $22,500 cash + $22,500 in-kind through a convention agreement with Key Institute. The in-kind portion covers a PR dinner/event during the event launch period (not directly for the main event). Once the documentation and agreement process is complete, Avianca will cover the full requested flight block under the negotiated terms and conditions.</p>
                 <p className="mt-1 text-amber-600 font-medium">Status: Awaiting formal documentation and signatures.</p>
               </div>
             </div>
