@@ -3,6 +3,7 @@ import type { BudgetItem } from "@/data/budgetData";
 
 const API_URL = "/api/budget-items";
 const SAVE_DEBOUNCE_MS = 800;
+const SEED_VERSION = "2026-04-09T17:50:00Z";
 
 export function useBudgetApi(
   fallbackItems: BudgetItem[]
@@ -32,9 +33,52 @@ export function useBudgetApi(
         const data = await res.json();
         if (!cancelled) {
           if (data.items && Array.isArray(data.items) && data.items.length > 0) {
+            const appliedVersion = localStorage.getItem("seed-version-applied");
+            if (appliedVersion !== SEED_VERSION) {
+              try {
+                const seedRes = await fetch(import.meta.env.BASE_URL + "seed-data.json");
+                if (seedRes.ok) {
+                  const seedItems = await seedRes.json();
+                  if (Array.isArray(seedItems) && seedItems.length > 0) {
+                    const seedStr = JSON.stringify(seedItems);
+                    const dbStr = JSON.stringify(data.items);
+                    if (seedStr.length > dbStr.length) {
+                      console.log("Seed data is newer, syncing to server...");
+                      await saveToServer(seedItems);
+                      setItemsState(seedItems);
+                      latestItems.current = seedItems;
+                      localStorage.setItem("seed-version-applied", SEED_VERSION);
+                      initialLoadDone.current = true;
+                      setLoading(false);
+                      return;
+                    }
+                  }
+                }
+              } catch (seedErr) {
+                console.warn("Could not load seed data:", seedErr);
+              }
+              localStorage.setItem("seed-version-applied", SEED_VERSION);
+            }
             setItemsState(data.items);
             latestItems.current = data.items;
           } else {
+            try {
+              const seedRes = await fetch(import.meta.env.BASE_URL + "seed-data.json");
+              if (seedRes.ok) {
+                const seedItems = await seedRes.json();
+                if (Array.isArray(seedItems) && seedItems.length > 0) {
+                  await saveToServer(seedItems);
+                  setItemsState(seedItems);
+                  latestItems.current = seedItems;
+                  localStorage.setItem("seed-version-applied", SEED_VERSION);
+                  initialLoadDone.current = true;
+                  setLoading(false);
+                  return;
+                }
+              }
+            } catch (seedErr) {
+              console.warn("Could not load seed data:", seedErr);
+            }
             await saveToServer(fallbackItems);
             latestItems.current = fallbackItems;
           }
