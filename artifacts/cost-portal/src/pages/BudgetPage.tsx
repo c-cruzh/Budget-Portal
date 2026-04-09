@@ -1,9 +1,8 @@
 import { useState, useMemo, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  Search, Filter, Download, Plus, ChevronDown, ChevronRight,
-  ExternalLink, CheckCircle2, AlertCircle, Clock, Tag,
-  DollarSign, TrendingUp, BarChart3, Edit3, Save, X, Trash2
+  Search, Download, Plus, ChevronRight,
+  Tag, Trash2
 } from "lucide-react";
 import { INITIAL_BUDGET_ITEMS, type BudgetItem } from "@/data/budgetData";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
@@ -26,10 +25,37 @@ import {
 } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { StatusBadge } from "@/components/StatusBadge";
 import { EditableCell } from "@/components/EditableCell";
 import { SummaryCards } from "@/components/SummaryCards";
-import { LinkCell } from "@/components/LinkCell";
+
+function CotizacionBadge({ value }: { value: string }) {
+  if (!value) return <span className="text-muted-foreground/40 text-xs">--</span>;
+  const v = value.trim().toUpperCase();
+  if (v === "PENDING") return <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-600 border border-orange-500/20 whitespace-nowrap">PENDING</span>;
+  if (v === "VOLUNTARIO") return <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 border border-violet-500/20 whitespace-nowrap">VOLUNTARIO</span>;
+  if (v === "PROVEE ESEN") return <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-600 border border-teal-500/20 whitespace-nowrap">PROVEE ESEN</span>;
+  if (v === "NA") return <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-500/10 text-gray-500 border border-gray-500/20 whitespace-nowrap">N/A</span>;
+  if (v.startsWith("A") && /^A\d+$/.test(v)) return <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 whitespace-nowrap font-mono">{v}</span>;
+  if (v.startsWith("HTTP")) return <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 border border-blue-500/20 whitespace-nowrap truncate max-w-[100px] block">Link</span>;
+  return <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 whitespace-nowrap truncate max-w-[110px] block">{value.length > 18 ? value.slice(0, 18) + "..." : value}</span>;
+}
+
+function ToggleCell({ value, onToggle, labelOn, labelOff }: { value: boolean | string; onToggle: () => void; labelOn?: string; labelOff?: string }) {
+  const isOn = value === true || value === "SI";
+  return (
+    <button
+      onClick={onToggle}
+      className={cn(
+        "text-[10px] px-2 py-0.5 rounded border font-medium transition-colors whitespace-nowrap",
+        isOn
+          ? "bg-primary/10 text-primary border-primary/20"
+          : "bg-muted/50 text-muted-foreground/50 border-border/50 hover:border-border"
+      )}
+    >
+      {isOn ? (labelOn || "SI") : (labelOff || "NO")}
+    </button>
+  );
+}
 
 export default function BudgetPage() {
   const [items, setItems] = useLocalStorage<BudgetItem[]>("budget-items-v2", INITIAL_BUDGET_ITEMS);
@@ -37,31 +63,13 @@ export default function BudgetPage() {
   const [filterEvento, setFilterEvento] = useState("ALL");
   const [filterArea, setFilterArea] = useState("ALL");
   const [filterCentro, setFilterCentro] = useState("ALL");
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set(["MAIN EVENT_INGRESO ESEN Y PARQUEO", "MAIN EVENT_AUDITORIO/MAIN STAGE", "BEFORE/AFTER MAIN EVENT_HOSPITALITY"]));
   const [showAddModal, setShowAddModal] = useState(false);
   const [newItem, setNewItem] = useState<Partial<BudgetItem>>({
-    evento: "MAIN EVENT",
-    area: "",
-    centroCosto: "",
-    item: "",
-    descripcion: "",
-    notas: "",
-    inKind: false,
-    agencyFee: false,
-    qty: 1,
-    uom: "",
-    porDias: "NO",
-    qtyDias: 1,
-    precioUnitario: 0,
-    subtotal: 0,
-    aplicaFee: "NO",
-    fee: 0,
-    subtotalConFee: 0,
-    iva: 0,
-    total: 0,
-    cotizacion: "",
-    documento: "",
+    evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "",
+    inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1,
+    precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0,
+    cotizacion: "", documento: "",
   });
 
   const eventos = useMemo(() => ["ALL", ...Array.from(new Set(items.map(i => i.evento).filter(Boolean)))], [items]);
@@ -88,13 +96,13 @@ export default function BudgetPage() {
         i.descripcion.toLowerCase().includes(q) ||
         i.area.toLowerCase().includes(q) ||
         i.centroCosto.toLowerCase().includes(q) ||
-        i.notas.toLowerCase().includes(q)
+        i.notas.toLowerCase().includes(q) ||
+        i.cotizacion.toLowerCase().includes(q)
       );
     }
     return out;
   }, [items, filterEvento, filterArea, filterCentro, search]);
 
-  // Group by evento + area
   const grouped = useMemo(() => {
     const map = new Map<string, { evento: string; area: string; items: BudgetItem[] }>();
     filtered.forEach(item => {
@@ -105,22 +113,41 @@ export default function BudgetPage() {
     return map;
   }, [filtered]);
 
+  const recalc = (updated: BudgetItem): BudgetItem => {
+    const qty = Number(updated.qty) || 0;
+    const dias = Number(updated.qtyDias) || 1;
+    const precio = Number(updated.precioUnitario) || 0;
+    const byDias = updated.porDias === "SI";
+    updated.subtotal = byDias ? qty * dias * precio : qty * precio;
+    const feeRate = 0.20;
+    updated.fee = updated.aplicaFee === "SI" ? updated.subtotal * feeRate : 0;
+    updated.subtotalConFee = updated.subtotal + updated.fee;
+    updated.iva = updated.subtotalConFee * 0.13;
+    updated.total = updated.subtotalConFee + updated.iva;
+    return updated;
+  };
+
   const updateItem = useCallback((id: string, field: keyof BudgetItem, value: BudgetItem[keyof BudgetItem]) => {
     setItems(prev => prev.map(item => {
       if (item.id !== id) return item;
       const updated = { ...item, [field]: value };
-      // Recalculate derived fields
-      const qty = Number(updated.qty) || 0;
-      const dias = Number(updated.qtyDias) || 1;
-      const precio = Number(updated.precioUnitario) || 0;
-      const byDias = updated.porDias === "SI";
-      updated.subtotal = byDias ? qty * dias * precio : qty * precio;
-      const feeRate = 0.20;
-      updated.fee = updated.aplicaFee === "SI" ? updated.subtotal * feeRate : 0;
-      updated.subtotalConFee = updated.subtotal + updated.fee;
-      updated.iva = updated.subtotalConFee * 0.13;
-      updated.total = updated.subtotalConFee + updated.iva;
-      return updated;
+      return recalc(updated);
+    }));
+  }, [setItems]);
+
+  const toggleField = useCallback((id: string, field: "inKind" | "agencyFee") => {
+    setItems(prev => prev.map(item => {
+      if (item.id !== id) return item;
+      const updated = { ...item, [field]: !item[field] };
+      return recalc(updated);
+    }));
+  }, [setItems]);
+
+  const toggleStringField = useCallback((id: string, field: "porDias" | "aplicaFee") => {
+    setItems(prev => prev.map(item => {
+      if (item.id !== id) return item;
+      const updated = { ...item, [field]: item[field] === "SI" ? "NO" : "SI" };
+      return recalc(updated);
     }));
   }, [setItems]);
 
@@ -130,17 +157,7 @@ export default function BudgetPage() {
 
   const addItem = useCallback(() => {
     const id = `custom-${Date.now()}`;
-    const qty = Number(newItem.qty) || 0;
-    const dias = Number(newItem.qtyDias) || 1;
-    const precio = Number(newItem.precioUnitario) || 0;
-    const byDias = newItem.porDias === "SI";
-    const subtotal = byDias ? qty * dias * precio : qty * precio;
-    const fee = newItem.aplicaFee === "SI" ? subtotal * 0.20 : 0;
-    const subtotalConFee = subtotal + fee;
-    const iva = subtotalConFee * 0.13;
-    const total = subtotalConFee + iva;
-
-    const item: BudgetItem = {
+    const base: BudgetItem = {
       id,
       evento: newItem.evento || "MAIN EVENT",
       area: newItem.area || "",
@@ -154,17 +171,13 @@ export default function BudgetPage() {
       uom: newItem.uom || "",
       porDias: newItem.porDias || "NO",
       qtyDias: newItem.qtyDias || 1,
-      precioUnitario: precio,
-      subtotal,
-      aplicaFee: newItem.aplicaFee || "NO",
-      fee,
-      subtotalConFee,
-      iva,
-      total,
+      precioUnitario: Number(newItem.precioUnitario) || 0,
+      subtotal: 0, aplicaFee: newItem.aplicaFee || "NO",
+      fee: 0, subtotalConFee: 0, iva: 0, total: 0,
       cotizacion: newItem.cotizacion || "",
       documento: newItem.documento || "",
     };
-    setItems(prev => [...prev, item]);
+    setItems(prev => [...prev, recalc(base)]);
     setShowAddModal(false);
     setNewItem({ evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", documento: "" });
   }, [newItem, setItems]);
@@ -184,19 +197,23 @@ export default function BudgetPage() {
   const pendingCount = useMemo(() => filtered.filter(i => i.cotizacion === "PENDING").length, [filtered]);
 
   const exportCSV = () => {
-    const headers = ["EVENTO", "AREA", "CENTRO DE COSTO", "ITEM", "DESCRIPCION", "QTY", "UOM", "PRECIO UNITARIO", "SUBTOTAL", "FEE", "SUBTOTAL CON FEE", "IVA", "TOTAL", "IN-KIND", "COTIZACION"];
+    const headers = [
+      "EVENTO", "AREA/ZONA", "CENTRO DE COSTO", "ITEM", "DESCRIPCION", "NOTAS/OBSERVACIONES",
+      "IN-KIND?", "PRODUCTION AGENCY FEE?", "QTY", "UoM", "CONTRATACION POR DIAS?", "QTY DIAS",
+      "PRECIO UNITARIO", "SUBTOTAL", "APLICA FEE DE PRODUCCION?", "FEE", "SUBTOTAL CON FEE",
+      "IVA", "TOTAL", "COTIZACION", "DOCUMENTO DE DETALLE"
+    ];
     const rows = filtered.map(i => [
-      i.evento, i.area, i.centroCosto, i.item, i.descripcion,
-      i.qty, i.uom, i.precioUnitario, i.subtotal, i.fee,
-      i.subtotalConFee, i.iva, i.total, i.inKind ? "SI" : "NO", i.cotizacion
+      i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
+      i.inKind ? "SI" : "NO", i.agencyFee ? "SI" : "NO", i.qty, i.uom,
+      i.porDias, i.qtyDias, i.precioUnitario, i.subtotal, i.aplicaFee,
+      i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.documento
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = "EmTech_El_Salvador_2026_Budget.csv";
-    a.click();
+    a.href = url; a.download = "EmTech_El_Salvador_2026_Budget.csv"; a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -210,82 +227,54 @@ export default function BudgetPage() {
         itemCount={filtered.length}
       />
 
-      {/* Toolbar */}
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search items..."
-            className="pl-9 bg-card border-card-border"
-          />
+          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search items, notes, cotizacion..." className="pl-9 bg-card border-card-border" />
         </div>
-
         <Select value={filterEvento} onValueChange={v => { setFilterEvento(v); setFilterArea("ALL"); setFilterCentro("ALL"); }}>
-          <SelectTrigger className="w-[200px] bg-card border-card-border">
-            <SelectValue placeholder="Event" />
-          </SelectTrigger>
-          <SelectContent>
-            {eventos.map(e => (
-              <SelectItem key={e} value={e}>{e === "ALL" ? "All Events" : e}</SelectItem>
-            ))}
-          </SelectContent>
+          <SelectTrigger className="w-[200px] bg-card border-card-border"><SelectValue placeholder="Event" /></SelectTrigger>
+          <SelectContent>{eventos.map(e => <SelectItem key={e} value={e}>{e === "ALL" ? "All Events" : e}</SelectItem>)}</SelectContent>
         </Select>
-
         <Select value={filterArea} onValueChange={v => { setFilterArea(v); setFilterCentro("ALL"); }}>
-          <SelectTrigger className="w-[220px] bg-card border-card-border">
-            <SelectValue placeholder="Area" />
-          </SelectTrigger>
-          <SelectContent>
-            {areas.map(a => (
-              <SelectItem key={a} value={a}>{a === "ALL" ? "All Areas" : a}</SelectItem>
-            ))}
-          </SelectContent>
+          <SelectTrigger className="w-[220px] bg-card border-card-border"><SelectValue placeholder="Area" /></SelectTrigger>
+          <SelectContent>{areas.map(a => <SelectItem key={a} value={a}>{a === "ALL" ? "All Areas" : a}</SelectItem>)}</SelectContent>
         </Select>
-
         <Select value={filterCentro} onValueChange={setFilterCentro}>
-          <SelectTrigger className="w-[200px] bg-card border-card-border">
-            <SelectValue placeholder="Cost Center" />
-          </SelectTrigger>
-          <SelectContent>
-            {centros.map(c => (
-              <SelectItem key={c} value={c}>{c === "ALL" ? "All Centers" : c}</SelectItem>
-            ))}
-          </SelectContent>
+          <SelectTrigger className="w-[200px] bg-card border-card-border"><SelectValue placeholder="Cost Center" /></SelectTrigger>
+          <SelectContent>{centros.map(c => <SelectItem key={c} value={c}>{c === "ALL" ? "All Centers" : c}</SelectItem>)}</SelectContent>
         </Select>
-
         <div className="flex gap-2 ml-auto">
-          <Button variant="outline" size="sm" onClick={exportCSV} className="gap-2">
-            <Download className="w-4 h-4" />
-            Export CSV
-          </Button>
-          <Button size="sm" onClick={() => setShowAddModal(true)} className="gap-2">
-            <Plus className="w-4 h-4" />
-            Add Item
-          </Button>
+          <Button variant="outline" size="sm" onClick={exportCSV} className="gap-2"><Download className="w-4 h-4" />Export CSV</Button>
+          <Button size="sm" onClick={() => setShowAddModal(true)} className="gap-2"><Plus className="w-4 h-4" />Add Item</Button>
         </div>
       </div>
 
-      {/* Table */}
       <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-xs">
             <thead>
-              <tr className="border-b border-border bg-muted/50">
-                <th className="text-left px-4 py-3 font-semibold text-muted-foreground w-8"></th>
-                <th className="text-left px-4 py-3 font-semibold text-muted-foreground min-w-[220px]">Item</th>
-                <th className="text-left px-4 py-3 font-semibold text-muted-foreground min-w-[140px]">Cost Center</th>
-                <th className="text-center px-3 py-3 font-semibold text-muted-foreground w-16">Qty</th>
-                <th className="text-left px-3 py-3 font-semibold text-muted-foreground w-20">UoM</th>
-                <th className="text-right px-3 py-3 font-semibold text-muted-foreground w-24">Unit Price</th>
-                <th className="text-right px-3 py-3 font-semibold text-muted-foreground w-24">Subtotal</th>
-                <th className="text-right px-3 py-3 font-semibold text-muted-foreground w-24">Fee</th>
-                <th className="text-right px-3 py-3 font-semibold text-muted-foreground w-20">IVA</th>
-                <th className="text-right px-4 py-3 font-semibold text-muted-foreground w-28">Total</th>
-                <th className="text-left px-3 py-3 font-semibold text-muted-foreground min-w-[120px]">Status</th>
-                <th className="text-left px-3 py-3 font-semibold text-muted-foreground min-w-[140px]">Quote / Doc</th>
-                <th className="w-20 px-3 py-3"></th>
+              <tr className="border-b border-border bg-muted/50 text-[10px] uppercase tracking-wider">
+                <th className="px-2 py-2.5 w-6"></th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[180px]">Item</th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[140px]">Descripcion</th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[130px]">Notas</th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[100px]">Centro Costo</th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-12">In-Kind</th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-10">Qty</th>
+                <th className="text-left px-1 py-2.5 font-semibold text-muted-foreground w-16">UoM</th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-12">Dias?</th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-10">Dias</th>
+                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20">P. Unit.</th>
+                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20">Subtotal</th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-12">Fee?</th>
+                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16">Fee</th>
+                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20">Sub+Fee</th>
+                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16">IVA</th>
+                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-24">Total</th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px]">Cotizacion</th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px]">Documento</th>
+                <th className="w-8 px-1 py-2.5"></th>
               </tr>
             </thead>
             <tbody>
@@ -295,177 +284,126 @@ export default function BudgetPage() {
                 const hasInKind = group.items.some(i => i.inKind);
 
                 return [
-                  // Group header row
                   <tr
                     key={`header-${key}`}
                     className="bg-muted/30 border-t border-b border-border cursor-pointer hover:bg-muted/50 transition-colors select-none"
                     onClick={() => toggleArea(key)}
                   >
-                    <td className="px-4 py-2.5" colSpan={1}>
-                      <motion.div
-                        animate={{ rotate: isExpanded ? 90 : 0 }}
-                        transition={{ duration: 0.15 }}
-                        className="w-4 h-4 text-muted-foreground"
-                      >
-                        <ChevronRight className="w-4 h-4" />
+                    <td className="px-2 py-2" colSpan={1}>
+                      <motion.div animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.15 }} className="w-3.5 h-3.5 text-muted-foreground">
+                        <ChevronRight className="w-3.5 h-3.5" />
                       </motion.div>
                     </td>
-                    <td className="px-4 py-2.5" colSpan={8}>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-foreground">{group.area}</span>
-                        <Badge variant="secondary" className="text-xs font-normal">
-                          {group.evento === "MAIN EVENT" ? "Main Event" : "Pre/Post Event"}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
-                          {group.items.length} items
-                        </Badge>
-                        {hasInKind && (
-                          <Badge className="text-xs bg-amber-500/15 text-amber-600 border-amber-500/20 font-normal">
-                            In-Kind
-                          </Badge>
-                        )}
+                    <td className="px-2 py-2" colSpan={12}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-foreground text-xs">{group.area}</span>
+                        <Badge variant="secondary" className="text-[10px] font-normal py-0">{group.evento === "MAIN EVENT" ? "Main Event" : group.evento === "MAIN EVENT VIP DINNER" ? "VIP Dinner" : "Pre/Post"}</Badge>
+                        <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground py-0">{group.items.length} items</Badge>
+                        {hasInKind && <Badge className="text-[10px] bg-amber-500/15 text-amber-600 border-amber-500/20 font-normal py-0">In-Kind</Badge>}
                       </div>
                     </td>
-                    <td className="px-4 py-2.5 text-right font-semibold" colSpan={4}>
-                      {groupTotal > 0 ? (
-                        <span className="text-primary">{formatUSD(groupTotal)}</span>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">In-Kind / $0</span>
-                      )}
+                    <td className="px-2 py-2 text-right font-semibold" colSpan={7}>
+                      {groupTotal > 0 ? <span className="text-primary text-xs">{formatUSD(groupTotal)}</span> : <span className="text-muted-foreground text-[10px]">In-Kind / $0</span>}
                     </td>
                   </tr>,
 
-                  // Item rows
                   ...(isExpanded ? group.items.map(item => (
-                    <motion.tr
+                    <tr
                       key={item.id}
-                      initial={{ opacity: 0, y: -4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -4 }}
-                      transition={{ duration: 0.15 }}
                       className={cn(
-                        "border-b border-border/50 transition-colors",
-                        item.inKind ? "bg-amber-500/5" : "hover:bg-muted/20",
-                        editingId === item.id && "bg-primary/5 ring-1 ring-inset ring-primary/20"
+                        "border-b border-border/50 transition-colors text-xs",
+                        item.inKind ? "bg-amber-500/5" : "hover:bg-muted/20"
                       )}
                     >
-                      <td className="px-4 py-2.5">
+                      <td className="px-2 py-1.5 align-top">
                         {item.inKind && (
-                          <Tooltip>
-                            <TooltipTrigger>
-                              <Tag className="w-3.5 h-3.5 text-amber-500" />
-                            </TooltipTrigger>
-                            <TooltipContent>In-Kind contribution</TooltipContent>
-                          </Tooltip>
+                          <Tooltip><TooltipTrigger><Tag className="w-3 h-3 text-amber-500" /></TooltipTrigger><TooltipContent>In-Kind</TooltipContent></Tooltip>
                         )}
                       </td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex flex-col gap-0.5">
-                          <EditableCell
-                            value={item.item}
-                            onSave={v => updateItem(item.id, "item", v)}
-                            className="font-medium text-foreground"
-                          />
-                          {item.descripcion && (
-                            <span className="text-xs text-muted-foreground leading-tight line-clamp-1">{item.descripcion}</span>
-                          )}
-                          {item.notas && (
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <span className="text-xs text-muted-foreground/60 italic line-clamp-1 cursor-help">{item.notas.slice(0, 60)}…</span>
-                              </TooltipTrigger>
-                              <TooltipContent className="max-w-xs text-xs">{item.notas}</TooltipContent>
-                            </Tooltip>
-                          )}
-                        </div>
+                      <td className="px-2 py-1.5 align-top">
+                        <EditableCell value={item.item} onSave={v => updateItem(item.id, "item", v)} className="font-medium text-foreground text-xs" />
                       </td>
-                      <td className="px-3 py-2.5">
-                        <EditableCell
-                          value={item.centroCosto}
-                          onSave={v => updateItem(item.id, "centroCosto", v)}
-                          className="text-muted-foreground text-xs"
-                        />
+                      <td className="px-2 py-1.5 align-top">
+                        <EditableCell value={item.descripcion} onSave={v => updateItem(item.id, "descripcion", v)} className="text-muted-foreground text-xs" placeholder="descripcion..." />
                       </td>
-                      <td className="px-3 py-2.5 text-center">
-                        <EditableCell
-                          value={String(item.qty)}
-                          onSave={v => updateItem(item.id, "qty", v)}
-                          className="text-center font-mono text-sm"
-                          type="number"
-                        />
+                      <td className="px-2 py-1.5 align-top">
+                        <EditableCell value={item.notas} onSave={v => updateItem(item.id, "notas", v)} className="text-muted-foreground/70 text-xs italic" placeholder="notas..." />
                       </td>
-                      <td className="px-3 py-2.5 text-muted-foreground text-xs">
-                        <EditableCell
-                          value={item.uom}
-                          onSave={v => updateItem(item.id, "uom", v)}
-                          className="text-muted-foreground text-xs"
-                        />
+                      <td className="px-2 py-1.5 align-top">
+                        <EditableCell value={item.centroCosto} onSave={v => updateItem(item.id, "centroCosto", v)} className="text-muted-foreground text-xs" />
                       </td>
-                      <td className="px-3 py-2.5 text-right font-mono text-sm">
+                      <td className="px-1 py-1.5 text-center align-top">
+                        <ToggleCell value={item.inKind} onToggle={() => toggleField(item.id, "inKind")} labelOn="SI" labelOff="NO" />
+                      </td>
+                      <td className="px-1 py-1.5 text-center align-top">
+                        <EditableCell value={String(item.qty)} onSave={v => updateItem(item.id, "qty", v)} className="text-center font-mono text-xs" type="number" />
+                      </td>
+                      <td className="px-1 py-1.5 align-top">
+                        <EditableCell value={item.uom} onSave={v => updateItem(item.id, "uom", v)} className="text-muted-foreground text-xs" />
+                      </td>
+                      <td className="px-1 py-1.5 text-center align-top">
+                        <ToggleCell value={item.porDias} onToggle={() => toggleStringField(item.id, "porDias")} />
+                      </td>
+                      <td className="px-1 py-1.5 text-center align-top">
+                        <EditableCell value={String(item.qtyDias)} onSave={v => updateItem(item.id, "qtyDias", v)} className="text-center font-mono text-xs" type="number" />
+                      </td>
+                      <td className="px-2 py-1.5 text-right align-top font-mono">
+                        <EditableCell value={String(item.precioUnitario)} onSave={v => updateItem(item.id, "precioUnitario", parseFloat(v) || 0)} className="text-right font-mono text-xs" type="number" />
+                      </td>
+                      <td className="px-2 py-1.5 text-right align-top font-mono text-muted-foreground">
+                        {item.subtotal > 0 ? formatUSD(item.subtotal) : "--"}
+                      </td>
+                      <td className="px-1 py-1.5 text-center align-top">
+                        <ToggleCell value={item.aplicaFee} onToggle={() => toggleStringField(item.id, "aplicaFee")} />
+                      </td>
+                      <td className="px-2 py-1.5 text-right align-top font-mono text-muted-foreground">
+                        {item.fee > 0 ? formatUSD(item.fee) : "--"}
+                      </td>
+                      <td className="px-2 py-1.5 text-right align-top font-mono text-muted-foreground">
+                        {item.subtotalConFee > 0 ? formatUSD(item.subtotalConFee) : "--"}
+                      </td>
+                      <td className="px-2 py-1.5 text-right align-top font-mono text-muted-foreground">
+                        {item.iva > 0 ? formatUSD(item.iva) : "--"}
+                      </td>
+                      <td className="px-2 py-1.5 text-right align-top">
                         {item.inKind ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : (
-                          <EditableCell
-                            value={String(item.precioUnitario)}
-                            onSave={v => updateItem(item.id, "precioUnitario", parseFloat(v) || 0)}
-                            className="text-right font-mono text-sm"
-                            type="number"
-                            prefix="$"
-                          />
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono text-sm text-muted-foreground">
-                        {item.inKind ? "—" : formatUSD(item.subtotal)}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono text-sm text-muted-foreground">
-                        {item.fee > 0 ? formatUSD(item.fee) : "—"}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono text-sm text-muted-foreground">
-                        {item.iva > 0 ? formatUSD(item.iva) : "—"}
-                      </td>
-                      <td className="px-4 py-2.5 text-right">
-                        {item.inKind ? (
-                          <span className="text-amber-600 font-semibold text-sm">In-Kind</span>
+                          <span className="text-amber-600 font-semibold text-xs">In-Kind</span>
                         ) : item.total > 0 ? (
-                          <span className="font-semibold text-foreground font-mono">{formatUSD(item.total)}</span>
+                          <span className="font-semibold text-foreground font-mono text-xs">{formatUSD(item.total)}</span>
                         ) : (
                           <span className="text-muted-foreground">$0.00</span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5">
-                        <StatusBadge value={item.cotizacion} />
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <LinkCell value={item.cotizacion} documento={item.documento} itemId={item.id} onSave={(field, val) => updateItem(item.id, field as keyof BudgetItem, val)} />
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <div className="flex gap-1 justify-end">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                                onClick={() => deleteItem(item.id)}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Delete item</TooltipContent>
-                          </Tooltip>
+                      <td className="px-2 py-1.5 align-top">
+                        <div className="flex flex-col gap-1">
+                          <CotizacionBadge value={item.cotizacion} />
+                          <EditableCell value={item.cotizacion} onSave={v => updateItem(item.id, "cotizacion", v)} className="text-muted-foreground text-[10px]" placeholder="cotizacion..." />
                         </div>
                       </td>
-                    </motion.tr>
+                      <td className="px-2 py-1.5 align-top">
+                        <EditableCell value={item.documento} onSave={v => updateItem(item.id, "documento", v)} className="text-muted-foreground text-[10px]" placeholder="doc..." />
+                      </td>
+                      <td className="px-1 py-1.5 align-top">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-destructive" onClick={() => deleteItem(item.id)}>
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Delete item</TooltipContent>
+                        </Tooltip>
+                      </td>
+                    </tr>
                   )) : [])
                 ];
               })}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-border bg-muted/30">
-                <td colSpan={9} className="px-4 py-3 font-semibold text-muted-foreground">
-                  TOTAL — {filtered.length} items shown
+                <td colSpan={16} className="px-3 py-3 font-semibold text-muted-foreground text-xs">
+                  TOTAL -- {filtered.length} items
                 </td>
-                <td className="px-4 py-3 text-right font-bold text-lg text-primary font-mono">
+                <td className="px-2 py-3 text-right font-bold text-sm text-primary font-mono">
                   {formatUSD(totalBudget)}
                 </td>
                 <td colSpan={3}></td>
@@ -475,89 +413,99 @@ export default function BudgetPage() {
         </div>
       </div>
 
-      {/* Add Item Modal */}
       <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Budget Item</DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 mt-2">
-            <div className="col-span-2">
-              <label className="text-sm font-medium mb-1 block">Item Name *</label>
+          <div className="grid grid-cols-3 gap-3 mt-2 text-sm">
+            <div className="col-span-3">
+              <label className="text-xs font-medium mb-1 block">Item Name *</label>
               <Input value={newItem.item} onChange={e => setNewItem(p => ({ ...p, item: e.target.value }))} placeholder="e.g. CATERING COFFEE BREAK" />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Event</label>
+              <label className="text-xs font-medium mb-1 block">Evento</label>
               <Select value={newItem.evento} onValueChange={v => setNewItem(p => ({ ...p, evento: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="MAIN EVENT">MAIN EVENT</SelectItem>
+                  <SelectItem value="MAIN EVENT VIP DINNER">MAIN EVENT VIP DINNER</SelectItem>
                   <SelectItem value="BEFORE/AFTER MAIN EVENT">BEFORE/AFTER MAIN EVENT</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Area</label>
-              <Input value={newItem.area} onChange={e => setNewItem(p => ({ ...p, area: e.target.value }))} placeholder="e.g. CATERING / BREAKS" />
+              <label className="text-xs font-medium mb-1 block">Area / Zona</label>
+              <Input value={newItem.area} onChange={e => setNewItem(p => ({ ...p, area: e.target.value }))} placeholder="e.g. AUDITORIO/MAIN STAGE" />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Cost Center</label>
-              <Input value={newItem.centroCosto} onChange={e => setNewItem(p => ({ ...p, centroCosto: e.target.value }))} placeholder="e.g. CATERING" />
+              <label className="text-xs font-medium mb-1 block">Centro de Costo</label>
+              <Input value={newItem.centroCosto} onChange={e => setNewItem(p => ({ ...p, centroCosto: e.target.value }))} placeholder="e.g. STAFF" />
+            </div>
+            <div className="col-span-3">
+              <label className="text-xs font-medium mb-1 block">Descripcion</label>
+              <Input value={newItem.descripcion} onChange={e => setNewItem(p => ({ ...p, descripcion: e.target.value }))} placeholder="Description..." />
+            </div>
+            <div className="col-span-3">
+              <label className="text-xs font-medium mb-1 block">Notas / Observaciones</label>
+              <Input value={newItem.notas} onChange={e => setNewItem(p => ({ ...p, notas: e.target.value }))} placeholder="Notes..." />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Unit of Measure</label>
-              <Input value={newItem.uom} onChange={e => setNewItem(p => ({ ...p, uom: e.target.value }))} placeholder="e.g. PERSONA" />
+              <label className="text-xs font-medium mb-1 block">Qty</label>
+              <Input type="number" value={newItem.qty} onChange={e => setNewItem(p => ({ ...p, qty: parseFloat(e.target.value) || 0 }))} />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Quantity</label>
-              <Input type="number" value={newItem.qty as number} onChange={e => setNewItem(p => ({ ...p, qty: parseFloat(e.target.value) || 0 }))} />
+              <label className="text-xs font-medium mb-1 block">UoM</label>
+              <Input value={newItem.uom} onChange={e => setNewItem(p => ({ ...p, uom: e.target.value }))} placeholder="PERSONA, UNIDAD..." />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Unit Price (USD)</label>
-              <Input type="number" value={newItem.precioUnitario} onChange={e => setNewItem(p => ({ ...p, precioUnitario: parseFloat(e.target.value) || 0 }))} />
+              <label className="text-xs font-medium mb-1 block">Precio Unitario</label>
+              <Input type="number" step="0.01" value={newItem.precioUnitario} onChange={e => setNewItem(p => ({ ...p, precioUnitario: parseFloat(e.target.value) || 0 }))} />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Apply Agency Fee?</label>
-              <Select value={newItem.aplicaFee} onValueChange={v => setNewItem(p => ({ ...p, aplicaFee: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NO">No</SelectItem>
-                  <SelectItem value="SI">Yes (20%)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium mb-1 block">Bill by Days?</label>
+              <label className="text-xs font-medium mb-1 block">Contratacion por Dias?</label>
               <Select value={newItem.porDias} onValueChange={v => setNewItem(p => ({ ...p, porDias: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="NO">No</SelectItem>
-                  <SelectItem value="SI">Yes</SelectItem>
+                  <SelectItem value="SI">SI</SelectItem>
+                  <SelectItem value="NO">NO</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            {newItem.porDias === "SI" && (
-              <div>
-                <label className="text-sm font-medium mb-1 block">Number of Days</label>
-                <Input type="number" value={newItem.qtyDias as number} onChange={e => setNewItem(p => ({ ...p, qtyDias: parseInt(e.target.value) || 1 }))} />
-              </div>
-            )}
-            <div className="col-span-2">
-              <label className="text-sm font-medium mb-1 block">Description</label>
-              <Input value={newItem.descripcion} onChange={e => setNewItem(p => ({ ...p, descripcion: e.target.value }))} placeholder="Optional description" />
+            <div>
+              <label className="text-xs font-medium mb-1 block">Qty Dias</label>
+              <Input type="number" value={newItem.qtyDias} onChange={e => setNewItem(p => ({ ...p, qtyDias: parseFloat(e.target.value) || 1 }))} />
             </div>
-            <div className="col-span-2">
-              <label className="text-sm font-medium mb-1 block">Quote / Link</label>
-              <Input value={newItem.cotizacion} onChange={e => setNewItem(p => ({ ...p, cotizacion: e.target.value }))} placeholder="URL or quote reference" />
+            <div>
+              <label className="text-xs font-medium mb-1 block">Aplica Fee?</label>
+              <Select value={newItem.aplicaFee} onValueChange={v => setNewItem(p => ({ ...p, aplicaFee: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SI">SI</SelectItem>
+                  <SelectItem value="NO">NO</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <div className="col-span-2 flex items-center gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={newItem.inKind} onChange={e => setNewItem(p => ({ ...p, inKind: e.target.checked }))} className="rounded" />
-                <span className="text-sm">In-Kind contribution</span>
+            <div className="flex items-end gap-4">
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={newItem.inKind || false} onChange={e => setNewItem(p => ({ ...p, inKind: e.target.checked }))} className="rounded border-border" />
+                In-Kind?
+              </label>
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={newItem.agencyFee || false} onChange={e => setNewItem(p => ({ ...p, agencyFee: e.target.checked }))} className="rounded border-border" />
+                Agency Fee?
               </label>
             </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Cotizacion</label>
+              <Input value={newItem.cotizacion} onChange={e => setNewItem(p => ({ ...p, cotizacion: e.target.value }))} placeholder="A2, PENDING..." />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Documento</label>
+              <Input value={newItem.documento} onChange={e => setNewItem(p => ({ ...p, documento: e.target.value }))} placeholder="Document ref..." />
+            </div>
           </div>
-          <div className="flex gap-3 justify-end mt-4">
+          <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setShowAddModal(false)}>Cancel</Button>
             <Button onClick={addItem} disabled={!newItem.item}>Add Item</Button>
           </div>

@@ -7,7 +7,7 @@ A fully-editable cost management portal for the MIT Technology Review EmTech Dig
 ## Features
 
 - **Overview Dashboard**: KPI cards (total budget, cash spend, in-kind, pending quotes), charts by area/event phase/cost center, top items
-- **Budget Items**: Expandable grouped table (by event + area), inline editable cells (click any cell to edit), filter by event/area/cost center, CSV export, add/delete items
+- **Budget Items**: Full Excel-parity table with all 21 columns (EVENTO, AREA/ZONA, CENTRO DE COSTO, ITEM, DESCRIPCION, NOTAS/OBSERVACIONES, IN-KIND, AGENCY FEE, QTY, UoM, POR DIAS, QTY DIAS, PRECIO UNITARIO, SUBTOTAL, APLICA FEE, FEE, SUBTOTAL CON FEE, IVA, TOTAL, COTIZACION, DOCUMENTO). Every field is inline-editable. Toggle buttons for boolean fields (In-Kind, Por Dias, Aplica Fee). Cotizacion column shows identifier badges (A2=Aurora360, PENDING, VOLUNTARIO, etc.). Grouped by event+area with expand/collapse. Filters, search, CSV export with all columns, add/delete items.
 - **Flights & Transfers**: Avianca flight block by route group, ground transfers (arrivals, in-city, departures) with editable costs
 - **Persistent**: All edits saved in localStorage, survive page refreshes
 - **Link management**: Quote/document URLs open in new tab, inline edit UI for links
