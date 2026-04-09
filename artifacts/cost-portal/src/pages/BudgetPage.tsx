@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
-  Cloud, CloudOff, Loader2, Pencil, UserCircle
+  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText
 } from "lucide-react";
 import { INITIAL_BUDGET_ITEMS, type BudgetItem } from "@/data/budgetData";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
@@ -117,7 +117,7 @@ export default function BudgetPage() {
     evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "",
     inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1,
     precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0,
-    cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false,
+    cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, soloPresupuestado: false,
   });
 
   const eventos = useMemo(() => ["ALL", ...Array.from(new Set(items.map(i => i.evento).filter(v => v && v.trim())))], [items]);
@@ -194,7 +194,7 @@ export default function BudgetPage() {
     }));
   }, [setItems]);
 
-  const toggleField = useCallback((id: string, field: "inKind" | "agencyFee") => {
+  const toggleField = useCallback((id: string, field: "inKind" | "agencyFee" | "validarCosto" | "contratarAparte" | "soloPresupuestado") => {
     setItems(prev => prev.map(item => {
       if (item.id !== id) return item;
       const updated = { ...item, [field]: !item[field] };
@@ -275,10 +275,11 @@ export default function BudgetPage() {
       contratarAparte: false,
       cotizacionLink: "",
       exentoIva: false,
+      soloPresupuestado: false,
     };
     setItems(prev => [...prev, recalc(base)]);
     setShowAddModal(false);
-    setNewItem({ evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, exentoIva: false });
+    setNewItem({ evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, exentoIva: false, soloPresupuestado: false });
   }, [newItem, setItems]);
 
   const updateComment = useCallback((id: string, field: "notas" | "descripcion", value: string) => {
@@ -310,14 +311,14 @@ export default function BudgetPage() {
       "EVENTO", "AREA/ZONA", "CENTRO DE COSTO", "ITEM", "DESCRIPCION", "NOTAS/OBSERVACIONES",
       "IN-KIND?", "AURORA 360?", "QTY", "UoM", "CONTRATACION POR DIAS?", "QTY DIAS",
       "PRECIO UNITARIO", "SUBTOTAL", "VIA PRODUCTORA (AURORA 360)?", "FEE INCL. EN COTIZACION?",
-      "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "IMAGEN DE REFERENCIA", "PROVEEDOR",
+      "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "SOLO PRESUPUESTADO?", "IMAGEN DE REFERENCIA", "PROVEEDOR",
       "VALIDAR COSTO?", "CONTRATAR APARTE?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO"
     ];
     const rows = filtered.map(i => [
       i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
       i.inKind ? "SI" : "NO", i.agencyFee ? "SI" : "NO", i.qty, i.uom,
       i.porDias, i.qtyDias, i.precioUnitario, i.subtotal, i.agencyFee ? "SI" : "NO",
-      i.aplicaFee, i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.documento,
+      i.aplicaFee, i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.soloPresupuestado ? "SI" : "NO", i.documento,
       i.proveedor || "", i.validarCosto ? "SI" : "NO", i.contratarAparte ? "SI" : "NO",
       i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || ""
     ]);
@@ -470,6 +471,7 @@ export default function BudgetPage() {
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">IVA</th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-24 bg-[hsl(var(--muted))] border-b border-border">Total</th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">Cotizacion</th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">Solo Presup.</th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">Proveedor</th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[100px] bg-[hsl(var(--muted))] border-b border-border">Assigned</th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[80px] bg-[hsl(var(--muted))] border-b border-border">Img. Ref.</th>
@@ -503,7 +505,7 @@ export default function BudgetPage() {
                         {hasInKind && <Badge className="text-[10px] bg-amber-500/15 text-amber-600 border-amber-500/20 font-normal py-0">In-Kind</Badge>}
                       </div>
                     </td>
-                    <td className="px-2 py-2 text-right font-semibold" colSpan={10}>
+                    <td className="px-2 py-2 text-right font-semibold" colSpan={11}>
 
                       {groupTotal > 0 ? <span className="text-primary text-xs">{formatUSD(groupTotal)}</span> : <span className="text-muted-foreground text-[10px]">In-Kind / $0</span>}
                     </td>
@@ -676,6 +678,29 @@ export default function BudgetPage() {
                           </div>
                         )}
                       </td>
+                      <td className="px-1 py-1.5 text-center align-top">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={canEdit ? () => toggleField(item.id, "soloPresupuestado") : undefined}
+                              className={cn(
+                                "inline-flex items-center justify-center w-6 h-6 rounded transition-colors",
+                                !canEdit && "cursor-default",
+                                item.soloPresupuestado
+                                  ? "bg-yellow-500/15 text-yellow-500 border border-yellow-500/30"
+                                  : "bg-muted/30 text-muted-foreground/25 border border-transparent"
+                              )}
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-[200px] text-xs">
+                            {item.soloPresupuestado
+                              ? "Solo presupuestado — no existe cotizacion"
+                              : canEdit ? "Click para marcar como solo presupuestado" : "Solo presupuestado"}
+                          </TooltipContent>
+                        </Tooltip>
+                      </td>
                       <td className="px-2 py-1.5 align-top">
                         <EditableCell value={item.proveedor || ""} onSave={v => updateItem(item.id, "proveedor", v)} className="text-muted-foreground text-xs" placeholder="proveedor..." disabled={!canEdit} />
                       </td>
@@ -800,7 +825,7 @@ export default function BudgetPage() {
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-border bg-muted/30">
-                <td colSpan={16} className="px-3 py-3 font-semibold text-muted-foreground text-xs">
+                <td colSpan={17} className="px-3 py-3 font-semibold text-muted-foreground text-xs">
                   TOTAL -- {filtered.length} items
                 </td>
                 <td className="px-2 py-3 text-right font-bold text-sm text-primary font-mono">
