@@ -450,10 +450,10 @@ export default function BudgetPage() {
       </div>
 
       <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[calc(100vh-280px)] budget-scroll">
           <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-border bg-muted/50 text-[10px] uppercase tracking-wider">
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-border bg-muted text-[10px] uppercase tracking-wider">
                 <th className="px-2 py-2.5 w-6"></th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[200px]">Item</th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px]">Centro Costo</th>
