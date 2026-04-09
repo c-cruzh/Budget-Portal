@@ -81,7 +81,7 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
               <X className="w-4 h-4" />
             </button>
           </div>
-          <p className="text-[10px] text-sidebar-foreground/40 mt-2 uppercase tracking-widest">Cost Portal</p>
+          <p className="text-[10px] text-sidebar-foreground/40 mt-2 uppercase tracking-widest">Organizers Portal</p>
         </div>
 
         {/* Nav */}
