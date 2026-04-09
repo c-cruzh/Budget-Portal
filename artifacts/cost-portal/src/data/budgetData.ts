@@ -28,6 +28,7 @@ export interface BudgetItem {
   exentoIva?: boolean;
   assignedTo?: string;
   soloPresupuestado?: boolean;
+  accionRequerida?: boolean;
 }
 
 export const INITIAL_BUDGET_ITEMS: BudgetItem[] = [
