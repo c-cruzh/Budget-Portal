@@ -665,14 +665,14 @@ export default function BudgetPage() {
                           <div className="flex flex-col gap-0.5">
                             <CotizacionBadge value={item.cotizacion} />
                             <EditableCell value={item.cotizacion} onSave={v => updateItem(item.id, "cotizacion", v)} className="text-muted-foreground text-[10px]" placeholder="cotizacion..." disabled={!canEdit} />
-                            {item.cotizacionLink ? (
-                              <a href={item.cotizacionLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-[9px] text-blue-500 hover:text-blue-600 truncate max-w-[120px]">
-                                <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
-                                <span className="truncate">{item.cotizacion || "Ver doc"}</span>
-                              </a>
-                            ) : (
-                              <EditableCell value={item.cotizacionLink || ""} onSave={v => updateItem(item.id, "cotizacionLink", v)} className="text-blue-400/40 text-[9px]" placeholder="+ link" disabled={!canEdit} />
-                            )}
+                            <div className="flex items-center gap-0.5">
+                              {item.cotizacionLink && (
+                                <a href={item.cotizacionLink} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-blue-500 hover:text-blue-600" title={item.cotizacionLink}>
+                                  <ExternalLink className="w-2.5 h-2.5" />
+                                </a>
+                              )}
+                              <EditableCell value={item.cotizacionLink || ""} onSave={v => updateItem(item.id, "cotizacionLink", v)} className={item.cotizacionLink ? "text-blue-500 text-[9px] truncate max-w-[100px]" : "text-blue-400/40 text-[9px]"} placeholder="+ link" disabled={!canEdit} />
+                            </div>
                           </div>
                         )}
                       </td>
