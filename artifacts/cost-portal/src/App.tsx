@@ -4,13 +4,17 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { motion } from "framer-motion";
 import {
-  LayoutDashboard, TableProperties, Plane, Menu, X, ChevronRight
+  LayoutDashboard, TableProperties, Plane, Menu, X, ChevronRight,
+  Wine, Coffee, Sandwich
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import DashboardPage from "@/pages/DashboardPage";
 import BudgetPage from "@/pages/BudgetPage";
 import AviancaPage from "@/pages/AviancaPage";
+import CoctelPage from "@/pages/CoctelPage";
+import BarBebidasPage from "@/pages/BarBebidasPage";
+import LunchPage from "@/pages/LunchPage";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -19,6 +23,9 @@ const NAV_ITEMS = [
   { path: "/", label: "Overview", icon: LayoutDashboard },
   { path: "/budget", label: "Budget Items", icon: TableProperties },
   { path: "/travel", label: "Flights & Transfers", icon: Plane },
+  { path: "/coctel", label: "Coctel (Delibanquetes)", icon: Wine },
+  { path: "/bar-bebidas", label: "Bar & Bebidas", icon: Coffee },
+  { path: "/lunch", label: "Lunch & Coffee Breaks", icon: Sandwich },
 ];
 
 function NavLink({ item }: { item: typeof NAV_ITEMS[number] }) {
@@ -157,6 +164,9 @@ function Router() {
       <Route path="/" component={() => <Layout><DashboardPage /></Layout>} />
       <Route path="/budget" component={() => <Layout><BudgetPage /></Layout>} />
       <Route path="/travel" component={() => <Layout><AviancaPage /></Layout>} />
+      <Route path="/coctel" component={() => <Layout><CoctelPage /></Layout>} />
+      <Route path="/bar-bebidas" component={() => <Layout><BarBebidasPage /></Layout>} />
+      <Route path="/lunch" component={() => <Layout><LunchPage /></Layout>} />
       <Route component={NotFound} />
     </Switch>
   );

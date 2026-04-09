@@ -9,6 +9,9 @@ A fully-editable cost management portal for the MIT Technology Review EmTech Dig
 - **Overview Dashboard**: KPI cards (total budget, cash spend, in-kind, pending quotes), charts by area/event phase/cost center, top items
 - **Budget Items**: Full Excel-parity table with inline-editable fields. Item cell merges Descripcion/Notas as tooltip. Toggle buttons for boolean fields (In-Kind, Por Dias, Aplica Fee, Validar Costo, Contratar Aparte). Cotizacion column shows identifier badges and link support. Grouped by event+area with expand/collapse. Filters, search, CSV export, add/delete items.
 - **Flights & Transfers**: Avianca flight block by route group, ground transfers with editable costs
+- **Coctel (Delibanquetes)**: 21 menu items (saladas/dulces) across 2 days, Esc A (400) vs B (500) cost comparison, 10% servicio, tipo badges (I/II/Gourmet/Vegetarianos/Dulce)
+- **Bar & Bebidas**: Full beverage planning — Coffee station, drinks/water, bar cocktail (5-7 PM), ice. Purchase list for PriceSmart/Diasa. Bar mix breakdown (cerveza 54.7%, vino blanco 22.5%, tinto 15.9%, espumante 6.9%)
+- **Lunch & Coffee Breaks (Andián)**: 19 menu items across Coffee AM/PM and Lunch (Regular + Veg). Day 1 vs Day 2 allocation. Fuente badges (COTIZADO/PROPUESTO). Montaje+transporte $450/día
 - **Persistent**: All edits synced to PostgreSQL database via API (auto-save with 800ms debounce). Cloud sync indicator shows save status.
 - **Link management**: Quote/document URLs open in new tab, inline edit UI for links
 - **Summary Cards (6)**: Total Budget, Cash Expenditure, In-Kind Items, Pending Quotes, Costos a Validar, Contratar Aparte
