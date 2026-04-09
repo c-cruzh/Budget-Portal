@@ -5,16 +5,18 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard, TableProperties, Plane, Menu, X, ChevronRight,
-  Wine, Coffee, Sandwich
+  Wine, Coffee, Sandwich, LogOut
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import DashboardPage from "@/pages/DashboardPage";
 import BudgetPage from "@/pages/BudgetPage";
 import AviancaPage from "@/pages/AviancaPage";
 import CoctelPage from "@/pages/CoctelPage";
 import BarBebidasPage from "@/pages/BarBebidasPage";
 import LunchPage from "@/pages/LunchPage";
+import LoginPage from "@/pages/LoginPage";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -48,11 +50,10 @@ function NavLink({ item }: { item: typeof NAV_ITEMS[number] }) {
 }
 
 function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => void }) {
-  const [location] = useLocation();
+  const { user, logout } = useAuth();
 
   return (
     <>
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div
           className="fixed inset-0 bg-black/40 z-30 lg:hidden"
@@ -84,12 +85,32 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
           <p className="text-[10px] text-sidebar-foreground/40 mt-2 uppercase tracking-widest">Organizers Portal</p>
         </div>
 
-        {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1">
           {NAV_ITEMS.map(item => (
             <NavLink key={item.path} item={item} />
           ))}
         </nav>
+
+        {user && (
+          <div className="px-3 py-3 border-t border-sidebar-border">
+            <div className="flex items-center gap-2 px-2 mb-2">
+              <div className="w-7 h-7 rounded-full bg-primary/20 text-primary flex items-center justify-center text-xs font-bold flex-shrink-0">
+                {user.name.charAt(0)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-sidebar-foreground truncate">{user.name}</p>
+                <p className="text-[10px] text-sidebar-foreground/50 truncate">{user.organization}</p>
+              </div>
+            </div>
+            <button
+              onClick={logout}
+              className="flex items-center gap-2 px-2 py-1.5 w-full rounded-md text-xs text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Sign Out
+            </button>
+          </div>
+        )}
 
         <div className="px-4 py-4 border-t border-sidebar-border space-y-3">
           <img
@@ -109,6 +130,7 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
 function Layout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [location] = useLocation();
+  const { user } = useAuth();
 
   const currentPage = NAV_ITEMS.find(n =>
     n.path === "/" ? location === "/" : location.startsWith(n.path)
@@ -118,9 +140,7 @@ function Layout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background">
       <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
 
-      {/* Main content */}
       <div className="lg:pl-[240px] flex flex-col min-h-screen">
-        {/* Top bar */}
         <header className="sticky top-0 z-20 bg-background/80 backdrop-blur-sm border-b border-border px-5 py-3.5 flex items-center gap-4">
           <button
             onClick={() => setMobileOpen(true)}
@@ -135,14 +155,18 @@ function Layout({ children }: { children: React.ReactNode }) {
             <span className="font-semibold text-foreground">{currentPage.label}</span>
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-3">
+            {user && (
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                {user.name} ({user.organization})
+              </span>
+            )}
             <span className="text-xs text-muted-foreground px-2.5 py-1 rounded-full bg-muted border border-border">
               April 2026
             </span>
           </div>
         </header>
 
-        {/* Page content */}
         <main className="flex-1 px-5 sm:px-8 py-6 max-w-[1440px] w-full mx-auto">
           <motion.div
             key={location}
@@ -158,7 +182,7 @@ function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Router() {
+function AppRouter() {
   return (
     <Switch>
       <Route path="/" component={() => <Layout><DashboardPage /></Layout>} />
@@ -172,14 +196,34 @@ function Router() {
   );
 }
 
+function AuthGate() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  return <AppRouter />;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
-        <Toaster />
+        <AuthProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <AuthGate />
+          </WouterRouter>
+          <Toaster />
+        </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );
