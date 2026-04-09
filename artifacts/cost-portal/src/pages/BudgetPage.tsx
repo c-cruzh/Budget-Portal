@@ -67,7 +67,7 @@ function recalcItem(item: BudgetItem): BudgetItem {
   const feeApplies = item.agencyFee && item.aplicaFee !== "SI";
   item.fee = feeApplies ? item.subtotal * 0.20 : 0;
   item.subtotalConFee = item.subtotal + item.fee;
-  item.iva = item.subtotalConFee * 0.13;
+  item.iva = item.exentoIva ? 0 : item.subtotalConFee * 0.13;
   item.total = item.subtotalConFee + item.iva;
   return item;
 }
@@ -186,10 +186,11 @@ export default function BudgetPage() {
       validarCosto: false,
       contratarAparte: false,
       cotizacionLink: "",
+      exentoIva: false,
     };
     setItems(prev => [...prev, recalc(base)]);
     setShowAddModal(false);
-    setNewItem({ evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false });
+    setNewItem({ evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, exentoIva: false });
   }, [newItem, setItems]);
 
   const toggleArea = (key: string) => {
@@ -214,7 +215,7 @@ export default function BudgetPage() {
       "IN-KIND?", "AURORA 360?", "QTY", "UoM", "CONTRATACION POR DIAS?", "QTY DIAS",
       "PRECIO UNITARIO", "SUBTOTAL", "VIA PRODUCTORA (AURORA 360)?", "FEE INCL. EN COTIZACION?",
       "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "DOCUMENTO DE DETALLE", "PROVEEDOR",
-      "VALIDAR COSTO?", "CONTRATAR APARTE?", "COTIZACION LINK"
+      "VALIDAR COSTO?", "CONTRATAR APARTE?", "COTIZACION LINK", "EXENTO IVA?"
     ];
     const rows = filtered.map(i => [
       i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
@@ -222,7 +223,7 @@ export default function BudgetPage() {
       i.porDias, i.qtyDias, i.precioUnitario, i.subtotal, i.agencyFee ? "SI" : "NO",
       i.aplicaFee, i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.documento,
       i.proveedor || "", i.validarCosto ? "SI" : "NO", i.contratarAparte ? "SI" : "NO",
-      i.cotizacionLink || ""
+      i.cotizacionLink || "", i.exentoIva ? "SI" : "NO"
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -469,8 +470,25 @@ export default function BudgetPage() {
                       <td className="px-2 py-1.5 text-right align-top font-mono text-muted-foreground">
                         {item.fee > 0 ? formatUSD(item.fee) : "--"}
                       </td>
-                      <td className="px-2 py-1.5 text-right align-top font-mono text-muted-foreground">
-                        {item.iva > 0 ? formatUSD(item.iva) : "--"}
+                      <td className="px-2 py-1.5 text-right align-top">
+                        {item.exentoIva ? (
+                          <button
+                            onClick={() => { updateItem(item.id, "exentoIva", false); }}
+                            className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/20 hover:bg-amber-500/20 transition-colors font-medium"
+                          >EXENTO</button>
+                        ) : item.iva > 0 ? (
+                          <span
+                            className="font-mono text-muted-foreground cursor-pointer hover:text-amber-600 transition-colors"
+                            title="Click para marcar exento de IVA"
+                            onClick={() => { updateItem(item.id, "exentoIva", true); }}
+                          >{formatUSD(item.iva)}</span>
+                        ) : (
+                          <span
+                            className="text-muted-foreground/30 cursor-pointer hover:text-amber-600 transition-colors"
+                            title="Click para marcar exento de IVA"
+                            onClick={() => { updateItem(item.id, "exentoIva", true); }}
+                          >--</span>
+                        )}
                       </td>
                       <td className="px-2 py-1.5 text-right align-top">
                         {item.inKind ? (
