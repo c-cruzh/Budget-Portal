@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
-  Cloud, CloudOff, Loader2
+  Cloud, CloudOff, Loader2, Pencil
 } from "lucide-react";
 import { INITIAL_BUDGET_ITEMS, type BudgetItem } from "@/data/budgetData";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
@@ -21,6 +21,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -86,6 +87,8 @@ export default function BudgetPage() {
   const [filterCotizacion, setFilterCotizacion] = useState("ALL");
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set(["MAIN EVENT_INGRESO ESEN Y PARQUEO", "MAIN EVENT_AUDITORIO/MAIN STAGE", "BEFORE/AFTER MAIN EVENT_HOSPITALITY"]));
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editItem, setEditItem] = useState<Partial<BudgetItem>>({});
   const [newItem, setNewItem] = useState<Partial<BudgetItem>>({
     evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "",
     inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1,
@@ -186,6 +189,41 @@ export default function BudgetPage() {
   const deleteItem = useCallback((id: string) => {
     setItems(prev => prev.filter(i => i.id !== id));
   }, [setItems]);
+
+  const openEditModal = useCallback((item: BudgetItem) => {
+    setEditItem({ ...item });
+    setShowEditModal(true);
+  }, []);
+
+  const saveEditItem = useCallback(() => {
+    if (!editItem.id) return;
+    setItems(prev => prev.map(i => {
+      if (i.id !== editItem.id) return i;
+      const updated: BudgetItem = {
+        ...i,
+        evento: editItem.evento || i.evento,
+        area: editItem.area ?? i.area,
+        centroCosto: editItem.centroCosto ?? i.centroCosto,
+        item: editItem.item || i.item,
+        descripcion: editItem.descripcion ?? i.descripcion,
+        notas: editItem.notas ?? i.notas,
+        inKind: editItem.inKind ?? i.inKind,
+        agencyFee: editItem.agencyFee ?? i.agencyFee,
+        qty: Number(editItem.qty) || i.qty,
+        uom: editItem.uom ?? i.uom,
+        porDias: editItem.porDias ?? i.porDias,
+        qtyDias: Number(editItem.qtyDias) || i.qtyDias,
+        precioUnitario: Number(editItem.precioUnitario) ?? i.precioUnitario,
+        aplicaFee: editItem.aplicaFee ?? i.aplicaFee,
+        cotizacion: editItem.cotizacion ?? i.cotizacion,
+        documento: editItem.documento ?? i.documento,
+        proveedor: editItem.proveedor ?? i.proveedor,
+        exentoIva: editItem.exentoIva ?? i.exentoIva,
+      };
+      return recalcItem(updated);
+    }));
+    setShowEditModal(false);
+  }, [editItem, setItems]);
 
   const addItem = useCallback(() => {
     const id = `custom-${Date.now()}`;
@@ -642,14 +680,24 @@ export default function BudgetPage() {
                         </Tooltip>
                       </td>
                       <td className="px-1 py-1.5 align-top">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-destructive" onClick={() => deleteItem(item.id)}>
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Delete item</TooltipContent>
-                        </Tooltip>
+                        <div className="flex items-center gap-0.5">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => openEditModal(item)}>
+                                <Pencil className="w-3 h-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Edit item</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-destructive" onClick={() => deleteItem(item.id)}>
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Delete item</TooltipContent>
+                          </Tooltip>
+                        </div>
                       </td>
                     </tr>
                   )) : [])
@@ -675,6 +723,7 @@ export default function BudgetPage() {
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add Budget Item</DialogTitle>
+            <DialogDescription>Fill in the fields below to add a new budget line item.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-3 gap-3 mt-2 text-sm">
             <div className="col-span-3">
@@ -772,6 +821,116 @@ export default function BudgetPage() {
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setShowAddModal(false)}>Cancel</Button>
             <Button onClick={addItem} disabled={!newItem.item}>Add Item</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Budget Item</DialogTitle>
+            <DialogDescription>Modify the fields below and click Save Changes.</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-3 gap-3 mt-2 text-sm">
+            <div className="col-span-3">
+              <label className="text-xs font-medium mb-1 block">Item Name *</label>
+              <Input value={editItem.item || ""} onChange={e => setEditItem(p => ({ ...p, item: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Evento</label>
+              <Select value={editItem.evento || "MAIN EVENT"} onValueChange={v => setEditItem(p => ({ ...p, evento: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="MAIN EVENT">MAIN EVENT</SelectItem>
+                  <SelectItem value="MAIN EVENT VIP DINNER">MAIN EVENT VIP DINNER</SelectItem>
+                  <SelectItem value="BEFORE/AFTER MAIN EVENT">BEFORE/AFTER MAIN EVENT</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Area / Zona</label>
+              <Input value={editItem.area || ""} onChange={e => setEditItem(p => ({ ...p, area: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Centro de Costo</label>
+              <Input value={editItem.centroCosto || ""} onChange={e => setEditItem(p => ({ ...p, centroCosto: e.target.value }))} />
+            </div>
+            <div className="col-span-3">
+              <label className="text-xs font-medium mb-1 block">Descripcion</label>
+              <Input value={editItem.descripcion || ""} onChange={e => setEditItem(p => ({ ...p, descripcion: e.target.value }))} />
+            </div>
+            <div className="col-span-3">
+              <label className="text-xs font-medium mb-1 block">Notas / Observaciones</label>
+              <Input value={editItem.notas || ""} onChange={e => setEditItem(p => ({ ...p, notas: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Qty</label>
+              <Input type="number" value={editItem.qty ?? 0} onChange={e => setEditItem(p => ({ ...p, qty: parseFloat(e.target.value) || 0 }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">UoM</label>
+              <Input value={editItem.uom || ""} onChange={e => setEditItem(p => ({ ...p, uom: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Precio Unitario</label>
+              <Input type="number" step="0.01" value={editItem.precioUnitario ?? 0} onChange={e => setEditItem(p => ({ ...p, precioUnitario: parseFloat(e.target.value) || 0 }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Tipo de Contratacion</label>
+              <Select value={editItem.porDias || "NO"} onValueChange={v => setEditItem(p => ({ ...p, porDias: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SI">Por Dia</SelectItem>
+                  <SelectItem value="NO">One-Time</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Qty Dias</label>
+              <Input type="number" value={editItem.qtyDias ?? 1} onChange={e => setEditItem(p => ({ ...p, qtyDias: parseFloat(e.target.value) || 1 }))} />
+            </div>
+            <div className="flex items-end gap-4">
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={editItem.agencyFee || false} onChange={e => setEditItem(p => ({ ...p, agencyFee: e.target.checked }))} className="rounded border-border" />
+                Via Aurora 360?
+              </label>
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Fee incluido en cotizacion?</label>
+              <Select value={editItem.aplicaFee || "NO"} onValueChange={v => setEditItem(p => ({ ...p, aplicaFee: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SI">SI (ya incluido)</SelectItem>
+                  <SelectItem value="NO">NO (se agrega 20%)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Proveedor</label>
+              <Input value={editItem.proveedor || ""} onChange={e => setEditItem(p => ({ ...p, proveedor: e.target.value }))} />
+            </div>
+            <div className="flex items-end gap-4">
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={editItem.inKind || false} onChange={e => setEditItem(p => ({ ...p, inKind: e.target.checked }))} className="rounded border-border" />
+                In-Kind?
+              </label>
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={editItem.exentoIva || false} onChange={e => setEditItem(p => ({ ...p, exentoIva: e.target.checked }))} className="rounded border-border" />
+                Exento IVA?
+              </label>
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Cotizacion</label>
+              <Input value={editItem.cotizacion || ""} onChange={e => setEditItem(p => ({ ...p, cotizacion: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Imagen de Referencia</label>
+              <Input value={editItem.documento || ""} onChange={e => setEditItem(p => ({ ...p, documento: e.target.value }))} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button>
+            <Button onClick={saveEditItem} disabled={!editItem.item}>Save Changes</Button>
           </div>
         </DialogContent>
       </Dialog>
