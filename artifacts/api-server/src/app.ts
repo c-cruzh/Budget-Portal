@@ -40,7 +40,7 @@ app.use(
     store: new PgSession({
       conString: process.env["DATABASE_URL"],
       tableName: "session",
-      createTableIfMissing: true,
+      createTableIfMissing: false,
     }),
     secret: process.env["SESSION_SECRET"] || "emtech-dev-secret-2026",
     name: "emtech.sid",
