@@ -57,28 +57,41 @@ function ToggleCell({ value, onToggle, labelOn, labelOff }: { value: boolean | s
   );
 }
 
+function recalcItem(item: BudgetItem): BudgetItem {
+  const qty = Number(item.qty) || 0;
+  const dias = Number(item.qtyDias) || 1;
+  const precio = Number(item.precioUnitario) || 0;
+  const byDias = item.porDias === "SI";
+  item.subtotal = byDias ? qty * dias * precio : qty * precio;
+  const feeApplies = item.agencyFee && item.aplicaFee !== "SI";
+  item.fee = feeApplies ? item.subtotal * 0.20 : 0;
+  item.subtotalConFee = item.subtotal + item.fee;
+  item.iva = item.subtotalConFee * 0.13;
+  item.total = item.subtotalConFee + item.iva;
+  return item;
+}
+
 function getInitialItems(): BudgetItem[] {
   try {
-    const v3Raw = localStorage.getItem("budget-items-v3");
-    if (v3Raw) return JSON.parse(v3Raw);
-    const v2Raw = localStorage.getItem("budget-items-v2");
-    if (v2Raw) {
-      const v2Items = JSON.parse(v2Raw) as any[];
-      const migrated = v2Items.map((item: any) => ({
+    const v4Raw = localStorage.getItem("budget-items-v4");
+    if (v4Raw) return JSON.parse(v4Raw);
+    const prev = localStorage.getItem("budget-items-v3") || localStorage.getItem("budget-items-v2");
+    if (prev) {
+      const items = (JSON.parse(prev) as any[]).map((item: any) => recalcItem({
         ...item,
         proveedor: item.proveedor || "",
       }));
-      localStorage.setItem("budget-items-v3", JSON.stringify(migrated));
-      return migrated;
+      localStorage.setItem("budget-items-v4", JSON.stringify(items));
+      return items;
     }
   } catch {}
-  return INITIAL_BUDGET_ITEMS;
+  return INITIAL_BUDGET_ITEMS.map(recalcItem);
 }
 
 const MIGRATED_ITEMS = getInitialItems();
 
 export default function BudgetPage() {
-  const [items, setItems] = useLocalStorage<BudgetItem[]>("budget-items-v3", MIGRATED_ITEMS);
+  const [items, setItems] = useLocalStorage<BudgetItem[]>("budget-items-v4", MIGRATED_ITEMS);
   const [search, setSearch] = useState("");
   const [filterEvento, setFilterEvento] = useState("ALL");
   const [filterArea, setFilterArea] = useState("ALL");
@@ -134,19 +147,7 @@ export default function BudgetPage() {
     return map;
   }, [filtered]);
 
-  const recalc = (updated: BudgetItem): BudgetItem => {
-    const qty = Number(updated.qty) || 0;
-    const dias = Number(updated.qtyDias) || 1;
-    const precio = Number(updated.precioUnitario) || 0;
-    const byDias = updated.porDias === "SI";
-    updated.subtotal = byDias ? qty * dias * precio : qty * precio;
-    const feeRate = 0.20;
-    updated.fee = updated.aplicaFee === "SI" ? updated.subtotal * feeRate : 0;
-    updated.subtotalConFee = updated.subtotal + updated.fee;
-    updated.iva = updated.subtotalConFee * 0.13;
-    updated.total = updated.subtotalConFee + updated.iva;
-    return updated;
-  };
+  const recalc = recalcItem;
 
   const updateItem = useCallback((id: string, field: keyof BudgetItem, value: BudgetItem[keyof BudgetItem]) => {
     setItems(prev => prev.map(item => {
@@ -222,8 +223,8 @@ export default function BudgetPage() {
     const headers = [
       "EVENTO", "AREA/ZONA", "CENTRO DE COSTO", "ITEM", "DESCRIPCION", "NOTAS/OBSERVACIONES",
       "IN-KIND?", "AURORA 360?", "QTY", "UoM", "CONTRATACION POR DIAS?", "QTY DIAS",
-      "PRECIO UNITARIO", "SUBTOTAL", "VIA PRODUCTORA (AURORA 360)?", "INCLUYE FEE?",
-      "FEE", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "DOCUMENTO DE DETALLE", "PROVEEDOR"
+      "PRECIO UNITARIO", "SUBTOTAL", "VIA PRODUCTORA (AURORA 360)?", "FEE INCL. EN COTIZACION?",
+      "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "DOCUMENTO DE DETALLE", "PROVEEDOR"
     ];
     const rows = filtered.map(i => [
       i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
@@ -291,7 +292,7 @@ export default function BudgetPage() {
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20">P. Unit.</th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20">Subtotal</th>
                 <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20">Via Productora</th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16">Incl. Fee?</th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20">Fee en Cotiz.?</th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16">Fee 20%</th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16">IVA</th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-24">Total</th>
@@ -405,7 +406,21 @@ export default function BudgetPage() {
                         </button>
                       </td>
                       <td className="px-1 py-1.5 text-center align-top">
-                        <ToggleCell value={item.aplicaFee} onToggle={() => toggleStringField(item.id, "aplicaFee")} labelOn="SI" labelOff="NO" />
+                        {item.agencyFee ? (
+                          <button
+                            onClick={() => toggleStringField(item.id, "aplicaFee")}
+                            className={cn(
+                              "text-[10px] px-1.5 py-0.5 rounded border font-medium transition-colors whitespace-nowrap",
+                              item.aplicaFee === "SI"
+                                ? "bg-green-500/10 text-green-600 border-green-500/20"
+                                : "bg-red-500/10 text-red-600 border-red-500/20"
+                            )}
+                          >
+                            {item.aplicaFee === "SI" ? "Incluido" : "No incl."}
+                          </button>
+                        ) : (
+                          <span className="text-muted-foreground/30 text-[10px]">--</span>
+                        )}
                       </td>
                       <td className="px-2 py-1.5 text-right align-top font-mono text-muted-foreground">
                         {item.fee > 0 ? formatUSD(item.fee) : "--"}
@@ -534,12 +549,12 @@ export default function BudgetPage() {
               </label>
             </div>
             <div>
-              <label className="text-xs font-medium mb-1 block">Incluye Fee?</label>
+              <label className="text-xs font-medium mb-1 block">Fee incluido en cotizacion?</label>
               <Select value={newItem.aplicaFee} onValueChange={v => setNewItem(p => ({ ...p, aplicaFee: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="SI">SI</SelectItem>
-                  <SelectItem value="NO">NO</SelectItem>
+                  <SelectItem value="SI">SI (ya incluido)</SelectItem>
+                  <SelectItem value="NO">NO (se agrega 20%)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
