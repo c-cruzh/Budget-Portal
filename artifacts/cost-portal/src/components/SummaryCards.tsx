@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { DollarSign, Package, AlertCircle, CheckCircle2, FileText } from "lucide-react";
+import { DollarSign, Package, AlertCircle, CheckCircle2, FileText, AlertTriangle } from "lucide-react";
 import { formatUSD } from "@/lib/utils";
 
 interface SummaryCardsProps {
@@ -8,9 +8,10 @@ interface SummaryCardsProps {
   totalInKind: number;
   pendingCount: number;
   itemCount: number;
+  validarCount: number;
 }
 
-export function SummaryCards({ totalBudget, totalPaid, totalInKind, pendingCount, itemCount }: SummaryCardsProps) {
+export function SummaryCards({ totalBudget, totalPaid, totalInKind, pendingCount, itemCount, validarCount }: SummaryCardsProps) {
   const cards = [
     {
       label: "Total Budget",
@@ -40,10 +41,17 @@ export function SummaryCards({ totalBudget, totalPaid, totalInKind, pendingCount
       icon: pendingCount > 0 ? AlertCircle : CheckCircle2,
       color: pendingCount > 0 ? "bg-orange-500/10 text-orange-500" : "bg-emerald-500/10 text-emerald-500",
     },
+    {
+      label: "Costos a Validar",
+      value: String(validarCount),
+      sub: "Revisar / cotizar aparte",
+      icon: AlertTriangle,
+      color: validarCount > 0 ? "bg-red-500/10 text-red-500" : "bg-emerald-500/10 text-emerald-500",
+    },
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
       {cards.map((card, idx) => (
         <motion.div
           key={card.label}
