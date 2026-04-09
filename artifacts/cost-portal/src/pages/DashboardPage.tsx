@@ -7,12 +7,12 @@ import {
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { INITIAL_BUDGET_ITEMS, AVIANCA_ROUTES, type BudgetItem } from "@/data/budgetData";
 import { formatUSD } from "@/lib/utils";
-import { TrendingUp, DollarSign, Package, AlertCircle, CheckCircle, Clock } from "lucide-react";
+import { TrendingUp, DollarSign, Package, AlertCircle, CheckCircle, Clock, Handshake } from "lucide-react";
 
 const COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#ddd6fe", "#ede9fe", "#f5f3ff", "#4f46e5"];
 
 export default function DashboardPage() {
-  const [items] = useLocalStorage<BudgetItem[]>("budget-items", INITIAL_BUDGET_ITEMS);
+  const [items] = useLocalStorage<BudgetItem[]>("budget-items-v2", INITIAL_BUDGET_ITEMS);
 
   const stats = useMemo(() => {
     const total = items.reduce((s, i) => s + i.total, 0);
@@ -59,7 +59,7 @@ export default function DashboardPage() {
   const byEvento = useMemo(() => {
     const map = new Map<string, number>();
     items.filter(i => !i.inKind && i.total > 0).forEach(i => {
-      const label = i.evento === "MAIN EVENT" ? "Main Event" : "Pre/Post Event";
+      const label = i.evento === "MAIN EVENT" ? "Main Event" : i.evento === "MAIN EVENT VIP DINNER" ? "VIP Dinner" : "Pre/Post Event";
       map.set(label, (map.get(label) || 0) + i.total);
     });
     return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
@@ -110,6 +110,27 @@ export default function DashboardPage() {
             <p className="text-xs text-muted-foreground mt-1">{card.sub}</p>
           </motion.div>
         ))}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 text-sm">
+          <div className="flex items-start gap-2">
+            <Handshake className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-semibold text-amber-700">Avianca / Kinstitute Convention</p>
+              <p className="text-muted-foreground text-xs mt-1">$22,500 cash + $22,500 in-kind commitment pending formal documentation. In-kind covers a PR dinner/event. Once signed, Avianca covers the full flight block.</p>
+            </div>
+          </div>
+        </div>
+        <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-sm">
+          <div className="flex items-start gap-2">
+            <Handshake className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-semibold text-emerald-700">Andian — Potential Sponsor</p>
+              <p className="text-muted-foreground text-xs mt-1">Andian (lunch & coffee breaks caterer) could enter as a sponsor to improve budget viability. Negotiation in progress.</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Charts Row 1 */}

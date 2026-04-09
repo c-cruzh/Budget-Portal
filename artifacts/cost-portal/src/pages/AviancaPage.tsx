@@ -1,6 +1,5 @@
-import { useState } from "react";
 import { motion } from "framer-motion";
-import { Plane, Users, DollarSign, TrendingDown, Info, ExternalLink } from "lucide-react";
+import { Plane, Users, TrendingDown, Info, AlertTriangle, Handshake } from "lucide-react";
 import { AVIANCA_ROUTES, TRANSFER_ITEMS, type AviancaRoute, type TransferItem } from "@/data/budgetData";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { formatUSD } from "@/lib/utils";
@@ -11,8 +10,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 const IVA_RATE = 0.13;
 
 export default function AviancaPage() {
-  const [routes, setRoutes] = useLocalStorage<AviancaRoute[]>("avianca-routes", AVIANCA_ROUTES);
-  const [transfers, setTransfers] = useLocalStorage<TransferItem[]>("transfer-items", TRANSFER_ITEMS);
+  const [routes, setRoutes] = useLocalStorage<AviancaRoute[]>("avianca-routes-v2", AVIANCA_ROUTES);
+  const [transfers, setTransfers] = useLocalStorage<TransferItem[]>("transfer-items-v2", TRANSFER_ITEMS);
 
   const updateRoute = (id: string, field: keyof AviancaRoute, value: AviancaRoute[keyof AviancaRoute]) => {
     setRoutes(prev => prev.map(r => {
@@ -29,15 +28,11 @@ export default function AviancaPage() {
     setTransfers(prev => prev.map(t => {
       if (t.id !== id) return t;
       const updated = { ...t, [field]: value };
-      if (field === "vehiculos" || field === "costoSinIva") {
-        // costoSinIva is already the route total for this group, just update
-      }
       return updated;
     }));
   };
 
   const totalFlights = routes.reduce((s, r) => s + r.costoTotal, 0);
-  const totalFlightsWithIva = totalFlights * (1 + IVA_RATE);
   const totalPax = routes.reduce((s, r) => s + r.asientos, 0);
 
   const arrivalTransfers = transfers.filter(t => t.tipo === "ARRIVALS");
@@ -52,10 +47,9 @@ export default function AviancaPage() {
 
   return (
     <div className="space-y-8">
-      {/* Summary banner */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { label: "Total Flight Block", value: formatUSD(totalFlights), sub: `+IVA: ${formatUSD(totalFlightsWithIva)}`, icon: Plane, color: "text-blue-500" },
+          { label: "Total Flight Block", value: formatUSD(totalFlights), sub: "IVA & taxes already included", icon: Plane, color: "text-blue-500" },
           { label: "Total Passengers", value: String(totalPax), sub: "Business Flex class", icon: Users, color: "text-indigo-500" },
           { label: "Ground Transfers", value: formatUSD(totalTransfers), sub: `+IVA: ${formatUSD(totalTransfersWithIva)}`, icon: TrendingDown, color: "text-emerald-500" },
         ].map(card => (
@@ -77,7 +71,6 @@ export default function AviancaPage() {
         ))}
       </div>
 
-      {/* Avianca Flight Block */}
       <section>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
@@ -90,7 +83,7 @@ export default function AviancaPage() {
               <Info className="w-4 h-4 text-muted-foreground cursor-help" />
             </TooltipTrigger>
             <TooltipContent className="max-w-xs text-xs">
-              Additional benefits: 15% discount on Economy fares, 20% discount on Business fares, unlimited redemption code portal for event attendees.
+              Fares already include IVA, airport taxes, and all travel fees. No additional tax applies.
             </TooltipContent>
           </Tooltip>
         </div>
@@ -103,7 +96,6 @@ export default function AviancaPage() {
                 <th className="text-center px-4 py-3 font-semibold text-muted-foreground w-20">Seats</th>
                 <th className="text-right px-4 py-3 font-semibold text-muted-foreground w-32">Per Passenger</th>
                 <th className="text-right px-4 py-3 font-semibold text-muted-foreground w-32">Route Total</th>
-                <th className="text-right px-4 py-3 font-semibold text-muted-foreground w-32">+IVA Total</th>
               </tr>
             </thead>
             <tbody>
@@ -122,35 +114,45 @@ export default function AviancaPage() {
                     <EditableCell value={String(route.costoPorPasajero)} onSave={v => updateRoute(route.id, "costoPorPasajero", parseFloat(v) || 0)} className="text-right font-mono" type="number" prefix="$" />
                   </td>
                   <td className="px-4 py-3 text-right font-mono font-semibold">{formatUSD(route.costoTotal)}</td>
-                  <td className="px-4 py-3 text-right font-mono text-primary font-semibold">{formatUSD(route.costoTotal * (1 + IVA_RATE))}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-border bg-muted/30">
-                <td className="px-4 py-3 font-bold" colSpan={3}>TOTAL GENERAL</td>
+                <td className="px-4 py-3 font-bold" colSpan={3}>TOTAL GENERAL (IVA & taxes included)</td>
                 <td className="px-4 py-3 text-right font-bold font-mono text-lg">{formatUSD(totalFlights)}</td>
-                <td className="px-4 py-3 text-right font-bold font-mono text-lg text-primary">{formatUSD(totalFlightsWithIva)}</td>
               </tr>
             </tfoot>
           </table>
         </div>
 
-        <div className="mt-3 p-3 rounded-lg bg-blue-500/5 border border-blue-500/15 text-xs text-muted-foreground space-y-1">
-          <p className="font-semibold text-blue-600">Additional Avianca Benefits Included:</p>
-          <p>• 15% discount on Economy fares for general attendees</p>
-          <p>• 20% discount on Business fares for general attendees</p>
-          <p>• Unlimited discount code redemption portal for the event</p>
+        <div className="mt-4 space-y-3">
+          <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs text-muted-foreground space-y-2">
+            <div className="flex items-start gap-2">
+              <Handshake className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-semibold text-amber-700">Avianca / Kinstitute Sponsorship Convention — Pending Documentation</p>
+                <p className="mt-1">Avianca will commit $22,500 cash + $22,500 in-kind through a convention agreement with Kinstitute. The in-kind portion covers a PR dinner/event during the event launch period (not directly for the main event). Once the documentation and agreement process is complete, Avianca will cover the full requested flight block under the negotiated terms and conditions.</p>
+                <p className="mt-1 text-amber-600 font-medium">Status: Awaiting formal documentation and signatures.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-lg bg-blue-500/5 border border-blue-500/15 text-xs text-muted-foreground space-y-1">
+            <p className="font-semibold text-blue-600">Additional Avianca Benefits Included:</p>
+            <p>15% discount on Economy fares for general attendees</p>
+            <p>20% discount on Business fares for general attendees</p>
+            <p>Unlimited discount code redemption portal for the event</p>
+          </div>
         </div>
       </section>
 
-      {/* Ground Transfers */}
       <section>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
             <TrendingDown className="w-4 h-4 text-emerald-500" />
           </div>
-          <h2 className="text-lg font-semibold">Ground Transfers — Línea Ejecutiva</h2>
+          <h2 className="text-lg font-semibold">Ground Transfers — Linea Ejecutiva</h2>
           <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-normal text-xs">Toyota Hiace</Badge>
         </div>
 
@@ -167,7 +169,7 @@ export default function AviancaPage() {
                   <tr className="border-b border-border bg-muted/40">
                     <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Group / Activity</th>
                     <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Time</th>
-                    <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Origin → Destination</th>
+                    <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground">Origin / Destination</th>
                     <th className="text-center px-4 py-2.5 font-semibold text-muted-foreground w-20">Vehicles</th>
                     <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground w-28">Cost (no IVA)</th>
                     <th className="text-right px-4 py-2.5 font-semibold text-muted-foreground w-28">+IVA</th>
@@ -180,7 +182,7 @@ export default function AviancaPage() {
                         <EditableCell value={`${t.grupo} - ${t.detalle}`} onSave={v => updateTransfer(t.id, "detalle", v)} className="font-medium" />
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground text-xs">{t.hora}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground text-xs">{t.origen} → {t.destino}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground text-xs">{t.origen} / {t.destino}</td>
                       <td className="px-4 py-2.5 text-center">
                         <EditableCell value={String(t.vehiculos)} onSave={v => updateTransfer(t.id, "vehiculos", parseInt(v) || 1)} className="text-center font-mono" type="number" />
                       </td>

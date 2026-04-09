@@ -32,7 +32,7 @@ import { SummaryCards } from "@/components/SummaryCards";
 import { LinkCell } from "@/components/LinkCell";
 
 export default function BudgetPage() {
-  const [items, setItems] = useLocalStorage<BudgetItem[]>("budget-items", INITIAL_BUDGET_ITEMS);
+  const [items, setItems] = useLocalStorage<BudgetItem[]>("budget-items-v2", INITIAL_BUDGET_ITEMS);
   const [search, setSearch] = useState("");
   const [filterEvento, setFilterEvento] = useState("ALL");
   const [filterArea, setFilterArea] = useState("ALL");
@@ -64,16 +64,16 @@ export default function BudgetPage() {
     documento: "",
   });
 
-  const eventos = useMemo(() => ["ALL", ...Array.from(new Set(items.map(i => i.evento)))], [items]);
+  const eventos = useMemo(() => ["ALL", ...Array.from(new Set(items.map(i => i.evento).filter(Boolean)))], [items]);
   const areas = useMemo(() => {
     const src = filterEvento === "ALL" ? items : items.filter(i => i.evento === filterEvento);
-    return ["ALL", ...Array.from(new Set(src.map(i => i.area)))];
+    return ["ALL", ...Array.from(new Set(src.map(i => i.area).filter(Boolean)))];
   }, [items, filterEvento]);
   const centros = useMemo(() => {
     let src = items;
     if (filterEvento !== "ALL") src = src.filter(i => i.evento === filterEvento);
     if (filterArea !== "ALL") src = src.filter(i => i.area === filterArea);
-    return ["ALL", ...Array.from(new Set(src.map(i => i.centroCosto)))];
+    return ["ALL", ...Array.from(new Set(src.map(i => i.centroCosto).filter(Boolean)))];
   }, [items, filterEvento, filterArea]);
 
   const filtered = useMemo(() => {
