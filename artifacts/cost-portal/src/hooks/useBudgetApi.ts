@@ -170,6 +170,9 @@ export function useBudgetApi(
   }
 
   const patchItem = useCallback((id: string, field: string, value: any, commentOnly = false) => {
+    setItemsState(prev => prev.map(item =>
+      item.id === id ? { ...item, [field]: value } : item
+    ));
     const key = `${id}:${field}`;
     const existing = pendingPatches.current.get(key);
     if (existing) clearTimeout(existing);

@@ -41,6 +41,8 @@ export default function DashboardPage() {
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [noteValue, setNoteValue] = useState("");
   const noteInputRef = useRef<HTMLTextAreaElement>(null);
+  const [topCostMode, setTopCostMode] = useState<"CASH" | "INKIND" | "ALL">("CASH");
+  const [topCostVisible, setTopCostVisible] = useState(10);
 
   const stats = useMemo(() => {
     const total = items.reduce((s, i) => s + i.total, 0);
@@ -162,9 +164,15 @@ export default function DashboardPage() {
       .slice(0, 10);
   }, [items]);
 
-  const topItems = useMemo(() => {
-    return [...items].filter(i => i.total > 0).sort((a, b) => b.total - a.total).slice(0, 8);
-  }, [items]);
+  const topItemsAll = useMemo(() => {
+    let src = [...items];
+    if (topCostMode === "CASH") src = src.filter(i => !i.inKind && i.total > 0);
+    else if (topCostMode === "INKIND") src = src.filter(i => i.inKind);
+    else src = src.filter(i => i.total > 0 || i.inKind);
+    return src.sort((a, b) => b.total - a.total);
+  }, [items, topCostMode]);
+
+  const topItems = useMemo(() => topItemsAll.slice(0, topCostVisible), [topItemsAll, topCostVisible]);
 
   const cardVariants = {
     hidden: { opacity: 0, y: 16 },
@@ -448,9 +456,26 @@ export default function DashboardPage() {
         </div>
 
         <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Top Cost Items</h3>
-            <span className="text-[10px] text-muted-foreground">{topItems.filter(i => i.mitigable).length} marcados para mitigar</span>
+          <div className="px-5 py-4 border-b border-border space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Top Cost Items</h3>
+              <span className="text-[10px] text-muted-foreground">{topItemsAll.filter(i => i.mitigable).length} marcados para mitigar</span>
+            </div>
+            <div className="flex items-center gap-1 bg-muted/20 rounded-lg p-0.5">
+              {([["CASH", "Cash"], ["INKIND", "In-Kind"], ["ALL", "Todos"]] as const).map(([val, label]) => (
+                <button
+                  key={val}
+                  onClick={() => { setTopCostMode(val); setTopCostVisible(10); setExpandedItem(null); }}
+                  className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                    topCostMode === val
+                      ? "bg-card text-foreground shadow-sm border border-border/50"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="divide-y divide-border/50">
             {topItems.map((item, idx) => {
@@ -586,6 +611,31 @@ export default function DashboardPage() {
               );
             })}
           </div>
+          {topItemsAll.length > 10 && (
+            <div className="px-5 py-3 border-t border-border flex items-center justify-between">
+              <span className="text-[10px] text-muted-foreground">
+                {topItems.length} de {topItemsAll.length} items
+              </span>
+              <div className="flex items-center gap-2">
+                {topCostVisible > 10 && (
+                  <button
+                    onClick={() => setTopCostVisible(prev => Math.max(10, prev - 10))}
+                    className="text-xs text-primary hover:underline font-medium"
+                  >
+                    Ver menos
+                  </button>
+                )}
+                {topCostVisible < topItemsAll.length && (
+                  <button
+                    onClick={() => setTopCostVisible(prev => Math.min(topItemsAll.length, prev + 10))}
+                    className="text-xs text-primary hover:underline font-medium"
+                  >
+                    Ver 10 mas
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
