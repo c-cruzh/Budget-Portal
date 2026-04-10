@@ -1,17 +1,7 @@
 import { motion } from "framer-motion";
-import { DollarSign, Package, AlertCircle, CheckCircle2, FileText, AlertTriangle, ShieldAlert, Flag } from "lucide-react";
+import { DollarSign, Package, AlertCircle, CheckCircle2, FileText, AlertTriangle, ShieldAlert, Flag, Percent } from "lucide-react";
 import { formatUSD } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-
-function InfoIcon({ className }: { className?: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <circle cx="12" cy="12" r="10" />
-      <path d="M12 16v-4" />
-      <path d="M12 8h.01" />
-    </svg>
-  );
-}
 
 interface SummaryCardsProps {
   totalBudget: number;
@@ -24,9 +14,10 @@ interface SummaryCardsProps {
   contratarAparteCount: number;
   soloPresupuestadoSum: number;
   accionRequeridaCount: number;
+  feeProductoraSum: number;
 }
 
-export function SummaryCards({ totalBudget, totalPaid, totalInKindCount, totalInKindSum, pendingCount, itemCount, validarCount, contratarAparteCount, soloPresupuestadoSum, accionRequeridaCount }: SummaryCardsProps) {
+export function SummaryCards({ totalBudget, totalPaid, totalInKindCount, totalInKindSum, pendingCount, itemCount, validarCount, contratarAparteCount, soloPresupuestadoSum, accionRequeridaCount, feeProductoraSum }: SummaryCardsProps) {
   const cards = [
     {
       label: "Total Budget",
@@ -43,6 +34,14 @@ export function SummaryCards({ totalBudget, totalPaid, totalInKindCount, totalIn
       icon: FileText,
       color: "bg-emerald-500/10 text-emerald-500",
       info: "Gasto real en efectivo — excluye items in-kind. Incluye fee e IVA.",
+    },
+    {
+      label: "Fee Productora",
+      value: formatUSD(feeProductoraSum),
+      sub: "Total fees Aurora 360",
+      icon: Percent,
+      color: feeProductoraSum > 0 ? "bg-blue-500/10 text-blue-500" : "bg-emerald-500/10 text-emerald-500",
+      info: "Suma total de los fees del 20% de la productora sobre todos los items contratados vía Aurora 360 — incluye fees explícitos y los ya incluidos en cotización.",
     },
     {
       label: "In-Kind Total",
@@ -95,7 +94,7 @@ export function SummaryCards({ totalBudget, totalPaid, totalInKindCount, totalIn
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
+    <div className="grid grid-cols-3 lg:grid-cols-3 xl:grid-cols-9 gap-3">
       {cards.map((card, idx) => (
         <motion.div
           key={card.label}

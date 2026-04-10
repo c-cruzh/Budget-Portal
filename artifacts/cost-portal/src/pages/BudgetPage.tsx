@@ -153,6 +153,11 @@ function recalcItem(item: BudgetItem): BudgetItem {
   return item;
 }
 
+function getFeeProductora(item: BudgetItem): number {
+  if (!item.agencyFee) return 0;
+  return item.fee > 0 ? item.fee : (item.feeIncluido || 0);
+}
+
 const SEED_ITEMS = INITIAL_BUDGET_ITEMS.map(recalcItem);
 
 export default function BudgetPage() {
@@ -183,6 +188,7 @@ export default function BudgetPage() {
   const [filterCotizacion, setFilterCotizacion] = useState("ALL");
   const [filterAsignado, setFilterAsignado] = useState("ALL");
   const [filterStatus, setFilterStatus] = useState("ALL");
+  const [filterInKind, setFilterInKind] = useState("ALL");
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -251,6 +257,8 @@ export default function BudgetPage() {
     else if (filterAsignado !== "ALL") out = out.filter(i => (i.assignedTo || "").trim() === filterAsignado);
     if (filterStatus === "(Sin status)") out = out.filter(i => !(i.statusCotizacion || "").trim());
     else if (filterStatus !== "ALL") out = out.filter(i => (i.statusCotizacion || "").trim() === filterStatus);
+    if (filterInKind === "SI") out = out.filter(i => i.inKind);
+    else if (filterInKind === "NO") out = out.filter(i => !i.inKind);
     if (search.trim()) {
       const q = search.toLowerCase();
       out = out.filter(i =>
@@ -265,7 +273,7 @@ export default function BudgetPage() {
       );
     }
     return out;
-  }, [items, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, search]);
+  }, [items, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, search]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, { evento: string; area: string; items: BudgetItem[] }>();
@@ -465,6 +473,7 @@ export default function BudgetPage() {
   const contratarAparteCount = useMemo(() => filtered.filter(i => i.contratarAparte).length, [filtered]);
   const soloPresupuestadoSum = useMemo(() => filtered.filter(i => i.soloPresupuestado).reduce((s, i) => s + i.total, 0), [filtered]);
   const accionRequeridaCount = useMemo(() => filtered.filter(i => i.accionRequerida).length, [filtered]);
+  const feeProductoraSum = useMemo(() => filtered.reduce((s, i) => s + getFeeProductora(i), 0), [filtered]);
 
   const exportCSV = () => {
     const headers = [
@@ -552,6 +561,7 @@ export default function BudgetPage() {
         contratarAparteCount={contratarAparteCount}
         soloPresupuestadoSum={soloPresupuestadoSum}
         accionRequeridaCount={accionRequeridaCount}
+        feeProductoraSum={feeProductoraSum}
       />
 
       <div className="space-y-3">
@@ -612,9 +622,17 @@ export default function BudgetPage() {
             <SelectTrigger className="w-[200px] bg-card border-card-border text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>{statusOptions.map(s => <SelectItem key={s} value={s}>{s === "ALL" ? "Status: Todos" : s}</SelectItem>)}</SelectContent>
           </Select>
-          {(filterProveedor !== "ALL" || filterProductora !== "ALL" || filterFeeEnCotiz !== "ALL" || filterCotizacion !== "ALL" || filterAsignado !== "ALL" || filterStatus !== "ALL") && (
+          <Select value={filterInKind} onValueChange={setFilterInKind}>
+            <SelectTrigger className="w-[150px] bg-card border-card-border text-xs"><SelectValue placeholder="In-Kind" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">In-Kind: Todos</SelectItem>
+              <SelectItem value="SI">Solo In-Kind</SelectItem>
+              <SelectItem value="NO">Sin In-Kind</SelectItem>
+            </SelectContent>
+          </Select>
+          {(filterProveedor !== "ALL" || filterProductora !== "ALL" || filterFeeEnCotiz !== "ALL" || filterCotizacion !== "ALL" || filterAsignado !== "ALL" || filterStatus !== "ALL" || filterInKind !== "ALL") && (
             <button
-              onClick={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); }}
+              onClick={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); }}
               className="text-xs text-primary hover:underline"
             >Clear filters</button>
           )}
@@ -880,10 +898,10 @@ export default function BudgetPage() {
                         ) : (item.feeIncluido || 0) > 0 ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="text-muted-foreground/30 italic cursor-help">({formatUSD(item.feeIncluido!)})</span>
+                              <span className="text-muted-foreground/25 cursor-help">{formatUSD(item.feeIncluido!)}</span>
                             </TooltipTrigger>
                             <TooltipContent side="bottom" className="text-xs font-normal max-w-[200px]">
-                              Fee ya incluido en la cotización — no suma al total.
+                              Fee del 20% ya incluido en la cotización — no suma al total, solo para visibilidad.
                             </TooltipContent>
                           </Tooltip>
                         ) : (
