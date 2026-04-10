@@ -1,7 +1,17 @@
 import { motion } from "framer-motion";
-import { DollarSign, Package, AlertCircle, CheckCircle2, FileText, AlertTriangle, ShieldAlert, Flag, Info } from "lucide-react";
+import { DollarSign, Package, AlertCircle, CheckCircle2, FileText, AlertTriangle, ShieldAlert, Flag } from "lucide-react";
 import { formatUSD } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
+function InfoIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 16v-4" />
+      <path d="M12 8h.01" />
+    </svg>
+  );
+}
 
 interface SummaryCardsProps {
   totalBudget: number;
@@ -37,18 +47,18 @@ export function SummaryCards({ totalBudget, totalPaid, totalInKindCount, totalIn
     {
       label: "In-Kind Total",
       value: formatUSD(totalInKindSum),
-      sub: `${totalInKindCount} sponsored / venue items`,
+      sub: `${totalInKindCount} sponsored items`,
       icon: Package,
       color: "bg-amber-500/10 text-amber-600",
-      info: "Valor total de contribuciones en especie (donaciones, venue, sponsors). No representan un desembolso de caja.",
+      info: "Valor total de contribuciones en especie (donaciones, venue, sponsors).",
     },
     {
-      label: "Presupuestado (est.)",
+      label: "Presupuestado",
       value: formatUSD(soloPresupuestadoSum),
-      sub: "Guesstimate / estimado",
+      sub: "Estimado sin cotizar",
       icon: FileText,
       color: soloPresupuestadoSum > 0 ? "bg-yellow-500/10 text-yellow-600" : "bg-emerald-500/10 text-emerald-500",
-      info: "Monto total de items marcados como 'solo presupuestado' — son estimados sin cotización formal.",
+      info: "Monto total de items 'solo presupuestado' — estimados sin cotización formal.",
     },
     {
       label: "Pending Quotes",
@@ -56,31 +66,31 @@ export function SummaryCards({ totalBudget, totalPaid, totalInKindCount, totalIn
       sub: "Need confirmation",
       icon: pendingCount > 0 ? AlertCircle : CheckCircle2,
       color: pendingCount > 0 ? "bg-orange-500/10 text-orange-500" : "bg-emerald-500/10 text-emerald-500",
-      info: "Items con cotización marcada como PENDING — aún no se ha recibido respuesta del proveedor.",
+      info: "Items con cotización PENDING — sin respuesta del proveedor.",
     },
     {
-      label: "Accion Requerida",
+      label: "Accion Req.",
       value: String(accionRequeridaCount),
-      sub: "Items que necesitan accion",
+      sub: "Necesitan accion",
       icon: Flag,
       color: accionRequeridaCount > 0 ? "bg-orange-500/10 text-orange-600" : "bg-emerald-500/10 text-emerald-500",
-      info: "Cantidad de items que requieren una acción o seguimiento inmediato por parte del equipo organizador.",
+      info: "Items que requieren acción o seguimiento inmediato.",
     },
     {
-      label: "Costos a Validar",
+      label: "A Validar",
       value: String(validarCount),
       sub: "Posible costo inflado",
       icon: AlertTriangle,
       color: validarCount > 0 ? "bg-red-500/10 text-red-500" : "bg-emerald-500/10 text-emerald-500",
-      info: "Items marcados por posible costo inflado. Se recomienda validar cotizando con otros proveedores.",
+      info: "Items con posible costo inflado. Validar con otros proveedores.",
     },
     {
-      label: "Contratar Aparte",
+      label: "Aparte",
       value: String(contratarAparteCount),
-      sub: "Cotizar con otros",
+      sub: "Cotizar directo",
       icon: ShieldAlert,
       color: contratarAparteCount > 0 ? "bg-amber-500/10 text-amber-600" : "bg-emerald-500/10 text-emerald-500",
-      info: "Items que conviene contratar directamente (sin productora) para evitar el fee del 20%.",
+      info: "Items que conviene contratar directo (sin productora) para evitar fee 20%.",
     },
   ];
 
@@ -92,26 +102,23 @@ export function SummaryCards({ totalBudget, totalPaid, totalInKindCount, totalIn
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: idx * 0.05, duration: 0.3 }}
-          className="rounded-xl border border-card-border bg-card p-4 shadow-sm"
+          className="rounded-xl border border-card-border bg-card p-3 shadow-sm overflow-hidden"
         >
-          <div className="flex items-center gap-2 mb-2">
-            <div className={`w-8 h-8 rounded-lg ${card.color} flex items-center justify-center flex-shrink-0`}>
-              <card.icon className="w-4 h-4" />
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <div className={`w-7 h-7 rounded-lg ${card.color} flex items-center justify-center flex-shrink-0`}>
+              <card.icon className="w-3.5 h-3.5" />
             </div>
-            <div className="flex items-center gap-1 min-w-0">
-              <p className="text-xs text-muted-foreground font-medium leading-tight truncate">{card.label}</p>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info className="w-3 h-3 text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors cursor-help flex-shrink-0" />
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[220px] text-xs font-normal">
-                  {card.info}
-                </TooltipContent>
-              </Tooltip>
-            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p className="text-[11px] text-muted-foreground font-medium leading-tight truncate cursor-help">{card.label}</p>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-[220px] text-xs font-normal">
+                {card.info}
+              </TooltipContent>
+            </Tooltip>
           </div>
-          <p className="text-xl font-bold text-foreground">{card.value}</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">{card.sub}</p>
+          <p className="text-lg font-bold text-foreground truncate">{card.value}</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{card.sub}</p>
         </motion.div>
       ))}
     </div>

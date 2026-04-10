@@ -69,13 +69,23 @@ const STATUS_COLORS: Record<string, string> = {
   "Pendiente Cotizar Alternativa": "bg-amber-500/10 text-amber-600 border-amber-500/20",
 };
 
+function InfoIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 16v-4" />
+      <path d="M12 8h.01" />
+    </svg>
+  );
+}
+
 function ColHeader({ label, info, align = "left" }: { label: string; info: string; align?: "left" | "center" | "right" }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <div className={cn("flex items-center gap-0.5 cursor-help", align === "right" && "justify-end", align === "center" && "justify-center")}>
           <span>{label}</span>
-          <Info className="w-2.5 h-2.5 text-muted-foreground/40 flex-shrink-0" />
+          <InfoIcon className="w-2.5 h-2.5 text-muted-foreground/40 flex-shrink-0" />
         </div>
       </TooltipTrigger>
       <TooltipContent side="bottom" className="max-w-[220px] text-xs font-normal normal-case tracking-normal">
