@@ -465,7 +465,7 @@ export default function BudgetPage() {
   };
 
   const totalBudget = useMemo(() => filtered.reduce((s, i) => s + i.total, 0), [filtered]);
-  const totalPaid = useMemo(() => filtered.filter(i => !i.inKind && i.total > 0).reduce((s, i) => s + i.total, 0), [filtered]);
+  const cashSinFee = useMemo(() => filtered.filter(i => !i.inKind && i.total > 0).reduce((s, i) => s + i.subtotal + i.iva + (i.turismo || 0), 0), [filtered]);
   const totalInKindCount = useMemo(() => filtered.filter(i => i.inKind).length, [filtered]);
   const totalInKindSum = useMemo(() => filtered.filter(i => i.inKind).reduce((s, i) => s + i.total, 0), [filtered]);
   const pendingCount = useMemo(() => filtered.filter(i => i.cotizacion === "PENDING").length, [filtered]);
@@ -474,6 +474,8 @@ export default function BudgetPage() {
   const soloPresupuestadoSum = useMemo(() => filtered.filter(i => i.soloPresupuestado).reduce((s, i) => s + i.total, 0), [filtered]);
   const accionRequeridaCount = useMemo(() => filtered.filter(i => i.accionRequerida).length, [filtered]);
   const feeProductoraSum = useMemo(() => filtered.reduce((s, i) => s + getFeeProductora(i), 0), [filtered]);
+  const feeExplicitSum = useMemo(() => filtered.reduce((s, i) => s + i.fee, 0), [filtered]);
+  const feeIncluidoSum = useMemo(() => filtered.reduce((s, i) => s + (i.feeIncluido || 0), 0), [filtered]);
 
   const exportCSV = () => {
     const headers = [
@@ -552,7 +554,7 @@ export default function BudgetPage() {
 
       <SummaryCards
         totalBudget={totalBudget}
-        totalPaid={totalPaid}
+        cashSinFee={cashSinFee}
         totalInKindCount={totalInKindCount}
         totalInKindSum={totalInKindSum}
         pendingCount={pendingCount}
@@ -562,6 +564,8 @@ export default function BudgetPage() {
         soloPresupuestadoSum={soloPresupuestadoSum}
         accionRequeridaCount={accionRequeridaCount}
         feeProductoraSum={feeProductoraSum}
+        feeExplicitSum={feeExplicitSum}
+        feeIncluidoSum={feeIncluidoSum}
       />
 
       <div className="space-y-3">

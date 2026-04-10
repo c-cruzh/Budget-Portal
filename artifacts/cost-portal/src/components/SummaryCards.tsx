@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 interface SummaryCardsProps {
   totalBudget: number;
-  totalPaid: number;
+  cashSinFee: number;
   totalInKindCount: number;
   totalInKindSum: number;
   pendingCount: number;
@@ -15,9 +15,11 @@ interface SummaryCardsProps {
   soloPresupuestadoSum: number;
   accionRequeridaCount: number;
   feeProductoraSum: number;
+  feeExplicitSum: number;
+  feeIncluidoSum: number;
 }
 
-export function SummaryCards({ totalBudget, totalPaid, totalInKindCount, totalInKindSum, pendingCount, itemCount, validarCount, contratarAparteCount, soloPresupuestadoSum, accionRequeridaCount, feeProductoraSum }: SummaryCardsProps) {
+export function SummaryCards({ totalBudget, cashSinFee, totalInKindCount, totalInKindSum, pendingCount, itemCount, validarCount, contratarAparteCount, soloPresupuestadoSum, accionRequeridaCount, feeProductoraSum, feeExplicitSum, feeIncluidoSum }: SummaryCardsProps) {
   const cards = [
     {
       label: "Total Budget",
@@ -28,20 +30,20 @@ export function SummaryCards({ totalBudget, totalPaid, totalInKindCount, totalIn
       info: "Suma total de todos los items del presupuesto, incluyendo fee e IVA.",
     },
     {
-      label: "Cash Expenditure",
-      value: formatUSD(totalPaid),
-      sub: "Actual spend (IVA incl.)",
+      label: "Cash (Sin Fee)",
+      value: formatUSD(cashSinFee),
+      sub: "Productos + IVA",
       icon: FileText,
       color: "bg-emerald-500/10 text-emerald-500",
-      info: "Gasto real en efectivo — excluye items in-kind. Incluye fee e IVA.",
+      info: "Gasto en productos y servicios + IVA, sin incluir el fee del 20% de la productora. Excluye items in-kind.",
     },
     {
       label: "Fee Productora",
       value: formatUSD(feeProductoraSum),
-      sub: "Total fees Aurora 360",
+      sub: `Incl: ${formatUSD(feeIncluidoSum)} | Adic: ${formatUSD(feeExplicitSum)}`,
       icon: Percent,
       color: feeProductoraSum > 0 ? "bg-blue-500/10 text-blue-500" : "bg-emerald-500/10 text-emerald-500",
-      info: "Suma total de los fees del 20% de la productora sobre todos los items contratados vía Aurora 360 — incluye fees explícitos y los ya incluidos en cotización.",
+      info: "Suma total de fees del 20% de Aurora 360. 'Incl' = ya incluido en la cotizacion (no suma al total del item). 'Adic' = fee adicional que si suma al total.",
     },
     {
       label: "In-Kind Total",
@@ -57,7 +59,7 @@ export function SummaryCards({ totalBudget, totalPaid, totalInKindCount, totalIn
       sub: "Estimado sin cotizar",
       icon: FileText,
       color: soloPresupuestadoSum > 0 ? "bg-yellow-500/10 text-yellow-600" : "bg-emerald-500/10 text-emerald-500",
-      info: "Monto total de items 'solo presupuestado' — estimados sin cotización formal.",
+      info: "Monto total de items 'solo presupuestado' — estimados sin cotizacion formal.",
     },
     {
       label: "Pending Quotes",
@@ -65,7 +67,7 @@ export function SummaryCards({ totalBudget, totalPaid, totalInKindCount, totalIn
       sub: "Need confirmation",
       icon: pendingCount > 0 ? AlertCircle : CheckCircle2,
       color: pendingCount > 0 ? "bg-orange-500/10 text-orange-500" : "bg-emerald-500/10 text-emerald-500",
-      info: "Items con cotización PENDING — sin respuesta del proveedor.",
+      info: "Items con cotizacion PENDING — sin respuesta del proveedor.",
     },
     {
       label: "Accion Req.",
@@ -73,7 +75,7 @@ export function SummaryCards({ totalBudget, totalPaid, totalInKindCount, totalIn
       sub: "Necesitan accion",
       icon: Flag,
       color: accionRequeridaCount > 0 ? "bg-orange-500/10 text-orange-600" : "bg-emerald-500/10 text-emerald-500",
-      info: "Items que requieren acción o seguimiento inmediato.",
+      info: "Items que requieren accion o seguimiento inmediato.",
     },
     {
       label: "A Validar",

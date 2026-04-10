@@ -17,19 +17,25 @@ function recalcItem(item: BudgetItem): BudgetItem {
   item.subtotal = byDias ? qty * dias * precio : qty * precio;
   const feeApplies = item.agencyFee && item.aplicaFee !== "SI";
   item.fee = feeApplies ? item.subtotal * 0.20 : 0;
+  item.feeIncluido = (item.agencyFee && item.aplicaFee === "SI") ? item.subtotal * 0.20 : 0;
   item.subtotalConFee = item.subtotal + item.fee;
   item.iva = item.exentoIva ? 0 : item.subtotalConFee * 0.13;
-  item.total = item.subtotalConFee + item.iva;
+  item.turismo = item.aplicaTurismo ? item.subtotalConFee * 0.05 : 0;
+  item.total = item.subtotalConFee + item.iva + (item.turismo || 0);
   return item;
 }
 
 const SEED_ITEMS = INITIAL_BUDGET_ITEMS.map(recalcItem);
 
 const COLORS_WARM = ["#d97706", "#ea8c00", "#f59e0b", "#fbbf24", "#fcd34d", "#fde68a", "#1a1a1a", "#525252", "#737373", "#a3a3a3"];
-const COLORS_AGENCY = ["#d97706", "#22c55e"];
+
+function getFeeProductora(item: BudgetItem): number {
+  if (!item.agencyFee) return 0;
+  return item.fee > 0 ? item.fee : (item.feeIncluido || 0);
+}
 
 export default function DashboardPage() {
-  const { items, loading } = useBudgetApi(SEED_ITEMS);
+  const { items, loading } = useBudgetApi(SEED_ITEMS, recalcItem);
 
   const stats = useMemo(() => {
     const total = items.reduce((s, i) => s + i.total, 0);
@@ -40,25 +46,34 @@ export default function DashboardPage() {
 
     const agencyItems = items.filter(i => i.agencyFee);
     const agencyTotal = agencyItems.reduce((s, i) => s + i.total, 0);
-    const totalFees = agencyItems.reduce((s, i) => s + i.fee, 0);
+    const totalFeesExplicit = agencyItems.reduce((s, i) => s + i.fee, 0);
+    const totalFeesIncluded = agencyItems.reduce((s, i) => s + (i.feeIncluido || 0), 0);
+    const totalFeesAll = items.reduce((s, i) => s + getFeeProductora(i), 0);
     const feeInQuoteItems = agencyItems.filter(i => i.aplicaFee === "SI");
-    const feeNotInQuoteItems = agencyItems.filter(i => i.aplicaFee !== "SI");
+    const feeNotInQuoteItems = agencyItems.filter(i => i.aplicaFee !== "SI" && i.fee > 0);
     const directItems = items.filter(i => !i.agencyFee && !i.inKind && i.total > 0);
     const directTotal = directItems.reduce((s, i) => s + i.total, 0);
     const exentoIvaCount = items.filter(i => i.exentoIva).length;
 
+    const cashSinFee = paidItems.reduce((s, i) => s + i.subtotal + i.iva + (i.turismo || 0), 0);
+
     return {
       total,
       paidTotal: paidItems.reduce((s, i) => s + i.total, 0),
+      cashSinFee,
       inKindCount: inKindItems.length,
       pendingCount: pendingItems.length,
       confirmedCount: confirmedItems.length,
       itemCount: items.length,
       agencyItemCount: agencyItems.length,
       agencyTotal,
-      totalFees,
+      totalFeesExplicit,
+      totalFeesIncluded,
+      totalFeesAll,
       feeInQuoteCount: feeInQuoteItems.length,
+      feeInQuoteAmount: feeInQuoteItems.reduce((s, i) => s + (i.feeIncluido || 0), 0),
       feeNotInQuoteCount: feeNotInQuoteItems.length,
+      feeNotInQuoteAmount: feeNotInQuoteItems.reduce((s, i) => s + i.fee, 0),
       directTotal,
       directItemCount: directItems.length,
       exentoIvaCount,
@@ -99,12 +114,22 @@ export default function DashboardPage() {
     return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
   }, [items]);
 
-  const statusData = useMemo(() => [
-    { name: "Confirmed", value: stats.confirmedCount, color: "#22c55e" },
-    { name: "Pending", value: stats.pendingCount, color: "#f59e0b" },
-    { name: "In-Kind", value: stats.inKindCount, color: "#a78bfa" },
-    { name: "Other", value: items.length - stats.confirmedCount - stats.pendingCount - stats.inKindCount, color: "#94a3b8" },
-  ].filter(d => d.value > 0), [stats, items]);
+  const quoteStatusData = useMemo(() => {
+    const recibida = items.filter(i => !i.inKind && i.cotizacion && i.cotizacion !== "PENDING" && i.cotizacion !== "NA" && i.cotizacion !== "" && i.cotizacion !== "VOLUNTARIO" && i.cotizacion !== "PROVEE ESEN");
+    const pending = items.filter(i => i.cotizacion === "PENDING");
+    const inKind = items.filter(i => i.inKind);
+    const na = items.filter(i => !i.inKind && (i.cotizacion === "NA" || i.cotizacion === ""));
+    return {
+      chart: [
+        { name: "Recibida", value: recibida.length, amount: recibida.reduce((s, i) => s + i.total, 0), color: "#22c55e" },
+        { name: "Pendiente", value: pending.length, amount: pending.reduce((s, i) => s + i.total, 0), color: "#f59e0b" },
+        { name: "In-Kind / Vol.", value: inKind.length, amount: inKind.reduce((s, i) => s + i.total, 0), color: "#a78bfa" },
+        { name: "Sin cotizar", value: na.length, amount: na.reduce((s, i) => s + i.total, 0), color: "#94a3b8" },
+      ].filter(d => d.value > 0),
+      recibidaCount: recibida.length,
+      recibidaAmount: recibida.reduce((s, i) => s + i.total, 0),
+    };
+  }, [items]);
 
   const agencyVsDirectData = useMemo(() => [
     { name: "Via Productora", value: stats.agencyTotal, color: "#d97706" },
@@ -112,8 +137,8 @@ export default function DashboardPage() {
   ].filter(d => d.value > 0), [stats]);
 
   const feeBreakdown = useMemo(() => [
-    { name: "Fee 20% aplicado", value: stats.feeNotInQuoteCount, color: "#d97706" },
-    { name: "Fee incluido en cotiz.", value: stats.feeInQuoteCount, color: "#3b82f6" },
+    { name: "Fee adicional (20%)", value: stats.feeNotInQuoteCount, amount: stats.feeNotInQuoteAmount, color: "#d97706" },
+    { name: "Fee incl. en cotiz.", value: stats.feeInQuoteCount, amount: stats.feeInQuoteAmount, color: "#3b82f6" },
   ].filter(d => d.value > 0), [stats]);
 
   const byProvider = useMemo(() => {
@@ -157,7 +182,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: "Total Budget", value: formatUSD(stats.total), sub: `${stats.itemCount} line items`, icon: DollarSign, color: "bg-primary/10 text-primary" },
-          { label: "Cash Expenditure", value: formatUSD(stats.paidTotal), sub: `${items.filter(i => !i.inKind && i.total > 0).length} paid items`, icon: TrendingUp, color: "bg-emerald-500/10 text-emerald-500" },
+          { label: "Cash (Sin Fee)", value: formatUSD(stats.cashSinFee), sub: "Productos + servicios + IVA", icon: TrendingUp, color: "bg-emerald-500/10 text-emerald-500" },
           { label: "In-Kind Items", value: String(stats.inKindCount), sub: "Sponsor / venue contributions", icon: Package, color: "bg-violet-500/10 text-violet-500" },
           { label: "Pending Quotes", value: String(stats.pendingCount), sub: "Need confirmation", icon: AlertCircle, color: "bg-red-500/10 text-red-500" },
         ].map((card, idx) => (
@@ -184,7 +209,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: "Via Productora (Aurora 360)", value: formatUSD(stats.agencyTotal), sub: `${stats.agencyItemCount} items (${stats.paidTotal > 0 ? ((stats.agencyTotal / stats.paidTotal) * 100).toFixed(1) : 0}% del gasto)`, icon: Building2, color: "bg-amber-500/10 text-amber-600" },
-          { label: "Total Fee 20%", value: formatUSD(stats.totalFees), sub: `${stats.feeNotInQuoteCount} items con fee adicional`, icon: Percent, color: "bg-orange-500/10 text-orange-600" },
+          { label: "Fee Productora Total", value: formatUSD(stats.totalFeesAll), sub: `Incl: ${formatUSD(stats.totalFeesIncluded)} | Adic: ${formatUSD(stats.totalFeesExplicit)}`, icon: Percent, color: "bg-orange-500/10 text-orange-600" },
           { label: "Contratacion Directa", value: formatUSD(stats.directTotal), sub: `${stats.directItemCount} items sin productora`, icon: Users, color: "bg-emerald-500/10 text-emerald-600" },
           { label: "IVA Exento", value: String(stats.exentoIvaCount), sub: "Items sin IVA 13%", icon: Percent, color: "bg-blue-500/10 text-blue-500" },
         ].map((card, idx) => (
@@ -267,47 +292,63 @@ export default function DashboardPage() {
                   <Pie data={feeBreakdown} cx="50%" cy="50%" innerRadius={28} outerRadius={42} dataKey="value" paddingAngle={3}>
                     {feeBreakdown.map((d, i) => <Cell key={i} fill={d.color} />)}
                   </Pie>
+                  <RechartTooltip
+                    formatter={(_v: number, _name: string, props: any) => {
+                      const d = props.payload;
+                      return [`${d.value} items - ${formatUSD(d.amount)}`, d.name];
+                    }}
+                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
               <div className="space-y-2 flex-1">
                 {feeBreakdown.map(d => (
-                  <div key={d.name} className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
-                    <span className="text-xs text-muted-foreground flex-1">{d.name}</span>
-                    <span className="text-xs font-bold">{d.value}</span>
+                  <div key={d.name}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
+                      <span className="text-xs text-muted-foreground flex-1">{d.name}</span>
+                      <span className="text-xs font-bold">{d.value}</span>
+                    </div>
+                    <div className="ml-[18px] text-[10px] text-muted-foreground/60">{formatUSD(d.amount)}</div>
                   </div>
                 ))}
               </div>
             </div>
-            <div className="border-t border-border pt-3 space-y-1.5">
+            <div className="border-t border-border pt-3">
               <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground">Total fee generado</span>
-                <span className="font-bold text-primary">{formatUSD(stats.totalFees)}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">% fee sobre gasto productora</span>
-                <span className="font-mono">{stats.agencyTotal > 0 ? ((stats.totalFees / stats.agencyTotal) * 100).toFixed(1) : "0"}%</span>
+                <span className="font-bold text-primary">{formatUSD(stats.totalFeesAll)}</span>
               </div>
             </div>
           </div>
         </div>
 
         <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm flex flex-col">
-          <h3 className="text-sm font-semibold mb-4 text-muted-foreground uppercase tracking-wide">Quote Status</h3>
+          <h3 className="text-sm font-semibold mb-4 text-muted-foreground uppercase tracking-wide">Cotizaciones</h3>
           <div className="flex items-center gap-6">
             <ResponsiveContainer width={100} height={100}>
               <PieChart>
-                <Pie data={statusData} cx="50%" cy="50%" innerRadius={28} outerRadius={42} dataKey="value" paddingAngle={2}>
-                  {statusData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                <Pie data={quoteStatusData.chart} cx="50%" cy="50%" innerRadius={28} outerRadius={42} dataKey="value" paddingAngle={2}>
+                  {quoteStatusData.chart.map((d, i) => <Cell key={i} fill={d.color} />)}
                 </Pie>
+                <RechartTooltip
+                  formatter={(_v: number, _name: string, props: any) => {
+                    const d = props.payload;
+                    return [`${d.value} items - ${formatUSD(d.amount)}`, d.name];
+                  }}
+                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                />
               </PieChart>
             </ResponsiveContainer>
             <div className="space-y-1.5 flex-1">
-              {statusData.map(d => (
-                <div key={d.name} className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
-                  <span className="text-xs text-muted-foreground flex-1">{d.name}</span>
-                  <span className="text-xs font-bold">{d.value}</span>
+              {quoteStatusData.chart.map(d => (
+                <div key={d.name}>
+                  <div className="flex items-center gap-2">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
+                    <span className="text-xs text-muted-foreground flex-1">{d.name}</span>
+                    <span className="text-xs font-bold">{d.value}</span>
+                  </div>
+                  <div className="ml-[18px] text-[10px] text-muted-foreground/60">{formatUSD(d.amount)}</div>
                 </div>
               ))}
             </div>
