@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
-  Search, Download, Plus, ChevronRight,
+  Search, Download, Plus, ChevronRight, Info,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
   Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2
 } from "lucide-react";
@@ -68,6 +68,22 @@ const STATUS_COLORS: Record<string, string> = {
   "Pendiente Cotizar": "bg-red-500/10 text-red-500 border-red-500/20",
   "Pendiente Cotizar Alternativa": "bg-amber-500/10 text-amber-600 border-amber-500/20",
 };
+
+function ColHeader({ label, info, align = "left" }: { label: string; info: string; align?: "left" | "center" | "right" }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className={cn("flex items-center gap-0.5 cursor-help", align === "right" && "justify-end", align === "center" && "justify-center")}>
+          <span>{label}</span>
+          <Info className="w-2.5 h-2.5 text-muted-foreground/40 flex-shrink-0" />
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-[220px] text-xs font-normal normal-case tracking-normal">
+        {info}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 function CotizacionBadge({ value }: { value: string }) {
   if (!value) return <span className="text-muted-foreground/40 text-xs">--</span>;
@@ -584,30 +600,78 @@ export default function BudgetPage() {
             <thead className="sticky top-0 z-10 shadow-[0_1px_3px_rgba(0,0,0,0.3)]">
               <tr className="text-[10px] uppercase tracking-wider">
                 <th className="px-2 py-2.5 w-6 bg-[hsl(var(--muted))] border-b border-border"></th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-10 bg-[hsl(var(--muted))] border-b border-border">Rev.</th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[200px] bg-[hsl(var(--muted))] border-b border-border">Item</th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">Centro Costo</th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-14 bg-[hsl(var(--muted))] border-b border-border">In-Kind</th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-10 bg-[hsl(var(--muted))] border-b border-border">Qty</th>
-                <th className="text-left px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">UoM</th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">Tipo</th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-10 bg-[hsl(var(--muted))] border-b border-border">Dias</th>
-                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">P. Unit.</th>
-                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">Subtotal</th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">Via Productora</th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">Fee en Cotiz.?</th>
-                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">Fee 20%</th>
-                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">IVA</th>
-                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-24 bg-[hsl(var(--muted))] border-b border-border">Total</th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">Cotizacion</th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[110px] bg-[hsl(var(--muted))] border-b border-border">Status</th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">Solo Presup.</th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">Proveedor</th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[100px] bg-[hsl(var(--muted))] border-b border-border">Assigned</th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[80px] bg-[hsl(var(--muted))] border-b border-border">Img. Ref.</th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">Validar</th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">Aparte</th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">Acción Req.</th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-10 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Rev." info="Marcar como revisado. Muestra quién lo revisó y cuándo." align="center" />
+                </th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[200px] bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Item" info="Nombre del producto, servicio o recurso necesario para el evento." />
+                </th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Centro Costo" info="Categoría de gasto dentro del área (ej: Staff, Señalética, AV, Catering)." />
+                </th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-14 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="In-Kind" info="Contribución en especie — donada o proporcionada por un sponsor/venue sin costo directo." align="center" />
+                </th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-10 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Qty" info="Cantidad de unidades requeridas." align="center" />
+                </th>
+                <th className="text-left px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="UoM" info="Unidad de medida (persona, unidad, servicio, m², etc.)." />
+                </th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Tipo" info="SI = contratación por días (Qty × Días × Precio). NO = contratación fija (Qty × Precio)." align="center" />
+                </th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-10 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Dias" info="Número de días que se requiere el servicio (aplica solo si Tipo = SI)." align="center" />
+                </th>
+                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="P. Unit." info="Precio unitario por unidad/día del item." align="right" />
+                </th>
+                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Subtotal" info="Qty × P.Unit (× Días si aplica). Sin fee ni IVA." align="right" />
+                </th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Via Productora" info="Indica si este item se contrata a través de Aurora 360 (productora del evento)." align="center" />
+                </th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Fee en Cotiz.?" info="SI = el fee de 20% ya está incluido en la cotización del proveedor. NO = se aplica fee adicional del 20%." align="center" />
+                </th>
+                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Fee 20%" info="Fee de gestión de la productora (20% sobre subtotal). Solo aplica si va vía productora y el fee no está incluido en la cotización." align="right" />
+                </th>
+                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="IVA" info="Impuesto al Valor Agregado (13% sobre subtotal + fee). Exento si el item tiene IVA exento marcado." align="right" />
+                </th>
+                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-24 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Total" info="Monto final = Subtotal + Fee + IVA. Este es el costo real que se pagará." align="right" />
+                </th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Cotizacion" info="Código o referencia de la cotización del proveedor (ej: A001, PENDING, VOLUNTARIO, NA)." />
+                </th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[110px] bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Status" info="Estado actual del proceso de cotización para este item (Recibida, Pendiente, No Aplica, etc.)." />
+                </th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Solo Presup." info="Item solo presupuestado — aún no tiene cotización formal. El monto es un estimado/guesstimate." align="center" />
+                </th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Proveedor" info="Nombre del proveedor o empresa que suministra este item." />
+                </th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[100px] bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Assigned" info="Persona responsable de gestionar o dar seguimiento a este item." />
+                </th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[80px] bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Img. Ref." info="Link a imagen de referencia del producto o servicio." />
+                </th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Validar" info="Marcar items con posible costo inflado que necesitan validación con otros proveedores." align="center" />
+                </th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Aparte" info="Marcar items que deben contratarse por aparte (sin productora) para evitar el fee del 20%." align="center" />
+                </th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Acción Req." info="Items que requieren una acción o seguimiento específico por parte del equipo." align="center" />
+                </th>
                 {canEdit && <th className="w-8 px-1 py-2.5 bg-[hsl(var(--muted))] border-b border-border"></th>}
               </tr>
             </thead>
