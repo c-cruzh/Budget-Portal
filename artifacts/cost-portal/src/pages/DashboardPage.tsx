@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { useMemo, useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartTooltip,
   ResponsiveContainer
@@ -7,7 +7,8 @@ import {
 import { INITIAL_BUDGET_ITEMS, type BudgetItem } from "@/data/budgetData";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { formatUSD } from "@/lib/utils";
-import { TrendingUp, DollarSign, Package, AlertCircle, Handshake, Building2, Percent, Users, Loader2 } from "lucide-react";
+import { TrendingUp, DollarSign, Package, AlertCircle, Handshake, Building2, Percent, Users, Loader2, ShieldCheck, ShieldAlert, ChevronDown, ChevronUp, MessageSquare, Check, X } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 function recalcItem(item: BudgetItem): BudgetItem {
   const qty = Number(item.qty) || 0;
@@ -35,7 +36,11 @@ function getFeeProductora(item: BudgetItem): number {
 }
 
 export default function DashboardPage() {
-  const { items, loading } = useBudgetApi(SEED_ITEMS, recalcItem);
+  const { items, loading, patchItem } = useBudgetApi(SEED_ITEMS, recalcItem);
+  const [expandedItem, setExpandedItem] = useState<string | null>(null);
+  const [editingNote, setEditingNote] = useState<string | null>(null);
+  const [noteValue, setNoteValue] = useState("");
+  const noteInputRef = useRef<HTMLTextAreaElement>(null);
 
   const stats = useMemo(() => {
     const total = items.reduce((s, i) => s + i.total, 0);
@@ -443,24 +448,143 @@ export default function DashboardPage() {
         </div>
 
         <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-border">
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Top Cost Items</h3>
+            <span className="text-[10px] text-muted-foreground">{topItems.filter(i => i.mitigable).length} marcados para mitigar</span>
           </div>
           <div className="divide-y divide-border/50">
-            {topItems.map((item, idx) => (
-              <div key={item.id} className="flex items-center gap-4 px-5 py-3 hover:bg-muted/10 transition-colors">
-                <span className="text-muted-foreground text-sm font-mono w-5">{idx + 1}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{item.item}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs text-muted-foreground">{item.area}</span>
-                    {item.agencyFee && <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/20">Aurora 360</span>}
-                    {item.proveedor && <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 border border-blue-500/20">{item.proveedor}</span>}
+            {topItems.map((item, idx) => {
+              const isExpanded = expandedItem === item.id;
+              const isEditingNote = editingNote === item.id;
+              const hasMitigNote = !!(item.mitigNote || "").trim();
+              return (
+                <div key={item.id}>
+                  <div
+                    className="flex items-center gap-3 px-5 py-3 hover:bg-muted/10 transition-colors cursor-pointer group"
+                    onClick={() => setExpandedItem(isExpanded ? null : item.id)}
+                  >
+                    <span className="text-muted-foreground text-sm font-mono w-5 shrink-0">{idx + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-foreground truncate">{item.item}</p>
+                        {item.mitigable && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shrink-0">Mitigable</span>
+                        )}
+                        {hasMitigNote && !isExpanded && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <MessageSquare className="w-3 h-3 text-muted-foreground shrink-0 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-[280px] text-xs whitespace-pre-wrap">
+                              {item.mitigNote}
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-muted-foreground">{item.area}</span>
+                        {item.agencyFee && <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/20">Aurora 360</span>}
+                        {item.proveedor && <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 border border-blue-500/20">{item.proveedor}</span>}
+                      </div>
+                    </div>
+                    <span className="text-sm font-semibold text-primary font-mono shrink-0">{formatUSD(item.total)}</span>
+                    {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />}
                   </div>
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="px-5 pb-4 pt-1 ml-8 space-y-3">
+                          <div className="grid grid-cols-3 gap-3 text-xs">
+                            <div><span className="text-muted-foreground">Subtotal:</span> <span className="font-mono font-medium">{formatUSD(item.subtotal)}</span></div>
+                            <div><span className="text-muted-foreground">Fee 20%:</span> <span className="font-mono font-medium">{formatUSD(item.fee)}</span></div>
+                            <div><span className="text-muted-foreground">IVA:</span> <span className="font-mono font-medium">{formatUSD(item.iva)}</span></div>
+                            <div><span className="text-muted-foreground">Qty:</span> <span className="font-medium">{item.qty} {item.uom}</span></div>
+                            <div><span className="text-muted-foreground">P. Unit:</span> <span className="font-mono font-medium">{formatUSD(Number(item.precioUnitario))}</span></div>
+                            {item.porDias === "SI" && <div><span className="text-muted-foreground">Dias:</span> <span className="font-medium">{item.qtyDias}</span></div>}
+                          </div>
+
+                          <div className="flex items-center gap-3 pt-1">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const newVal = !item.mitigable;
+                                patchItem(item.id, "mitigable", newVal);
+                              }}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                                item.mitigable
+                                  ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/20"
+                                  : "bg-card text-muted-foreground border-border hover:bg-muted/20 hover:text-foreground"
+                              }`}
+                            >
+                              {item.mitigable ? <ShieldCheck className="w-3.5 h-3.5" /> : <ShieldAlert className="w-3.5 h-3.5" />}
+                              {item.mitigable ? "Se puede mitigar" : "Marcar mitigable"}
+                            </button>
+
+                            {!isEditingNote && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingNote(item.id);
+                                  setNoteValue(item.mitigNote || "");
+                                  setTimeout(() => noteInputRef.current?.focus(), 50);
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border bg-card text-muted-foreground border-border hover:bg-muted/20 hover:text-foreground"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                                {hasMitigNote ? "Editar nota" : "Agregar nota"}
+                              </button>
+                            )}
+                          </div>
+
+                          {hasMitigNote && !isEditingNote && (
+                            <div className="text-xs bg-muted/10 rounded-lg p-3 border border-border/50">
+                              <p className="text-muted-foreground text-[10px] uppercase tracking-wide mb-1 font-medium">Nota de mitigacion</p>
+                              <p className="text-foreground whitespace-pre-wrap">{item.mitigNote}</p>
+                            </div>
+                          )}
+
+                          {isEditingNote && (
+                            <div className="space-y-2" onClick={e => e.stopPropagation()}>
+                              <textarea
+                                ref={noteInputRef}
+                                value={noteValue}
+                                onChange={e => setNoteValue(e.target.value)}
+                                placeholder="Escribe una nota de mitigacion..."
+                                className="w-full bg-muted/10 border border-border rounded-lg p-3 text-xs text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
+                                rows={3}
+                              />
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => {
+                                    patchItem(item.id, "mitigNote", noteValue.trim());
+                                    setEditingNote(null);
+                                  }}
+                                  className="flex items-center gap-1 px-3 py-1 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                                >
+                                  <Check className="w-3 h-3" /> Guardar
+                                </button>
+                                <button
+                                  onClick={() => setEditingNote(null)}
+                                  className="flex items-center gap-1 px-3 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                  <X className="w-3 h-3" /> Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
-                <span className="text-sm font-semibold text-primary font-mono">{formatUSD(item.total)}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

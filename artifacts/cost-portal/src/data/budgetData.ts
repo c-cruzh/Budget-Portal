@@ -34,6 +34,8 @@ export interface BudgetItem {
   accionRequerida?: boolean;
   reviewedBy?: string;
   statusCotizacion?: string;
+  mitigable?: boolean;
+  mitigNote?: string;
 }
 
 export const INITIAL_BUDGET_ITEMS: BudgetItem[] = [
