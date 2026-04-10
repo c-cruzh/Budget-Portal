@@ -109,7 +109,7 @@ export default function BudgetPage() {
   const [filterProductora, setFilterProductora] = useState("ALL");
   const [filterFeeEnCotiz, setFilterFeeEnCotiz] = useState("ALL");
   const [filterCotizacion, setFilterCotizacion] = useState("ALL");
-  const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set(["MAIN EVENT_INGRESO ESEN Y PARQUEO", "MAIN EVENT_AUDITORIO/MAIN STAGE", "BEFORE/AFTER MAIN EVENT_HOSPITALITY"]));
+  const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editItem, setEditItem] = useState<Partial<BudgetItem>>({});
@@ -362,10 +362,13 @@ export default function BudgetPage() {
 
   const totalBudget = useMemo(() => filtered.reduce((s, i) => s + i.total, 0), [filtered]);
   const totalPaid = useMemo(() => filtered.filter(i => !i.inKind && i.total > 0).reduce((s, i) => s + i.total, 0), [filtered]);
-  const totalInKind = useMemo(() => filtered.filter(i => i.inKind).length, [filtered]);
+  const totalInKindCount = useMemo(() => filtered.filter(i => i.inKind).length, [filtered]);
+  const totalInKindSum = useMemo(() => filtered.filter(i => i.inKind).reduce((s, i) => s + i.total, 0), [filtered]);
   const pendingCount = useMemo(() => filtered.filter(i => i.cotizacion === "PENDING").length, [filtered]);
   const validarCount = useMemo(() => filtered.filter(i => i.validarCosto).length, [filtered]);
   const contratarAparteCount = useMemo(() => filtered.filter(i => i.contratarAparte).length, [filtered]);
+  const soloPresupuestadoSum = useMemo(() => filtered.filter(i => i.soloPresupuestado).reduce((s, i) => s + i.total, 0), [filtered]);
+  const accionRequeridaCount = useMemo(() => filtered.filter(i => i.accionRequerida).length, [filtered]);
 
   const exportCSV = () => {
     const headers = [
@@ -444,11 +447,14 @@ export default function BudgetPage() {
       <SummaryCards
         totalBudget={totalBudget}
         totalPaid={totalPaid}
-        totalInKind={totalInKind}
+        totalInKindCount={totalInKindCount}
+        totalInKindSum={totalInKindSum}
         pendingCount={pendingCount}
         itemCount={filtered.length}
         validarCount={validarCount}
         contratarAparteCount={contratarAparteCount}
+        soloPresupuestadoSum={soloPresupuestadoSum}
+        accionRequeridaCount={accionRequeridaCount}
       />
 
       <div className="space-y-3">

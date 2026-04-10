@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartTooltip,
@@ -76,16 +76,19 @@ export default function DashboardPage() {
       .slice(0, 8);
   }, [items]);
 
+  const [centroExcludeInKind, setCentroExcludeInKind] = useState(true);
+
   const byCentro = useMemo(() => {
     const map = new Map<string, number>();
-    items.filter(i => !i.inKind && i.total > 0).forEach(i => {
+    const filtered = centroExcludeInKind ? items.filter(i => !i.inKind && i.total > 0) : items.filter(i => i.total > 0);
+    filtered.forEach(i => {
       map.set(i.centroCosto, (map.get(i.centroCosto) || 0) + i.total);
     });
     return Array.from(map.entries())
       .map(([name, value]) => ({ name: name.length > 18 ? name.slice(0, 18) + "\u2026" : name, value }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 10);
-  }, [items]);
+  }, [items, centroExcludeInKind]);
 
   const byEvento = useMemo(() => {
     const map = new Map<string, number>();
@@ -374,7 +377,15 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
-          <h3 className="text-sm font-semibold mb-4 text-muted-foreground uppercase tracking-wide">Spend by Cost Center</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Spend by Cost Center</h3>
+            <button
+              onClick={() => setCentroExcludeInKind(!centroExcludeInKind)}
+              className={`text-[10px] px-2.5 py-1 rounded-full border font-medium transition-colors ${centroExcludeInKind ? "bg-primary/10 text-primary border-primary/20" : "bg-muted/50 text-muted-foreground border-border/50 hover:border-border"}`}
+            >
+              {centroExcludeInKind ? "Excl. In-Kind" : "All"}
+            </button>
+          </div>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={byCentro} layout="vertical" margin={{ left: 0, right: 16 }}>
               <XAxis type="number" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />

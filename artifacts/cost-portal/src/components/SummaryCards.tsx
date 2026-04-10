@@ -1,18 +1,21 @@
 import { motion } from "framer-motion";
-import { DollarSign, Package, AlertCircle, CheckCircle2, FileText, AlertTriangle, ShieldAlert } from "lucide-react";
+import { DollarSign, Package, AlertCircle, CheckCircle2, FileText, AlertTriangle, ShieldAlert, Flag } from "lucide-react";
 import { formatUSD } from "@/lib/utils";
 
 interface SummaryCardsProps {
   totalBudget: number;
   totalPaid: number;
-  totalInKind: number;
+  totalInKindCount: number;
+  totalInKindSum: number;
   pendingCount: number;
   itemCount: number;
   validarCount: number;
   contratarAparteCount: number;
+  soloPresupuestadoSum: number;
+  accionRequeridaCount: number;
 }
 
-export function SummaryCards({ totalBudget, totalPaid, totalInKind, pendingCount, itemCount, validarCount, contratarAparteCount }: SummaryCardsProps) {
+export function SummaryCards({ totalBudget, totalPaid, totalInKindCount, totalInKindSum, pendingCount, itemCount, validarCount, contratarAparteCount, soloPresupuestadoSum, accionRequeridaCount }: SummaryCardsProps) {
   const cards = [
     {
       label: "Total Budget",
@@ -29,11 +32,18 @@ export function SummaryCards({ totalBudget, totalPaid, totalInKind, pendingCount
       color: "bg-emerald-500/10 text-emerald-500",
     },
     {
-      label: "In-Kind Items",
-      value: String(totalInKind),
-      sub: "Sponsored / venue",
+      label: "In-Kind Total",
+      value: formatUSD(totalInKindSum),
+      sub: `${totalInKindCount} sponsored / venue items`,
       icon: Package,
       color: "bg-amber-500/10 text-amber-600",
+    },
+    {
+      label: "Presupuestado (est.)",
+      value: formatUSD(soloPresupuestadoSum),
+      sub: "Guesstimate / estimado",
+      icon: FileText,
+      color: soloPresupuestadoSum > 0 ? "bg-yellow-500/10 text-yellow-600" : "bg-emerald-500/10 text-emerald-500",
     },
     {
       label: "Pending Quotes",
@@ -41,6 +51,13 @@ export function SummaryCards({ totalBudget, totalPaid, totalInKind, pendingCount
       sub: "Need confirmation",
       icon: pendingCount > 0 ? AlertCircle : CheckCircle2,
       color: pendingCount > 0 ? "bg-orange-500/10 text-orange-500" : "bg-emerald-500/10 text-emerald-500",
+    },
+    {
+      label: "Accion Requerida",
+      value: String(accionRequeridaCount),
+      sub: "Items que necesitan accion",
+      icon: Flag,
+      color: accionRequeridaCount > 0 ? "bg-orange-500/10 text-orange-600" : "bg-emerald-500/10 text-emerald-500",
     },
     {
       label: "Costos a Validar",
@@ -59,7 +76,7 @@ export function SummaryCards({ totalBudget, totalPaid, totalInKind, pendingCount
   ];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+    <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
       {cards.map((card, idx) => (
         <motion.div
           key={card.label}
