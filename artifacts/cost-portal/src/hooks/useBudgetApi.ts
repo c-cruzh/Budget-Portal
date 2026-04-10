@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { BudgetItem } from "@/data/budgetData";
 
 const API_URL = "/api/budget-items";
-const SEED_VERSION = "2026-04-09T17:50:00Z";
+const SEED_VERSION = "2026-04-10T07:30:00Z";
 
 export interface BudgetMeta {
   lastEditedBy: string;
@@ -12,7 +12,8 @@ export interface BudgetMeta {
 }
 
 export function useBudgetApi(
-  fallbackItems: BudgetItem[]
+  fallbackItems: BudgetItem[],
+  recalcFn?: (item: BudgetItem) => BudgetItem
 ): {
   items: BudgetItem[];
   setItems: (value: BudgetItem[] | ((prev: BudgetItem[]) => BudgetItem[])) => void;
@@ -56,8 +57,9 @@ export function useBudgetApi(
                     const dbStr = JSON.stringify(data.items);
                     if (seedStr.length > dbStr.length) {
                       console.log("Seed data is newer, syncing to server...");
-                      await saveFullToServer(seedItems);
-                      setItemsState(seedItems);
+                      const recalcedSeed = recalcFn ? seedItems.map(recalcFn) : seedItems;
+                      await saveFullToServer(recalcedSeed);
+                      setItemsState(recalcedSeed);
                       localStorage.setItem("seed-version-applied", SEED_VERSION);
                       initialLoadDone.current = true;
                       setLoading(false);
@@ -70,15 +72,17 @@ export function useBudgetApi(
               }
               localStorage.setItem("seed-version-applied", SEED_VERSION);
             }
-            setItemsState(data.items);
+            const recalced = recalcFn ? data.items.map(recalcFn) : data.items;
+            setItemsState(recalced);
           } else {
             try {
               const seedRes = await fetch(import.meta.env.BASE_URL + "seed-data.json");
               if (seedRes.ok) {
                 const seedItems = await seedRes.json();
                 if (Array.isArray(seedItems) && seedItems.length > 0) {
-                  await saveFullToServer(seedItems);
-                  setItemsState(seedItems);
+                  const recalced = recalcFn ? seedItems.map(recalcFn) : seedItems;
+                  await saveFullToServer(recalced);
+                  setItemsState(recalced);
                   localStorage.setItem("seed-version-applied", SEED_VERSION);
                   initialLoadDone.current = true;
                   setLoading(false);

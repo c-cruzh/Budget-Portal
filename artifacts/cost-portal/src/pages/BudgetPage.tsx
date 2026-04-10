@@ -161,7 +161,7 @@ function getFeeProductora(item: BudgetItem): number {
 const SEED_ITEMS = INITIAL_BUDGET_ITEMS.map(recalcItem);
 
 export default function BudgetPage() {
-  const { items, setItems, loading, saving, lastSaved, error, meta, saveCommentOnly, patchItem, saveFull } = useBudgetApi(SEED_ITEMS);
+  const { items, setItems, loading, saving, lastSaved, error, meta, saveCommentOnly, patchItem, saveFull } = useBudgetApi(SEED_ITEMS, recalcItem);
   const { permissions, user } = useAuth();
   const canEdit = permissions.canEdit;
   const canComment = permissions.canComment;
