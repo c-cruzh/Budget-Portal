@@ -189,6 +189,7 @@ export default function BudgetPage() {
   const [filterAsignado, setFilterAsignado] = useState("ALL");
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [filterInKind, setFilterInKind] = useState("ALL");
+  const [filterPrecio, setFilterPrecio] = useState("ALL");
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -259,6 +260,8 @@ export default function BudgetPage() {
     else if (filterStatus !== "ALL") out = out.filter(i => (i.statusCotizacion || "").trim() === filterStatus);
     if (filterInKind === "SI") out = out.filter(i => i.inKind);
     else if (filterInKind === "NO") out = out.filter(i => !i.inKind);
+    if (filterPrecio === "ZERO") out = out.filter(i => (Number(i.precioUnitario) || 0) === 0 && !i.inKind);
+    else if (filterPrecio === "NONZERO") out = out.filter(i => (Number(i.precioUnitario) || 0) > 0);
     if (search.trim()) {
       const q = search.toLowerCase();
       out = out.filter(i =>
@@ -273,7 +276,7 @@ export default function BudgetPage() {
       );
     }
     return out;
-  }, [items, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, search]);
+  }, [items, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, search]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, { evento: string; area: string; items: BudgetItem[] }>();
@@ -634,9 +637,17 @@ export default function BudgetPage() {
               <SelectItem value="NO">Sin In-Kind</SelectItem>
             </SelectContent>
           </Select>
-          {(filterProveedor !== "ALL" || filterProductora !== "ALL" || filterFeeEnCotiz !== "ALL" || filterCotizacion !== "ALL" || filterAsignado !== "ALL" || filterStatus !== "ALL" || filterInKind !== "ALL") && (
+          <Select value={filterPrecio} onValueChange={setFilterPrecio}>
+            <SelectTrigger className="w-[170px] bg-card border-card-border text-xs"><SelectValue placeholder="Precio" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Precio: Todos</SelectItem>
+              <SelectItem value="ZERO">Precio en $0</SelectItem>
+              <SelectItem value="NONZERO">Con precio</SelectItem>
+            </SelectContent>
+          </Select>
+          {(filterProveedor !== "ALL" || filterProductora !== "ALL" || filterFeeEnCotiz !== "ALL" || filterCotizacion !== "ALL" || filterAsignado !== "ALL" || filterStatus !== "ALL" || filterInKind !== "ALL" || filterPrecio !== "ALL") && (
             <button
-              onClick={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); }}
+              onClick={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); }}
               className="text-xs text-primary hover:underline"
             >Clear filters</button>
           )}

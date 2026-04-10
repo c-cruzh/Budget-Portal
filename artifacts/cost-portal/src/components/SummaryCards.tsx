@@ -20,7 +20,7 @@ interface SummaryCardsProps {
 }
 
 export function SummaryCards({ totalBudget, cashSinFee, totalInKindCount, totalInKindSum, pendingCount, itemCount, validarCount, contratarAparteCount, soloPresupuestadoSum, accionRequeridaCount, feeProductoraSum, feeExplicitSum, feeIncluidoSum }: SummaryCardsProps) {
-  const cards = [
+  const row1 = [
     {
       label: "Total Budget",
       value: formatUSD(totalBudget),
@@ -61,6 +61,9 @@ export function SummaryCards({ totalBudget, cashSinFee, totalInKindCount, totalI
       color: soloPresupuestadoSum > 0 ? "bg-yellow-500/10 text-yellow-600" : "bg-emerald-500/10 text-emerald-500",
       info: "Monto total de items 'solo presupuestado' — estimados sin cotizacion formal.",
     },
+  ];
+
+  const row2 = [
     {
       label: "Pending Quotes",
       value: String(pendingCount),
@@ -95,33 +98,40 @@ export function SummaryCards({ totalBudget, cashSinFee, totalInKindCount, totalI
     },
   ];
 
+  const renderCard = (card: typeof row1[0], idx: number) => (
+    <motion.div
+      key={card.label}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: idx * 0.04, duration: 0.3 }}
+      className="rounded-xl border border-card-border bg-card p-3 shadow-sm overflow-hidden"
+    >
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <div className={`w-7 h-7 rounded-lg ${card.color} flex items-center justify-center flex-shrink-0`}>
+          <card.icon className="w-3.5 h-3.5" />
+        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <p className="text-[11px] text-muted-foreground font-medium leading-tight truncate cursor-help">{card.label}</p>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-[220px] text-xs font-normal">
+            {card.info}
+          </TooltipContent>
+        </Tooltip>
+      </div>
+      <p className="text-lg font-bold text-foreground truncate">{card.value}</p>
+      <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{card.sub}</p>
+    </motion.div>
+  );
+
   return (
-    <div className="grid grid-cols-3 lg:grid-cols-3 xl:grid-cols-9 gap-3">
-      {cards.map((card, idx) => (
-        <motion.div
-          key={card.label}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: idx * 0.05, duration: 0.3 }}
-          className="rounded-xl border border-card-border bg-card p-3 shadow-sm overflow-hidden"
-        >
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <div className={`w-7 h-7 rounded-lg ${card.color} flex items-center justify-center flex-shrink-0`}>
-              <card.icon className="w-3.5 h-3.5" />
-            </div>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <p className="text-[11px] text-muted-foreground font-medium leading-tight truncate cursor-help">{card.label}</p>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="max-w-[220px] text-xs font-normal">
-                {card.info}
-              </TooltipContent>
-            </Tooltip>
-          </div>
-          <p className="text-lg font-bold text-foreground truncate">{card.value}</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{card.sub}</p>
-        </motion.div>
-      ))}
+    <div className="space-y-2">
+      <div className="grid grid-cols-3 lg:grid-cols-5 gap-3">
+        {row1.map((card, idx) => renderCard(card, idx))}
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {row2.map((card, idx) => renderCard(card, idx + row1.length))}
+      </div>
     </div>
   );
 }
