@@ -8,6 +8,7 @@ import {
 import { INITIAL_BUDGET_ITEMS, type BudgetItem } from "@/data/budgetData";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useAuth } from "@/hooks/useAuth";
+import { ComboInput } from "@/components/ComboInput";
 
 interface PortalUser {
   id: number;
@@ -212,6 +213,9 @@ export default function BudgetPage() {
     if (filterArea !== "ALL") src = src.filter(i => i.area === filterArea);
     return ["ALL", ...Array.from(new Set(src.map(i => i.centroCosto).filter(v => v && v.trim())))];
   }, [items, filterEvento, filterArea]);
+
+  const allAreas = useMemo(() => Array.from(new Set(items.map(i => i.area).filter(v => v && v.trim()))).sort(), [items]);
+  const allCentros = useMemo(() => Array.from(new Set(items.map(i => i.centroCosto).filter(v => v && v.trim()))).sort(), [items]);
 
   const proveedores = useMemo(() => {
     const hasBlank = items.some(i => !(i.proveedor || "").trim());
@@ -1244,11 +1248,11 @@ export default function BudgetPage() {
             </div>
             <div>
               <label className="text-xs font-medium mb-1 block">Area / Zona</label>
-              <Input value={newItem.area} onChange={e => setNewItem(p => ({ ...p, area: e.target.value }))} placeholder="e.g. AUDITORIO/MAIN STAGE" />
+              <ComboInput value={newItem.area || ""} onChange={v => setNewItem(p => ({ ...p, area: v }))} options={allAreas} placeholder="Seleccionar o crear..." />
             </div>
             <div>
               <label className="text-xs font-medium mb-1 block">Centro de Costo</label>
-              <Input value={newItem.centroCosto} onChange={e => setNewItem(p => ({ ...p, centroCosto: e.target.value }))} placeholder="e.g. STAFF" />
+              <ComboInput value={newItem.centroCosto || ""} onChange={v => setNewItem(p => ({ ...p, centroCosto: v }))} options={allCentros} placeholder="Seleccionar o crear..." />
             </div>
             <div className="col-span-3">
               <label className="text-xs font-medium mb-1 block">Descripcion</label>
@@ -1358,11 +1362,11 @@ export default function BudgetPage() {
             </div>
             <div>
               <label className="text-xs font-medium mb-1 block">Area / Zona</label>
-              <Input value={editItem.area || ""} onChange={e => setEditItem(p => ({ ...p, area: e.target.value }))} />
+              <ComboInput value={editItem.area || ""} onChange={v => setEditItem(p => ({ ...p, area: v }))} options={allAreas} placeholder="Seleccionar o crear..." />
             </div>
             <div>
               <label className="text-xs font-medium mb-1 block">Centro de Costo</label>
-              <Input value={editItem.centroCosto || ""} onChange={e => setEditItem(p => ({ ...p, centroCosto: e.target.value }))} />
+              <ComboInput value={editItem.centroCosto || ""} onChange={v => setEditItem(p => ({ ...p, centroCosto: v }))} options={allCentros} placeholder="Seleccionar o crear..." />
             </div>
             <div className="col-span-3">
               <label className="text-xs font-medium mb-1 block">Descripcion</label>
