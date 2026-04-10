@@ -145,9 +145,11 @@ function recalcItem(item: BudgetItem): BudgetItem {
   item.subtotal = byDias ? qty * dias * precio : qty * precio;
   const feeApplies = item.agencyFee && item.aplicaFee !== "SI";
   item.fee = feeApplies ? item.subtotal * 0.20 : 0;
+  item.feeIncluido = (item.agencyFee && item.aplicaFee === "SI") ? item.subtotal * 0.20 : 0;
   item.subtotalConFee = item.subtotal + item.fee;
   item.iva = item.exentoIva ? 0 : item.subtotalConFee * 0.13;
-  item.total = item.subtotalConFee + item.iva;
+  item.turismo = item.aplicaTurismo ? item.subtotalConFee * 0.05 : 0;
+  item.total = item.subtotalConFee + item.iva + (item.turismo || 0);
   return item;
 }
 
@@ -286,7 +288,7 @@ export default function BudgetPage() {
       });
       const changed = next.find(i => i.id === id);
       if (changed) {
-        const recalcFields = ["qty", "qtyDias", "precioUnitario", "porDias", "aplicaFee", "agencyFee", "inKind", "exentoIva"] as const;
+        const recalcFields = ["qty", "qtyDias", "precioUnitario", "porDias", "aplicaFee", "agencyFee", "inKind", "exentoIva", "aplicaTurismo"] as const;
         if (recalcFields.includes(field as any)) {
           const { id: _id, ...rest } = changed;
           Object.entries(rest).forEach(([k, v]) => patchItem(id, k, v));
@@ -386,6 +388,7 @@ export default function BudgetPage() {
           documento: editItem.documento ?? i.documento,
           proveedor: editItem.proveedor ?? i.proveedor,
           exentoIva: editItem.exentoIva ?? i.exentoIva,
+          aplicaTurismo: editItem.aplicaTurismo ?? i.aplicaTurismo ?? false,
           accionRequerida: editItem.accionRequerida ?? i.accionRequerida ?? false,
           statusCotizacion: editItem.statusCotizacion ?? i.statusCotizacion ?? "",
         };
@@ -422,7 +425,8 @@ export default function BudgetPage() {
       validarCosto: false,
       contratarAparte: false,
       cotizacionLink: "",
-      exentoIva: false,
+      exentoIva: newItem.exentoIva || false,
+      aplicaTurismo: newItem.aplicaTurismo || false,
       soloPresupuestado: false,
       accionRequerida: false,
     };
@@ -432,7 +436,7 @@ export default function BudgetPage() {
       return next;
     });
     setShowAddModal(false);
-    setNewItem({ evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, exentoIva: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "" });
+    setNewItem({ evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, exentoIva: false, aplicaTurismo: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "" });
   }, [newItem, setItems, saveFull]);
 
   const updateComment = useCallback((id: string, field: "notas" | "descripcion", value: string) => {
@@ -476,7 +480,8 @@ export default function BudgetPage() {
       i.porDias, i.qtyDias, i.precioUnitario, i.subtotal, i.agencyFee ? "SI" : "NO",
       i.aplicaFee, i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.soloPresupuestado ? "SI" : "NO", i.documento,
       i.proveedor || "", i.reviewedBy || "", i.validarCosto ? "SI" : "NO", i.contratarAparte ? "SI" : "NO",
-      i.accionRequerida ? "SI" : "NO", i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || "", i.statusCotizacion || ""
+      i.accionRequerida ? "SI" : "NO", i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || "", i.statusCotizacion || "",
+      i.aplicaTurismo ? "SI" : "NO", i.turismo || 0, i.feeIncluido || 0
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -660,13 +665,16 @@ export default function BudgetPage() {
                   <ColHeader label="Fee en Cotiz.?" info="SI = el fee de 20% ya está incluido en la cotización del proveedor. NO = se aplica fee adicional del 20%." align="center" />
                 </th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Fee 20%" info="Fee de gestión de la productora (20% sobre subtotal). Solo aplica si va vía productora y el fee no está incluido en la cotización." align="right" />
+                  <ColHeader label="Fee 20%" info="Fee de gestión de la productora (20% sobre subtotal). Si el fee ya está incluido en la cotización, se muestra en gris para referencia pero no suma al total." align="right" />
                 </th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
                   <ColHeader label="IVA" info="Impuesto al Valor Agregado (13% sobre subtotal + fee). Exento si el item tiene IVA exento marcado." align="right" />
                 </th>
+                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Turismo" info="Impuesto de turismo del 5% sobre subtotal + fee. Aplica solo a items marcados. Es adicional al IVA." align="right" />
+                </th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-24 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Total" info="Monto final = Subtotal + Fee + IVA. Este es el costo real que se pagará." align="right" />
+                  <ColHeader label="Total" info="Monto final = Subtotal + Fee (si no incluido) + IVA + Turismo. Este es el costo real que se pagará." align="right" />
                 </th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">
                   <ColHeader label="Cotizacion" info="Código o referencia de la cotización del proveedor (ej: A001, PENDING, VOLUNTARIO, NA)." />
@@ -715,7 +723,7 @@ export default function BudgetPage() {
                         <ChevronRight className="w-3.5 h-3.5" />
                       </motion.div>
                     </td>
-                    <td className="px-2 py-2" colSpan={16}>
+                    <td className="px-2 py-2" colSpan={17}>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-foreground text-xs">{group.area}</span>
                         <Badge variant="secondary" className="text-[10px] font-normal py-0">{group.evento === "MAIN EVENT" ? "Main Event" : group.evento === "MAIN EVENT VIP DINNER" ? "VIP Dinner" : "Pre/Post"}</Badge>
@@ -723,7 +731,7 @@ export default function BudgetPage() {
                         {hasInKind && <Badge className="text-[10px] bg-amber-500/15 text-amber-600 border-amber-500/20 font-normal py-0">In-Kind</Badge>}
                       </div>
                     </td>
-                    <td className="px-2 py-2 text-right font-semibold" colSpan={14}>
+                    <td className="px-2 py-2 text-right font-semibold" colSpan={15}>
 
                       {groupTotal > 0 ? <span className="text-primary text-xs">{formatUSD(groupTotal)}</span> : <span className="text-muted-foreground text-[10px]">In-Kind / $0</span>}
                     </td>
@@ -866,8 +874,21 @@ export default function BudgetPage() {
                           <span className="text-muted-foreground/30 text-[10px]">--</span>
                         )}
                       </td>
-                      <td className="px-2 py-1.5 text-right align-top font-mono text-muted-foreground">
-                        {item.fee > 0 ? formatUSD(item.fee) : "--"}
+                      <td className="px-2 py-1.5 text-right align-top font-mono">
+                        {item.fee > 0 ? (
+                          <span className="text-muted-foreground">{formatUSD(item.fee)}</span>
+                        ) : (item.feeIncluido || 0) > 0 ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="text-muted-foreground/30 italic cursor-help">({formatUSD(item.feeIncluido!)})</span>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="text-xs font-normal max-w-[200px]">
+                              Fee ya incluido en la cotización — no suma al total.
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="text-muted-foreground/30">--</span>
+                        )}
                       </td>
                       <td className="px-2 py-1.5 text-right align-top">
                         {item.exentoIva ? (
@@ -886,6 +907,20 @@ export default function BudgetPage() {
                             className={cn("text-muted-foreground/30", canEdit && "cursor-pointer hover:text-amber-600 transition-colors")}
                             title={canEdit ? "Click para marcar exento de IVA" : undefined}
                             onClick={canEdit ? () => { updateItem(item.id, "exentoIva", true); } : undefined}
+                          >--</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 text-right align-top">
+                        {item.aplicaTurismo ? (
+                          <button
+                            onClick={canEdit ? () => { updateItem(item.id, "aplicaTurismo", false); } : undefined}
+                            className={cn("text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-600 border border-cyan-500/20 font-medium font-mono", canEdit && "hover:bg-cyan-500/20 transition-colors", !canEdit && "cursor-default")}
+                          >{formatUSD(item.turismo || 0)}</button>
+                        ) : (
+                          <span
+                            className={cn("text-muted-foreground/30", canEdit && "cursor-pointer hover:text-cyan-600 transition-colors")}
+                            title={canEdit ? "Click para aplicar 5% turismo" : undefined}
+                            onClick={canEdit ? () => { updateItem(item.id, "aplicaTurismo", true); } : undefined}
                           >--</span>
                         )}
                       </td>
@@ -1134,7 +1169,7 @@ export default function BudgetPage() {
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-border bg-muted/30">
-                <td colSpan={20} className="px-3 py-3 font-semibold text-muted-foreground text-xs">
+                <td colSpan={21} className="px-3 py-3 font-semibold text-muted-foreground text-xs">
                   TOTAL -- {filtered.length} items
                 </td>
                 <td className="px-2 py-3 text-right font-bold text-sm text-primary font-mono">
@@ -1231,10 +1266,18 @@ export default function BudgetPage() {
               <label className="text-xs font-medium mb-1 block">Proveedor</label>
               <Input value={newItem.proveedor} onChange={e => setNewItem(p => ({ ...p, proveedor: e.target.value }))} placeholder="e.g. AURORA 360" />
             </div>
-            <div className="flex items-end gap-4">
+            <div className="flex items-end gap-4 flex-wrap">
               <label className="flex items-center gap-2 text-xs">
                 <input type="checkbox" checked={newItem.inKind || false} onChange={e => setNewItem(p => ({ ...p, inKind: e.target.checked }))} className="rounded border-border" />
                 In-Kind?
+              </label>
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={newItem.exentoIva || false} onChange={e => setNewItem(p => ({ ...p, exentoIva: e.target.checked }))} className="rounded border-border" />
+                Exento IVA?
+              </label>
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={newItem.aplicaTurismo || false} onChange={e => setNewItem(p => ({ ...p, aplicaTurismo: e.target.checked }))} className="rounded border-border" />
+                Turismo 5%?
               </label>
             </div>
             <div>
@@ -1345,6 +1388,10 @@ export default function BudgetPage() {
               <label className="flex items-center gap-2 text-xs">
                 <input type="checkbox" checked={editItem.exentoIva || false} onChange={e => setEditItem(p => ({ ...p, exentoIva: e.target.checked }))} className="rounded border-border" />
                 Exento IVA?
+              </label>
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={editItem.aplicaTurismo || false} onChange={e => setEditItem(p => ({ ...p, aplicaTurismo: e.target.checked }))} className="rounded border-border" />
+                Aplica Turismo 5%?
               </label>
             </div>
             <div>

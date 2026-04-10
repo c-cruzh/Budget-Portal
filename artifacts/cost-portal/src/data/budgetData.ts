@@ -26,6 +26,9 @@ export interface BudgetItem {
   validarCosto: boolean;
   contratarAparte: boolean;
   exentoIva?: boolean;
+  aplicaTurismo?: boolean;
+  turismo?: number;
+  feeIncluido?: number;
   assignedTo?: string;
   soloPresupuestado?: boolean;
   accionRequerida?: boolean;
