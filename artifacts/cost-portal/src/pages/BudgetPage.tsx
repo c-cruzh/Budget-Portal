@@ -69,6 +69,19 @@ const STATUS_COLORS: Record<string, string> = {
   "Pendiente Cotizar Alternativa": "bg-amber-500/10 text-amber-600 border-amber-500/20",
 };
 
+const STATUS_NO_COTIZACION = new Set([
+  "Cotización - No Aplica (In-Kind)",
+  "Cotización - No Aplica (Voluntario)",
+  "Cotización Pending",
+  "Pendiente Cotizar",
+]);
+
+const STATUS_HAS_COTIZACION = new Set([
+  "Cotización Recibida - Sin Observaciones",
+  "Cotización Recibida - Observaciones",
+  "Pendiente Cotizar Alternativa",
+]);
+
 function InfoIcon({ className }: { className?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -886,10 +899,21 @@ export default function BudgetPage() {
                         )}
                       </td>
                       <td className="px-2 py-1.5 align-top">
-                        {item.cotizacion === "VOLUNTARIO" || item.cotizacion === "NA" || item.cotizacion === "PROVEE ESEN" ? (
+                        {STATUS_NO_COTIZACION.has(item.statusCotizacion || "") ? (
                           <div className="flex flex-col gap-0.5">
-                            <CotizacionBadge value={item.cotizacion} />
-                            <span className="text-[9px] text-muted-foreground/40">N/A</span>
+                            <span className="text-[10px] text-muted-foreground/25 italic">No aplica</span>
+                          </div>
+                        ) : STATUS_HAS_COTIZACION.has(item.statusCotizacion || "") ? (
+                          <div className="flex flex-col gap-0.5">
+                            <EditableCell value={item.cotizacion} onSave={v => updateItem(item.id, "cotizacion", v)} className="text-muted-foreground text-[10px]" placeholder="cotizacion..." disabled={!canEdit} />
+                            <div className="flex items-center gap-0.5">
+                              {item.cotizacionLink && (
+                                <a href={item.cotizacionLink} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 text-blue-500 hover:text-blue-600" title={item.cotizacionLink}>
+                                  <ExternalLink className="w-2.5 h-2.5" />
+                                </a>
+                              )}
+                              <EditableCell value={item.cotizacionLink || ""} onSave={v => updateItem(item.id, "cotizacionLink", v)} className={item.cotizacionLink ? "text-blue-500 text-[9px] truncate max-w-[100px]" : "text-blue-400/40 text-[9px]"} placeholder="+ link" disabled={!canEdit} />
+                            </div>
                           </div>
                         ) : (
                           <div className="flex flex-col gap-0.5">
