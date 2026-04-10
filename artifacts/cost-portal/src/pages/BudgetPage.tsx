@@ -38,6 +38,37 @@ import { cn } from "@/lib/utils";
 import { EditableCell } from "@/components/EditableCell";
 import { SummaryCards } from "@/components/SummaryCards";
 
+const STATUS_COTIZACION_OPTIONS = [
+  "",
+  "Cotización Recibida - Sin Observaciones",
+  "Cotización Recibida - Observaciones",
+  "Cotización - No Aplica (In-Kind)",
+  "Cotización - No Aplica (Voluntario)",
+  "Cotización Pending",
+  "Pendiente Cotizar",
+  "Pendiente Cotizar Alternativa",
+];
+
+const STATUS_SHORT_LABELS: Record<string, string> = {
+  "Cotización Recibida - Sin Observaciones": "Recibida OK",
+  "Cotización Recibida - Observaciones": "Recibida c/ Obs.",
+  "Cotización - No Aplica (In-Kind)": "N/A In-Kind",
+  "Cotización - No Aplica (Voluntario)": "N/A Voluntario",
+  "Cotización Pending": "Pending",
+  "Pendiente Cotizar": "Pend. Cotizar",
+  "Pendiente Cotizar Alternativa": "Pend. Alternativa",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  "Cotización Recibida - Sin Observaciones": "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+  "Cotización Recibida - Observaciones": "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
+  "Cotización - No Aplica (In-Kind)": "bg-violet-500/10 text-violet-600 border-violet-500/20",
+  "Cotización - No Aplica (Voluntario)": "bg-violet-500/10 text-violet-600 border-violet-500/20",
+  "Cotización Pending": "bg-orange-500/10 text-orange-600 border-orange-500/20",
+  "Pendiente Cotizar": "bg-red-500/10 text-red-500 border-red-500/20",
+  "Pendiente Cotizar Alternativa": "bg-amber-500/10 text-amber-600 border-amber-500/20",
+};
+
 function CotizacionBadge({ value }: { value: string }) {
   if (!value) return <span className="text-muted-foreground/40 text-xs">--</span>;
   const v = value.trim().toUpperCase();
@@ -109,6 +140,8 @@ export default function BudgetPage() {
   const [filterProductora, setFilterProductora] = useState("ALL");
   const [filterFeeEnCotiz, setFilterFeeEnCotiz] = useState("ALL");
   const [filterCotizacion, setFilterCotizacion] = useState("ALL");
+  const [filterAsignado, setFilterAsignado] = useState("ALL");
+  const [filterStatus, setFilterStatus] = useState("ALL");
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -117,7 +150,7 @@ export default function BudgetPage() {
     evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "",
     inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1,
     precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0,
-    cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, soloPresupuestado: false, accionRequerida: false,
+    cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "",
   });
 
   const eventos = useMemo(() => ["ALL", ...Array.from(new Set(items.map(i => i.evento).filter(v => v && v.trim())))], [items]);
@@ -146,6 +179,20 @@ export default function BudgetPage() {
     return hasBlank ? ["ALL", "(Sin cotizacion)", ...sorted] : ["ALL", ...sorted];
   }, [items]);
 
+  const assignedToOptions = useMemo(() => {
+    const hasBlank = items.some(i => !(i.assignedTo || "").trim());
+    const set = new Set(items.map(i => (i.assignedTo || "").trim()).filter(v => v.length > 0));
+    const sorted = Array.from(set).sort();
+    return hasBlank ? ["ALL", "(Sin asignar)", ...sorted] : ["ALL", ...sorted];
+  }, [items]);
+
+  const statusOptions = useMemo(() => {
+    const hasBlank = items.some(i => !(i.statusCotizacion || "").trim());
+    const set = new Set(items.map(i => (i.statusCotizacion || "").trim()).filter(v => v.length > 0));
+    const sorted = Array.from(set).sort();
+    return hasBlank ? ["ALL", "(Sin status)", ...sorted] : ["ALL", ...sorted];
+  }, [items]);
+
   const filtered = useMemo(() => {
     let out = items;
     if (filterEvento !== "ALL") out = out.filter(i => i.evento === filterEvento);
@@ -159,6 +206,10 @@ export default function BudgetPage() {
     else if (filterFeeEnCotiz === "NO") out = out.filter(i => i.aplicaFee !== "SI");
     if (filterCotizacion === "(Sin cotizacion)") out = out.filter(i => !(i.cotizacion || "").trim());
     else if (filterCotizacion !== "ALL") out = out.filter(i => (i.cotizacion || "").trim() === filterCotizacion);
+    if (filterAsignado === "(Sin asignar)") out = out.filter(i => !(i.assignedTo || "").trim());
+    else if (filterAsignado !== "ALL") out = out.filter(i => (i.assignedTo || "").trim() === filterAsignado);
+    if (filterStatus === "(Sin status)") out = out.filter(i => !(i.statusCotizacion || "").trim());
+    else if (filterStatus !== "ALL") out = out.filter(i => (i.statusCotizacion || "").trim() === filterStatus);
     if (search.trim()) {
       const q = search.toLowerCase();
       out = out.filter(i =>
@@ -168,11 +219,12 @@ export default function BudgetPage() {
         i.centroCosto.toLowerCase().includes(q) ||
         i.notas.toLowerCase().includes(q) ||
         i.cotizacion.toLowerCase().includes(q) ||
-        (i.proveedor || "").toLowerCase().includes(q)
+        (i.proveedor || "").toLowerCase().includes(q) ||
+        (i.assignedTo || "").toLowerCase().includes(q)
       );
     }
     return out;
-  }, [items, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, search]);
+  }, [items, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, search]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, { evento: string; area: string; items: BudgetItem[] }>();
@@ -296,6 +348,7 @@ export default function BudgetPage() {
           proveedor: editItem.proveedor ?? i.proveedor,
           exentoIva: editItem.exentoIva ?? i.exentoIva,
           accionRequerida: editItem.accionRequerida ?? i.accionRequerida ?? false,
+          statusCotizacion: editItem.statusCotizacion ?? i.statusCotizacion ?? "",
         };
         return recalcItem(updated);
       });
@@ -340,7 +393,7 @@ export default function BudgetPage() {
       return next;
     });
     setShowAddModal(false);
-    setNewItem({ evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, exentoIva: false, soloPresupuestado: false, accionRequerida: false });
+    setNewItem({ evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, exentoIva: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "" });
   }, [newItem, setItems, saveFull]);
 
   const updateComment = useCallback((id: string, field: "notas" | "descripcion", value: string) => {
@@ -376,7 +429,7 @@ export default function BudgetPage() {
       "IN-KIND?", "AURORA 360?", "QTY", "UoM", "CONTRATACION POR DIAS?", "QTY DIAS",
       "PRECIO UNITARIO", "SUBTOTAL", "VIA PRODUCTORA (AURORA 360)?", "FEE INCL. EN COTIZACION?",
       "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "SOLO PRESUPUESTADO?", "IMAGEN DE REFERENCIA", "PROVEEDOR",
-      "REVIEWED BY", "VALIDAR COSTO?", "CONTRATAR APARTE?", "ACCIÓN REQUERIDA?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO"
+      "REVIEWED BY", "VALIDAR COSTO?", "CONTRATAR APARTE?", "ACCIÓN REQUERIDA?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO", "STATUS COTIZACION"
     ];
     const rows = filtered.map(i => [
       i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
@@ -384,7 +437,7 @@ export default function BudgetPage() {
       i.porDias, i.qtyDias, i.precioUnitario, i.subtotal, i.agencyFee ? "SI" : "NO",
       i.aplicaFee, i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.soloPresupuestado ? "SI" : "NO", i.documento,
       i.proveedor || "", i.reviewedBy || "", i.validarCosto ? "SI" : "NO", i.contratarAparte ? "SI" : "NO",
-      i.accionRequerida ? "SI" : "NO", i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || ""
+      i.accionRequerida ? "SI" : "NO", i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || "", i.statusCotizacion || ""
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -507,9 +560,17 @@ export default function BudgetPage() {
             <SelectTrigger className="w-[180px] bg-card border-card-border text-xs"><SelectValue placeholder="Cotizacion" /></SelectTrigger>
             <SelectContent>{cotizaciones.map(c => <SelectItem key={c} value={c}>{c === "ALL" ? "All Cotizaciones" : c}</SelectItem>)}</SelectContent>
           </Select>
-          {(filterProveedor !== "ALL" || filterProductora !== "ALL" || filterFeeEnCotiz !== "ALL" || filterCotizacion !== "ALL") && (
+          <Select value={filterAsignado} onValueChange={setFilterAsignado}>
+            <SelectTrigger className="w-[180px] bg-card border-card-border text-xs"><SelectValue placeholder="Asignado a" /></SelectTrigger>
+            <SelectContent>{assignedToOptions.map(a => <SelectItem key={a} value={a}>{a === "ALL" ? "Asignado: Todos" : a}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="w-[200px] bg-card border-card-border text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>{statusOptions.map(s => <SelectItem key={s} value={s}>{s === "ALL" ? "Status: Todos" : s}</SelectItem>)}</SelectContent>
+          </Select>
+          {(filterProveedor !== "ALL" || filterProductora !== "ALL" || filterFeeEnCotiz !== "ALL" || filterCotizacion !== "ALL" || filterAsignado !== "ALL" || filterStatus !== "ALL") && (
             <button
-              onClick={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); }}
+              onClick={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); }}
               className="text-xs text-primary hover:underline"
             >Clear filters</button>
           )}
@@ -539,6 +600,7 @@ export default function BudgetPage() {
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">IVA</th>
                 <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-24 bg-[hsl(var(--muted))] border-b border-border">Total</th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">Cotizacion</th>
+                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[110px] bg-[hsl(var(--muted))] border-b border-border">Status</th>
                 <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">Solo Presup.</th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">Proveedor</th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[100px] bg-[hsl(var(--muted))] border-b border-border">Assigned</th>
@@ -566,7 +628,7 @@ export default function BudgetPage() {
                         <ChevronRight className="w-3.5 h-3.5" />
                       </motion.div>
                     </td>
-                    <td className="px-2 py-2" colSpan={15}>
+                    <td className="px-2 py-2" colSpan={16}>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-foreground text-xs">{group.area}</span>
                         <Badge variant="secondary" className="text-[10px] font-normal py-0">{group.evento === "MAIN EVENT" ? "Main Event" : group.evento === "MAIN EVENT VIP DINNER" ? "VIP Dinner" : "Pre/Post"}</Badge>
@@ -574,7 +636,7 @@ export default function BudgetPage() {
                         {hasInKind && <Badge className="text-[10px] bg-amber-500/15 text-amber-600 border-amber-500/20 font-normal py-0">In-Kind</Badge>}
                       </div>
                     </td>
-                    <td className="px-2 py-2 text-right font-semibold" colSpan={13}>
+                    <td className="px-2 py-2 text-right font-semibold" colSpan={14}>
 
                       {groupTotal > 0 ? <span className="text-primary text-xs">{formatUSD(groupTotal)}</span> : <span className="text-muted-foreground text-[10px]">In-Kind / $0</span>}
                     </td>
@@ -770,6 +832,40 @@ export default function BudgetPage() {
                           </div>
                         )}
                       </td>
+                      <td className="px-2 py-1.5 align-top">
+                        {canEdit ? (
+                          <Select
+                            value={item.statusCotizacion || "__none__"}
+                            onValueChange={v => updateItem(item.id, "statusCotizacion", v === "__none__" ? "" : v)}
+                          >
+                            <SelectTrigger className={cn(
+                              "h-6 text-[10px] min-w-[100px] px-1.5 gap-1 border",
+                              item.statusCotizacion
+                                ? STATUS_COLORS[item.statusCotizacion] || "border-border"
+                                : "border-dashed border-border/50"
+                            )}>
+                              <SelectValue placeholder="Status..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {STATUS_COTIZACION_OPTIONS.map(opt => (
+                                <SelectItem key={opt || "__none__"} value={opt || "__none__"}>
+                                  {opt ? (
+                                    <span className={cn("text-[10px] px-1 py-0.5 rounded", STATUS_COLORS[opt] || "")}>{STATUS_SHORT_LABELS[opt] || opt}</span>
+                                  ) : (
+                                    <span className="text-muted-foreground">Sin status</span>
+                                  )}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : item.statusCotizacion ? (
+                          <span className={cn("text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap", STATUS_COLORS[item.statusCotizacion] || "border-border")}>
+                            {STATUS_SHORT_LABELS[item.statusCotizacion] || item.statusCotizacion}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground/30">--</span>
+                        )}
+                      </td>
                       <td className="px-1 py-1.5 text-center align-top">
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -940,13 +1036,13 @@ export default function BudgetPage() {
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-border bg-muted/30">
-                <td colSpan={19} className="px-3 py-3 font-semibold text-muted-foreground text-xs">
+                <td colSpan={20} className="px-3 py-3 font-semibold text-muted-foreground text-xs">
                   TOTAL -- {filtered.length} items
                 </td>
                 <td className="px-2 py-3 text-right font-bold text-sm text-primary font-mono">
                   {formatUSD(totalBudget)}
                 </td>
-                <td colSpan={9}></td>
+                <td colSpan={10}></td>
               </tr>
             </tfoot>
           </table>
