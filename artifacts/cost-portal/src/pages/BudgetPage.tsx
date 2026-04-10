@@ -645,11 +645,11 @@ export default function BudgetPage() {
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10 shadow-[0_1px_3px_rgba(0,0,0,0.3)]">
               <tr className="text-[10px] uppercase tracking-wider">
-                <th className="px-2 py-2.5 w-6 bg-[hsl(var(--muted))] border-b border-border"></th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-10 bg-[hsl(var(--muted))] border-b border-border">
+                <th className="sticky-col-0 px-2 py-2.5 w-6 bg-[hsl(var(--muted))] border-b border-border"></th>
+                <th className="sticky-col-1 text-center px-1 py-2.5 font-semibold text-muted-foreground w-10 bg-[hsl(var(--muted))] border-b border-border">
                   <ColHeader label="Rev." info="Marcar como revisado. Muestra quién lo revisó y cuándo." align="center" />
                 </th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[200px] bg-[hsl(var(--muted))] border-b border-border">
+                <th className="sticky-col-2 text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[200px] bg-[hsl(var(--muted))] border-b border-border">
                   <ColHeader label="Item" info="Nombre del producto, servicio o recurso necesario para el evento." />
                 </th>
                 <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">
@@ -736,12 +736,12 @@ export default function BudgetPage() {
                     className="bg-muted/30 border-t border-b border-border cursor-pointer hover:bg-muted/50 transition-colors select-none"
                     onClick={() => toggleArea(key)}
                   >
-                    <td className="px-2 py-2" colSpan={1}>
+                    <td className="sticky-col-0 px-2 py-2 bg-muted/30" colSpan={1}>
                       <motion.div animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.15 }} className="w-3.5 h-3.5 text-muted-foreground">
                         <ChevronRight className="w-3.5 h-3.5" />
                       </motion.div>
                     </td>
-                    <td className="px-2 py-2" colSpan={17}>
+                    <td className="sticky-col-1 px-2 py-2 bg-muted/30" colSpan={2}>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-foreground text-xs">{group.area}</span>
                         <Badge variant="secondary" className="text-[10px] font-normal py-0">{group.evento === "MAIN EVENT" ? "Main Event" : group.evento === "MAIN EVENT VIP DINNER" ? "VIP Dinner" : "Pre/Post"}</Badge>
@@ -749,6 +749,7 @@ export default function BudgetPage() {
                         {hasInKind && <Badge className="text-[10px] bg-amber-500/15 text-amber-600 border-amber-500/20 font-normal py-0">In-Kind</Badge>}
                       </div>
                     </td>
+                    <td className="px-2 py-2" colSpan={15}></td>
                     <td className="px-2 py-2 text-right font-semibold" colSpan={15}>
 
                       {groupTotal > 0 ? <span className="text-primary text-xs">{formatUSD(groupTotal)}</span> : <span className="text-muted-foreground text-[10px]">In-Kind / $0</span>}
@@ -763,12 +764,12 @@ export default function BudgetPage() {
                         item.inKind ? "bg-amber-500/5" : "hover:bg-muted/20"
                       )}
                     >
-                      <td className="px-2 py-1.5 align-top">
+                      <td className={cn("sticky-col-0 px-2 py-1.5 align-top", item.inKind ? "row-inkind-bg" : "bg-background")}>
                         {item.inKind && (
                           <Tooltip><TooltipTrigger><Tag className="w-3 h-3 text-amber-500" /></TooltipTrigger><TooltipContent>In-Kind</TooltipContent></Tooltip>
                         )}
                       </td>
-                      <td className="px-1 py-1.5 text-center align-top">
+                      <td className={cn("sticky-col-1 px-1 py-1.5 text-center align-top", item.inKind ? "row-inkind-bg" : "bg-background")}>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
@@ -791,7 +792,7 @@ export default function BudgetPage() {
                           </TooltipContent>
                         </Tooltip>
                       </td>
-                      <td className="px-2 py-1.5 align-top max-w-[260px]">
+                      <td className={cn("sticky-col-2 px-2 py-1.5 align-top max-w-[260px]", item.inKind ? "row-inkind-bg" : "bg-background")}>
                         <EditableCell value={item.item} onSave={v => updateItem(item.id, "item", v)} className="font-medium text-foreground text-xs" disabled={!canEdit} />
                         {(item.descripcion || item.notas) && (
                           <Tooltip>
@@ -1187,8 +1188,12 @@ export default function BudgetPage() {
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-border bg-muted/30">
-                <td colSpan={21} className="px-3 py-3 font-semibold text-muted-foreground text-xs">
+                <td className="sticky-col-0 px-2 py-3 bg-[hsl(var(--muted))]"></td>
+                <td className="sticky-col-1 px-2 py-3 bg-[hsl(var(--muted))]"></td>
+                <td className="sticky-col-2 px-2 py-3 font-semibold text-muted-foreground text-xs bg-[hsl(var(--muted))]">
                   TOTAL -- {filtered.length} items
+                </td>
+                <td colSpan={18} className="px-3 py-3">
                 </td>
                 <td className="px-2 py-3 text-right font-bold text-sm text-primary font-mono">
                   {formatUSD(totalBudget)}

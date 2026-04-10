@@ -229,6 +229,32 @@
   }
 }
 
+.row-inkind-bg {
+  background-color: hsl(40 20% 95%);
+}
+
+.sticky-col-0 {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+.sticky-col-1 {
+  position: sticky;
+  left: 24px;
+  z-index: 2;
+}
+.sticky-col-2 {
+  position: sticky;
+  left: 64px;
+  z-index: 2;
+  box-shadow: 2px 0 4px rgba(0,0,0,0.15);
+}
+thead .sticky-col-0,
+thead .sticky-col-1,
+thead .sticky-col-2 {
+  z-index: 12;
+}
+
 .budget-scroll {
   scrollbar-width: auto;
   scrollbar-color: hsl(var(--muted-foreground) / 0.35) hsl(var(--muted) / 0.5);
