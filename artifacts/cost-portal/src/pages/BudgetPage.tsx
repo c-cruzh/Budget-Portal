@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight, Info,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
-  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2
+  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star
 } from "lucide-react";
 import { INITIAL_BUDGET_ITEMS, type BudgetItem } from "@/data/budgetData";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
@@ -315,7 +315,7 @@ export default function BudgetPage() {
     });
   }, [setItems, patchItem]);
 
-  const toggleField = useCallback((id: string, field: "inKind" | "agencyFee" | "validarCosto" | "contratarAparte" | "soloPresupuestado" | "accionRequerida") => {
+  const toggleField = useCallback((id: string, field: "inKind" | "agencyFee" | "validarCosto" | "contratarAparte" | "soloPresupuestado" | "accionRequerida" | "niceToHave") => {
     setItems(prev => {
       const next = prev.map(item => {
         if (item.id !== id) return item;
@@ -490,7 +490,7 @@ export default function BudgetPage() {
       "IN-KIND?", "AURORA 360?", "QTY", "UoM", "CONTRATACION POR DIAS?", "QTY DIAS",
       "PRECIO UNITARIO", "SUBTOTAL", "VIA PRODUCTORA (AURORA 360)?", "FEE INCL. EN COTIZACION?",
       "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "SOLO PRESUPUESTADO?", "IMAGEN DE REFERENCIA", "PROVEEDOR",
-      "REVIEWED BY", "VALIDAR COSTO?", "CONTRATAR APARTE?", "ACCIÓN REQUERIDA?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO", "STATUS COTIZACION"
+      "REVIEWED BY", "VALIDAR COSTO?", "CONTRATAR APARTE?", "ACCIÓN REQUERIDA?", "NICE TO HAVE?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO", "STATUS COTIZACION"
     ];
     const rows = filtered.map(i => [
       i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
@@ -498,7 +498,7 @@ export default function BudgetPage() {
       i.porDias, i.qtyDias, i.precioUnitario, i.subtotal, i.agencyFee ? "SI" : "NO",
       i.aplicaFee, i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.soloPresupuestado ? "SI" : "NO", i.documento,
       i.proveedor || "", i.reviewedBy || "", i.validarCosto ? "SI" : "NO", i.contratarAparte ? "SI" : "NO",
-      i.accionRequerida ? "SI" : "NO", i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || "", i.statusCotizacion || "",
+      i.accionRequerida ? "SI" : "NO", i.niceToHave ? "SI" : "NO", i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || "", i.statusCotizacion || "",
       i.aplicaTurismo ? "SI" : "NO", i.turismo || 0, i.feeIncluido || 0
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -740,6 +740,9 @@ export default function BudgetPage() {
                 <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
                   <ColHeader label="Acción Req." info="Items que requieren una acción o seguimiento específico por parte del equipo." align="center" />
                 </th>
+                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Nice to Have" info="Items deseables pero no esenciales. Pueden eliminarse si se necesita recortar presupuesto." align="center" />
+                </th>
                 {canEdit && <th className="w-8 px-1 py-2.5 bg-[hsl(var(--muted))] border-b border-border"></th>}
               </tr>
             </thead>
@@ -768,8 +771,8 @@ export default function BudgetPage() {
                         {hasInKind && <Badge className="text-[10px] bg-amber-500/15 text-amber-600 border-amber-500/20 font-normal py-0">In-Kind</Badge>}
                       </div>
                     </td>
-                    <td className="px-2 py-2" colSpan={15}></td>
-                    <td className="px-2 py-2 text-right font-semibold" colSpan={15}>
+                    <td className="px-2 py-2" colSpan={16}></td>
+                    <td className="px-2 py-2 text-right font-semibold" colSpan={16}>
 
                       {groupTotal > 0 ? <span className="text-primary text-xs">{formatUSD(groupTotal)}</span> : <span className="text-muted-foreground text-[10px]">In-Kind / $0</span>}
                     </td>
@@ -1178,6 +1181,29 @@ export default function BudgetPage() {
                           </TooltipContent>
                         </Tooltip>
                       </td>
+                      <td className="px-1 py-1.5 text-center align-top">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={canEdit ? () => toggleField(item.id, "niceToHave") : undefined}
+                              className={cn(
+                                "inline-flex items-center justify-center w-6 h-6 rounded transition-colors",
+                                !canEdit && "cursor-default",
+                                item.niceToHave
+                                  ? "bg-purple-500/15 text-purple-500 border border-purple-500/30"
+                                  : "bg-muted/30 text-muted-foreground/25 border border-transparent"
+                              )}
+                            >
+                              <Star className={cn("w-3.5 h-3.5", item.niceToHave && "fill-purple-500")} />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-[200px] text-xs">
+                            {item.niceToHave
+                              ? "Nice to Have — deseable pero no esencial"
+                              : canEdit ? "Click para marcar como nice to have" : "Nice to have"}
+                          </TooltipContent>
+                        </Tooltip>
+                      </td>
                       {canEdit && (
                         <td className="px-1 py-1.5 align-top">
                           <div className="flex items-center gap-0.5">
@@ -1212,12 +1238,12 @@ export default function BudgetPage() {
                 <td className="sticky-col-2 px-2 py-3 font-semibold text-muted-foreground text-xs bg-[hsl(var(--muted))]">
                   TOTAL -- {filtered.length} items
                 </td>
-                <td colSpan={18} className="px-3 py-3">
+                <td colSpan={19} className="px-3 py-3">
                 </td>
                 <td className="px-2 py-3 text-right font-bold text-sm text-primary font-mono">
                   {formatUSD(totalBudget)}
                 </td>
-                <td colSpan={10}></td>
+                <td colSpan={11}></td>
               </tr>
             </tfoot>
           </table>

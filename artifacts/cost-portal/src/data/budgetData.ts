@@ -36,6 +36,7 @@ export interface BudgetItem {
   statusCotizacion?: string;
   mitigable?: boolean;
   mitigNote?: string;
+  niceToHave?: boolean;
 }
 
 export const INITIAL_BUDGET_ITEMS: BudgetItem[] = [
