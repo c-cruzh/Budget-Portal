@@ -1,0 +1,343 @@
+Product approach
+What the user sees
+
+A simple web app with a few screens:
+
+1. New Outreach
+A form where the user fills:
+
+language
+company name
+company URL
+recipient mode
+recipient name/title
+recipient email
+tailoring angle override
+sector reference override
+notes / constraints
+attachment bundle
+subject override if needed
+
+2. Record Detail
+After submission, the user sees:
+
+generation status
+link to generated Google Doc
+link to PDF
+approval status
+draft status
+last error if any
+
+3. Review / Action
+Buttons like:
+
+Generate Letter
+Generate Email Draft
+Generate Both
+Refresh Status
+Open Google Doc
+Open Gmail Draft
+
+4. Admin / Configuration
+For you only:
+
+set active template Doc ID
+set model
+set attachment bundles
+set approver email
+maybe edit default prompts
+
+So the UX becomes much more product-like, and the Sheet becomes internal infrastructure.
+
+How you want it to work
+
+The intended flow is:
+
+Flow A — letter
+
+User fills the form in the web app → submits → backend creates a new record in the Sheet → backend calls the model → backend copies the fixed Google Doc template → backend fills placeholders → backend exports PDF → backend writes URLs/statuses back into the Sheet → web app shows links and status.
+
+Flow B — email
+
+From the same record, user clicks Generate Email Draft → backend uses the same record data + generated letter URLs → backend creates a Gmail draft → backend attaches the generated PDF + bundle attachments + row overrides → backend writes draft status/ID back into the Sheet → web app shows success and a link/open action.
+
+Flow C — approval
+
+Native Google Docs approval should be attempted only if actually accessible programmatically.
+If not, the system should not break; it should set the status to something like Pending review and move on.
+
+Recommended architecture
+Frontend
+
+A small web app:
+
+form-based
+authenticated with your Google account or internal login
+clean dashboard / status list
+no spreadsheet exposure to end users
+
+This can be built in:
+
+Replit
+Next.js
+simple React app
+even a lightweight server-rendered app
+Backend
+
+A service layer that handles:
+
+reading/writing records
+calling the LLM
+copying and filling the GDoc template
+exporting PDF
+creating Gmail drafts
+resolving attachment bundles
+updating statuses/errors
+Persistence
+
+Use the existing Google Sheet as the system of record.
+
+That means:
+
+web app writes records into Intake
+backend reads from Intake
+backend writes generated fields/statuses back into Intake
+Config and Attachment Bundles stay as config tables
+
+This is good because it preserves what you already built.
+
+Core modules / functions required
+1) Record intake / record management
+
+These functions own the row lifecycle.
+
+Required functions
+createOutreachRecord(input)
+updateOutreachRecord(recordId, patch)
+getOutreachRecord(recordId)
+listOutreachRecords(filters)
+setRecordStatus(recordId, status)
+setRecordError(recordId, errorMessage)
+What they do
+normalize incoming form data
+write it into the Intake row
+return row number / record ID
+keep statuses synchronized
+2) Config and template management
+
+These functions read the existing Config tab and keep the system flexible.
+
+Required functions
+getConfig()
+getActiveTemplateId()
+getModelName()
+getApproverEmail()
+getDefaultAttachmentBundle()
+What they do
+read the sheet-backed config
+ensure one fixed template is used
+avoid title search
+centralize settings
+
+This is critical because the current system already assumes one fixed template and bundle logic.
+
+3) LLM generation layer
+
+This is the intelligence layer.
+
+Required functions
+fetchCompanyContext(companyUrl)
+generateLetterContent(record)
+generateEmailContent(record)
+parseJsonLoose(text)
+callModel(prompt, modelName)
+What they do
+fetch website context conservatively
+build the structured prompt
+return JSON, not raw prose blobs
+keep outputs consistent with template rendering
+Output schema
+
+For letters:
+
+subject_line
+salutation
+p1
+p2
+p3
+p4
+cta
+closing
+
+For emails:
+
+subject
+body
+4) Google Docs rendering layer
+
+This is where the real artifact is created.
+
+Required functions
+assertTemplatePlaceholders(templateDoc)
+copyTemplate(templateId, newTitle)
+renderLetterFromTemplate(record, letterJson)
+replacePlaceholders(doc, replacements)
+exportLetterPdf(docId)
+buildLetterTitle(record)
+What they do
+copy the one fixed Google Doc template
+verify placeholders exist
+fill placeholders with generated content
+preserve formatting
+export a PDF
+return both URLs
+Non-negotiable behavior
+
+The document must always:
+
+start from the fixed template
+preserve the template formatting
+never generate “from scratch” outside the template
+5) Gmail draft layer
+
+This handles the email output.
+
+Required functions
+resolveBundleAttachments(bundleKey)
+resolveRowOverrideAttachments(rawValue)
+buildAttachmentList(record, generatedPdf)
+createEmailDraft(record, emailJson, attachments)
+storeDraftMetadata(recordId, draftInfo)
+What they do
+always include generated PDF first
+then add bundle attachments
+then add row-specific overrides
+create a draft only
+never send automatically
+6) Approval / review layer
+
+This is lightweight but important.
+
+Required functions
+attemptNativeApproval(docId, approverEmail)
+fallbackApprovalState(recordId)
+markApproved(recordId)
+markRejected(recordId, reason)
+What they do
+try native approval if actually supported
+otherwise set Pending review
+do not break the workflow if native approval is unavailable
+7) Trigger / orchestration layer
+
+This runs the flow end-to-end.
+
+Required functions
+generateLetterForRecord(recordId)
+generateEmailDraftForRecord(recordId)
+generateBothForRecord(recordId)
+refreshRecord(recordId)
+What they do
+fetch the record
+validate required fields
+call generation
+write outputs back
+update status
+capture errors cleanly
+8) Web app API surface
+
+If Replit is building this as a real product, I would expose endpoints roughly like these:
+
+Endpoints
+POST /records
+GET /records
+GET /records/:id
+PATCH /records/:id
+POST /records/:id/generate-letter
+POST /records/:id/generate-email-draft
+POST /records/:id/generate-both
+POST /records/:id/refresh
+GET /config
+PATCH /config
+GET /attachment-bundles
+
+These can sit on top of the Sheet.
+
+Recommended UX abstraction
+
+Instead of showing raw column names like:
+
+Tailoring Angle Override
+Sector Reference Override
+Recipient Mode
+
+the app should translate them into user-friendly labels:
+
+“How should this company be positioned?”
+“What sector framing should the letter use?”
+“Who is this addressed to?”
+“Should the email mention a referral?”
+“Which materials should be attached?”
+
+That is what makes it product-like.
+
+Suggested backend workflow
+Generate Letter
+Read record from Sheet
+Validate required inputs
+Read config
+Fetch company website context
+Call OpenAI
+Validate returned JSON
+Copy template doc
+Replace placeholders
+Save doc
+Export PDF
+Write Doc URL/PDF URL to Sheet
+Update approval status
+Return response to web app
+Generate Email Draft
+Read record from Sheet
+Ensure generated PDF exists
+Fetch attachment bundle
+Resolve row overrides
+Call OpenAI for email
+Create Gmail draft
+Attach files
+Write draft status/ID to Sheet
+Return response to web app
+What the web app should hide from the user
+
+The user should not have to know about:
+
+column letters
+placeholder tokens
+raw sheet tabs
+Script Properties
+attachment bundle table format
+Google Doc IDs
+internal status codes
+
+That all stays internal.
+
+Best way to position this to Replit
+
+Tell them:
+
+Product framing
+
+This is not “a spreadsheet automation.”
+This is a sponsor outreach generation web app whose backend happens to use:
+
+Google Sheets as the control database
+Google Docs template rendering
+Gmail drafts as the outbound staging layer
+Functional framing
+
+The app should behave like:
+
+a lightweight CRM + document generation tool
+one record per outreach target
+generate letter
+generate draft
+track review state
+preserve document and attachment logic
