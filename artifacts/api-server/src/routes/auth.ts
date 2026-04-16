@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
-import { db } from "@workspace/db";
+import { db, withRetry } from "@workspace/db";
 import { users } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -16,22 +16,37 @@ const SEED_USERS = [
 
 async function seedUsers() {
   for (const u of SEED_USERS) {
-    const existing = await db.select().from(users).where(eq(users.email, u.email)).limit(1);
+    const existing = await withRetry(() =>
+      db.select().from(users).where(eq(users.email, u.email)).limit(1),
+    );
     if (existing.length === 0) {
       const hash = await bcrypt.hash(u.password, 10);
-      await db.insert(users).values({
-        email: u.email,
-        name: u.name,
-        role: u.role,
-        organization: u.organization,
-        passwordHash: hash,
-      });
+      await withRetry(() =>
+        db.insert(users).values({
+          email: u.email,
+          name: u.name,
+          role: u.role,
+          organization: u.organization,
+          passwordHash: hash,
+        }),
+      );
       console.log(`Seeded user: ${u.email}`);
     }
   }
 }
 
-seedUsers().catch(err => console.error("Failed to seed users:", err));
+function runSeedWithRetry(attempt = 0) {
+  seedUsers().catch((err) => {
+    console.error("Failed to seed users:", err);
+    if (attempt < 5) {
+      const wait = 2000 * Math.pow(2, attempt);
+      console.warn(`Retrying seed in ${wait}ms...`);
+      setTimeout(() => runSeedWithRetry(attempt + 1), wait);
+    }
+  });
+}
+
+runSeedWithRetry();
 
 router.post("/auth/login", async (req, res) => {
   try {

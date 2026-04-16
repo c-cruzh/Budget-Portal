@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, appState } from "@workspace/db";
+import { db, appState, withRetry } from "@workspace/db";
 import { users } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
@@ -16,10 +16,10 @@ const ORG_PERMISSIONS: Record<string, { canEdit: boolean; canComment: boolean }>
 
 router.get("/budget-items", async (_req, res) => {
   try {
-    const [row, metaRow] = await Promise.all([
+    const [row, metaRow] = await withRetry(() => Promise.all([
       db.select().from(appState).where(eq(appState.key, BUDGET_KEY)).limit(1),
       db.select().from(appState).where(eq(appState.key, BUDGET_META_KEY)).limit(1),
-    ]);
+    ]));
 
     const meta = metaRow.length > 0 ? metaRow[0].value : null;
 

@@ -3,6 +3,7 @@ import cors from "cors";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import pinoHttp from "pino-http";
+import { pool as sessionPool } from "@workspace/db";
 import router from "./routes";
 import { logger } from "./lib/logger";
 
@@ -38,9 +39,10 @@ app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 app.use(
   session({
     store: new PgSession({
-      conString: process.env["DATABASE_URL"],
+      pool: sessionPool,
       tableName: "session",
       createTableIfMissing: false,
+      errorLog: (err) => logger.error({ err }, "[pg-session] error"),
     }),
     secret: process.env["SESSION_SECRET"] || "emtech-dev-secret-2026",
     name: "emtech.sid",
