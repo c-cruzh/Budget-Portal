@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { DollarSign, Package, AlertCircle, CheckCircle2, FileText, AlertTriangle, ShieldAlert, Flag, Percent } from "lucide-react";
+import { DollarSign, Package, AlertCircle, CheckCircle2, FileText, AlertTriangle, ShieldAlert, Flag, Percent, Star } from "lucide-react";
 import { formatUSD } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -17,9 +17,11 @@ interface SummaryCardsProps {
   feeProductoraSum: number;
   feeExplicitSum: number;
   feeIncluidoSum: number;
+  niceToHaveCount: number;
+  niceToHaveSum: number;
 }
 
-export function SummaryCards({ totalBudget, cashSinFee, totalInKindCount, totalInKindSum, pendingCount, itemCount, validarCount, contratarAparteCount, soloPresupuestadoSum, accionRequeridaCount, feeProductoraSum, feeExplicitSum, feeIncluidoSum }: SummaryCardsProps) {
+export function SummaryCards({ totalBudget, cashSinFee, totalInKindCount, totalInKindSum, pendingCount, itemCount, validarCount, contratarAparteCount, soloPresupuestadoSum, accionRequeridaCount, feeProductoraSum, feeExplicitSum, feeIncluidoSum, niceToHaveCount, niceToHaveSum }: SummaryCardsProps) {
   const row1 = [
     {
       label: "Total Budget",
@@ -96,6 +98,14 @@ export function SummaryCards({ totalBudget, cashSinFee, totalInKindCount, totalI
       color: contratarAparteCount > 0 ? "bg-amber-500/10 text-amber-600" : "bg-emerald-500/10 text-emerald-500",
       info: "Items que conviene contratar directo (sin productora) para evitar fee 20%.",
     },
+    {
+      label: "Nice to Have",
+      value: formatUSD(niceToHaveSum),
+      sub: `${niceToHaveCount} items deseables`,
+      icon: Star,
+      color: niceToHaveCount > 0 ? "bg-purple-500/10 text-purple-500" : "bg-emerald-500/10 text-emerald-500",
+      info: "Suma total de items marcados como 'Nice to Have' — deseables pero no esenciales. Candidatos para reduccion del presupuesto.",
+    },
   ];
 
   const renderCard = (card: typeof row1[0], idx: number) => (
@@ -129,7 +139,7 @@ export function SummaryCards({ totalBudget, cashSinFee, totalInKindCount, totalI
       <div className="grid grid-cols-3 lg:grid-cols-5 gap-3">
         {row1.map((card, idx) => renderCard(card, idx))}
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {row2.map((card, idx) => renderCard(card, idx + row1.length))}
       </div>
     </div>

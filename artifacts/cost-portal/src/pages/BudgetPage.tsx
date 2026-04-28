@@ -483,6 +483,8 @@ export default function BudgetPage() {
   const feeProductoraSum = useMemo(() => filtered.reduce((s, i) => s + getFeeProductora(i), 0), [filtered]);
   const feeExplicitSum = useMemo(() => filtered.reduce((s, i) => s + i.fee, 0), [filtered]);
   const feeIncluidoSum = useMemo(() => filtered.reduce((s, i) => s + (i.feeIncluido || 0), 0), [filtered]);
+  const niceToHaveCount = useMemo(() => filtered.filter(i => i.niceToHave).length, [filtered]);
+  const niceToHaveSum = useMemo(() => filtered.filter(i => i.niceToHave).reduce((s, i) => s + i.total, 0), [filtered]);
 
   const exportCSV = () => {
     const headers = [
@@ -573,6 +575,8 @@ export default function BudgetPage() {
         feeProductoraSum={feeProductoraSum}
         feeExplicitSum={feeExplicitSum}
         feeIncluidoSum={feeIncluidoSum}
+        niceToHaveCount={niceToHaveCount}
+        niceToHaveSum={niceToHaveSum}
       />
 
       <div className="space-y-3">

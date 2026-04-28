@@ -7,7 +7,7 @@ import {
 import { INITIAL_BUDGET_ITEMS, type BudgetItem } from "@/data/budgetData";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { formatUSD } from "@/lib/utils";
-import { TrendingUp, DollarSign, Package, AlertCircle, Handshake, Building2, Percent, Users, Loader2, ShieldCheck, ShieldAlert, ChevronDown, ChevronUp, MessageSquare, Check, X } from "lucide-react";
+import { TrendingUp, DollarSign, Package, AlertCircle, Handshake, Building2, Percent, Users, Loader2, ShieldCheck, ShieldAlert, ChevronDown, ChevronUp, MessageSquare, Check, X, Star, ArrowDown, ArrowUp } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 function recalcItem(item: BudgetItem): BudgetItem {
@@ -43,6 +43,12 @@ export default function DashboardPage() {
   const noteInputRef = useRef<HTMLTextAreaElement>(null);
   const [topCostMode, setTopCostMode] = useState<"CASH" | "INKIND" | "ALL">("CASH");
   const [topCostVisible, setTopCostVisible] = useState(10);
+  const [niceSort, setNiceSort] = useState<"DESC" | "ASC">("DESC");
+  const [niceVisible, setNiceVisible] = useState(10);
+  const [niceExpanded, setNiceExpanded] = useState<string | null>(null);
+  const [niceEditingNote, setNiceEditingNote] = useState<string | null>(null);
+  const [niceNoteValue, setNiceNoteValue] = useState("");
+  const niceNoteRef = useRef<HTMLTextAreaElement>(null);
 
   const stats = useMemo(() => {
     const total = items.reduce((s, i) => s + i.total, 0);
@@ -64,6 +70,9 @@ export default function DashboardPage() {
 
     const cashSinFee = paidItems.reduce((s, i) => s + i.subtotal + i.iva + (i.turismo || 0), 0);
 
+    const niceToHaveItems = items.filter(i => i.niceToHave);
+    const niceToHaveSum = niceToHaveItems.reduce((s, i) => s + i.total, 0);
+
     return {
       total,
       paidTotal: paidItems.reduce((s, i) => s + i.total, 0),
@@ -84,6 +93,8 @@ export default function DashboardPage() {
       directTotal,
       directItemCount: directItems.length,
       exentoIvaCount,
+      niceToHaveCount: niceToHaveItems.length,
+      niceToHaveSum,
     };
   }, [items]);
 
@@ -174,6 +185,19 @@ export default function DashboardPage() {
 
   const topItems = useMemo(() => topItemsAll.slice(0, topCostVisible), [topItemsAll, topCostVisible]);
 
+  const niceItemsAll = useMemo(() => {
+    const src = items.filter(i => i.niceToHave);
+    return niceSort === "DESC"
+      ? src.sort((a, b) => b.total - a.total)
+      : src.sort((a, b) => a.total - b.total);
+  }, [items, niceSort]);
+
+  const niceItems = useMemo(() => niceItemsAll.slice(0, niceVisible), [niceItemsAll, niceVisible]);
+  const niceMitigatedSum = useMemo(
+    () => niceItemsAll.filter(i => i.mitigable).reduce((s, i) => s + i.total, 0),
+    [niceItemsAll],
+  );
+
   const cardVariants = {
     hidden: { opacity: 0, y: 16 },
     visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.06, duration: 0.3 } }),
@@ -219,12 +243,13 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {[
           { label: "Via Productora (Aurora 360)", value: formatUSD(stats.agencyTotal), sub: `${stats.agencyItemCount} items (${stats.paidTotal > 0 ? ((stats.agencyTotal / stats.paidTotal) * 100).toFixed(1) : 0}% del gasto)`, icon: Building2, color: "bg-amber-500/10 text-amber-600" },
           { label: "Fee Productora Total", value: formatUSD(stats.totalFeesAll), sub: `Incl: ${formatUSD(stats.totalFeesIncluded)} | Adic: ${formatUSD(stats.totalFeesExplicit)}`, icon: Percent, color: "bg-orange-500/10 text-orange-600" },
           { label: "Contratacion Directa", value: formatUSD(stats.directTotal), sub: `${stats.directItemCount} items sin productora`, icon: Users, color: "bg-emerald-500/10 text-emerald-600" },
           { label: "IVA Exento", value: String(stats.exentoIvaCount), sub: "Items sin IVA 13%", icon: Percent, color: "bg-blue-500/10 text-blue-500" },
+          { label: "Nice to Have", value: formatUSD(stats.niceToHaveSum), sub: `${stats.niceToHaveCount} items deseables`, icon: Star, color: stats.niceToHaveCount > 0 ? "bg-purple-500/10 text-purple-500" : "bg-emerald-500/10 text-emerald-500" },
         ].map((card, idx) => (
           <motion.div
             key={card.label}
@@ -637,6 +662,228 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="rounded-xl border border-card-border bg-card shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-border space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <Star className="w-4 h-4 text-purple-500 fill-purple-500" />
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Nice to Have — Decision Support</h3>
+            </div>
+            <div className="flex items-center gap-3 text-[10px]">
+              <span className="text-muted-foreground">
+                {niceItemsAll.length} items · <span className="font-bold text-purple-500">{formatUSD(stats.niceToHaveSum)}</span>
+              </span>
+              {niceMitigatedSum > 0 && (
+                <span className="text-emerald-500">
+                  Mitigable: <span className="font-bold">{formatUSD(niceMitigatedSum)}</span>
+                </span>
+              )}
+            </div>
+          </div>
+          {niceItemsAll.length > 0 && (
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] text-muted-foreground">
+                Items deseables pero no esenciales — candidatos para reducir el presupuesto.
+              </p>
+              <button
+                onClick={() => { setNiceSort(s => s === "DESC" ? "ASC" : "DESC"); setNiceExpanded(null); }}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-medium border border-border bg-muted/20 hover:bg-muted/40 transition-colors"
+              >
+                {niceSort === "DESC" ? <ArrowDown className="w-3 h-3" /> : <ArrowUp className="w-3 h-3" />}
+                {niceSort === "DESC" ? "Mayor a menor" : "Menor a mayor"}
+              </button>
+            </div>
+          )}
+        </div>
+        {niceItemsAll.length === 0 ? (
+          <div className="px-5 py-12 text-center">
+            <Star className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">No hay items marcados como Nice to Have</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Marca items con la estrella en la tabla de Budget Items para verlos aqui</p>
+          </div>
+        ) : (
+          <>
+            <div className="divide-y divide-border/50">
+              {niceItems.map((item, idx) => {
+                const isExpanded = niceExpanded === item.id;
+                const isEditingNote = niceEditingNote === item.id;
+                const hasMitigNote = !!(item.mitigNote || "").trim();
+                return (
+                  <div key={item.id}>
+                    <div
+                      className="flex items-center gap-3 px-5 py-3 hover:bg-muted/10 transition-colors cursor-pointer group"
+                      onClick={() => setNiceExpanded(isExpanded ? null : item.id)}
+                    >
+                      <span className="text-muted-foreground text-sm font-mono w-5 shrink-0">{idx + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-foreground truncate">{item.item}</p>
+                          {item.mitigable && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shrink-0">Mitigable</span>
+                          )}
+                          {hasMitigNote && !isExpanded && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <MessageSquare className="w-3 h-3 text-muted-foreground shrink-0 cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-[280px] text-xs whitespace-pre-wrap">
+                                {item.mitigNote}
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-muted-foreground">{item.area}</span>
+                          {item.inKind && <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-500 border border-violet-500/20">In-Kind</span>}
+                          {item.agencyFee && <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/20">Aurora 360</span>}
+                          {item.proveedor && <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 border border-blue-500/20">{item.proveedor}</span>}
+                        </div>
+                      </div>
+                      <span className="text-sm font-semibold text-purple-500 font-mono shrink-0">{formatUSD(item.total)}</span>
+                      {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />}
+                    </div>
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="px-5 pb-4 pt-1 ml-8 space-y-3">
+                            <div className="grid grid-cols-3 gap-3 text-xs">
+                              <div><span className="text-muted-foreground">Subtotal:</span> <span className="font-mono font-medium">{formatUSD(item.subtotal)}</span></div>
+                              <div><span className="text-muted-foreground">Fee 20%:</span> <span className="font-mono font-medium">{formatUSD(item.fee)}</span></div>
+                              <div><span className="text-muted-foreground">IVA:</span> <span className="font-mono font-medium">{formatUSD(item.iva)}</span></div>
+                              <div><span className="text-muted-foreground">Qty:</span> <span className="font-medium">{item.qty} {item.uom}</span></div>
+                              <div><span className="text-muted-foreground">P. Unit:</span> <span className="font-mono font-medium">{formatUSD(Number(item.precioUnitario))}</span></div>
+                              {item.porDias === "SI" && <div><span className="text-muted-foreground">Dias:</span> <span className="font-medium">{item.qtyDias}</span></div>}
+                            </div>
+
+                            {item.descripcion && (
+                              <div className="text-xs text-muted-foreground italic border-l-2 border-purple-500/30 pl-3">
+                                {item.descripcion}
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-3 pt-1 flex-wrap">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  patchItem(item.id, "niceToHave", false);
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border bg-card text-muted-foreground border-border hover:bg-muted/20 hover:text-foreground"
+                              >
+                                <Star className="w-3.5 h-3.5" />
+                                Quitar Nice to Have
+                              </button>
+
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const newVal = !item.mitigable;
+                                  patchItem(item.id, "mitigable", newVal);
+                                }}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                                  item.mitigable
+                                    ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30 hover:bg-emerald-500/20"
+                                    : "bg-card text-muted-foreground border-border hover:bg-muted/20 hover:text-foreground"
+                                }`}
+                              >
+                                {item.mitigable ? <ShieldCheck className="w-3.5 h-3.5" /> : <ShieldAlert className="w-3.5 h-3.5" />}
+                                {item.mitigable ? "Se puede mitigar" : "Marcar mitigable"}
+                              </button>
+
+                              {!isEditingNote && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setNiceEditingNote(item.id);
+                                    setNiceNoteValue(item.mitigNote || "");
+                                    setTimeout(() => niceNoteRef.current?.focus(), 50);
+                                  }}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border bg-card text-muted-foreground border-border hover:bg-muted/20 hover:text-foreground"
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5" />
+                                  {hasMitigNote ? "Editar nota" : "Agregar nota"}
+                                </button>
+                              )}
+                            </div>
+
+                            {hasMitigNote && !isEditingNote && (
+                              <div className="text-xs bg-muted/10 rounded-lg p-3 border border-border/50">
+                                <p className="text-muted-foreground text-[10px] uppercase tracking-wide mb-1 font-medium">Nota de decision</p>
+                                <p className="text-foreground whitespace-pre-wrap">{item.mitigNote}</p>
+                              </div>
+                            )}
+
+                            {isEditingNote && (
+                              <div className="space-y-2" onClick={e => e.stopPropagation()}>
+                                <textarea
+                                  ref={niceNoteRef}
+                                  value={niceNoteValue}
+                                  onChange={e => setNiceNoteValue(e.target.value)}
+                                  placeholder="Escribe una nota de decision (por que es nice-to-have, alternativas, etc.)..."
+                                  className="w-full bg-muted/10 border border-border rounded-lg p-3 text-xs text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground"
+                                  rows={3}
+                                />
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => {
+                                      patchItem(item.id, "mitigNote", niceNoteValue.trim());
+                                      setNiceEditingNote(null);
+                                    }}
+                                    className="flex items-center gap-1 px-3 py-1 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                                  >
+                                    <Check className="w-3 h-3" /> Guardar
+                                  </button>
+                                  <button
+                                    onClick={() => setNiceEditingNote(null)}
+                                    className="flex items-center gap-1 px-3 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                                  >
+                                    <X className="w-3 h-3" /> Cancelar
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
+            </div>
+            {niceItemsAll.length > 10 && (
+              <div className="px-5 py-3 border-t border-border flex items-center justify-between">
+                <span className="text-[10px] text-muted-foreground">
+                  {niceItems.length} de {niceItemsAll.length} items
+                </span>
+                <div className="flex items-center gap-2">
+                  {niceVisible > 10 && (
+                    <button
+                      onClick={() => setNiceVisible(prev => Math.max(10, prev - 10))}
+                      className="text-xs text-primary hover:underline font-medium"
+                    >
+                      Ver menos
+                    </button>
+                  )}
+                  {niceVisible < niceItemsAll.length && (
+                    <button
+                      onClick={() => setNiceVisible(prev => Math.min(niceItemsAll.length, prev + 10))}
+                      className="text-xs text-primary hover:underline font-medium"
+                    >
+                      Ver 10 mas
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
