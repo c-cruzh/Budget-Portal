@@ -10,6 +10,7 @@ const SEED_USERS = [
   { email: "camila@c2labs.ai", name: "Camila Cruz", role: "Organizer", organization: "C2 LABS", password: "EmTech2026!C2" },
   { email: "kevin@c2labs.ai", name: "Kevin Centeno", role: "Organizer", organization: "C2 LABS", password: "EmTech2026!C2" },
   { email: "manuel@c2labs.ai", name: "Manuel", role: "Organizer", organization: "C2 LABS", password: "EmTech2026!C2" },
+  { email: "iker@c2labs.ai", name: "Iker", role: "Organizer", organization: "C2 LABS", password: "EmTech2026!C2" },
   { email: "mercedes.bouzas@opinno.com", name: "Mercedes Bouza", role: "Organizer", organization: "OPINNO", password: "EmTech2026!OP" },
   { email: "beatriz.ferreira@opinno.com", name: "Beatriz Ferreira", role: "Organizer", organization: "OPINNO", password: "EmTech2026!OP" },
   { email: "flor@aurora360.xyz", name: "Flor Ventura", role: "Production Agency Lead", organization: "AURORA360", password: "EmTech2026!AU" },
