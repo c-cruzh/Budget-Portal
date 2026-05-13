@@ -179,7 +179,7 @@ export function useBudgetApi(
     const timer = setTimeout(() => {
       pendingPatches.current.delete(key);
       patchFieldOnServer(id, field, value, commentOnly);
-    }, 100);
+    }, 50);
     pendingPatches.current.set(key, timer);
   }, []);
 

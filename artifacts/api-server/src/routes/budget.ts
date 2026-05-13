@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, appState, withRetry } from "@workspace/db";
 import { users } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -113,21 +113,6 @@ router.patch("/budget-items", async (req, res) => {
       return;
     }
 
-    const [row] = await db.select().from(appState).where(eq(appState.key, BUDGET_KEY)).limit(1);
-    if (!row || !Array.isArray(row.value)) {
-      res.status(404).json({ error: "No budget data found" });
-      return;
-    }
-
-    const items = row.value as any[];
-    const idx = items.findIndex((i: any) => i.id === id);
-    if (idx === -1) {
-      res.status(404).json({ error: `Item ${id} not found` });
-      return;
-    }
-
-    items[idx] = { ...items[idx], [field]: value };
-
     const meta = {
       lastEditedBy: userName,
       lastEditedByEmail: userEmail,
@@ -135,13 +120,30 @@ router.patch("/budget-items", async (req, res) => {
       lastEditedAt: new Date().toISOString(),
     };
 
-    await Promise.all([
-      db.insert(appState)
-        .values({ key: BUDGET_KEY, value: items, updatedAt: new Date() })
-        .onConflictDoUpdate({
-          target: appState.key,
-          set: { value: items, updatedAt: new Date() },
-        }),
+    const valueJson = JSON.stringify(value);
+    const fieldPath = `{${field}}`;
+
+    const [updateResult] = await Promise.all([
+      db.execute(sql`
+        UPDATE app_state
+        SET value = (
+          SELECT jsonb_agg(
+            CASE
+              WHEN elem->>'id' = ${id}
+              THEN jsonb_set(elem, ${fieldPath}::text[], ${valueJson}::jsonb, true)
+              ELSE elem
+            END
+          )
+          FROM jsonb_array_elements(value) AS elem
+        ),
+        updated_at = now()
+        WHERE key = ${BUDGET_KEY}
+          AND EXISTS (
+            SELECT 1 FROM jsonb_array_elements(value) AS elem
+            WHERE elem->>'id' = ${id}
+          )
+        RETURNING 1
+      `),
       db.insert(appState)
         .values({ key: BUDGET_META_KEY, value: meta as any, updatedAt: new Date() })
         .onConflictDoUpdate({
@@ -149,6 +151,12 @@ router.patch("/budget-items", async (req, res) => {
           set: { value: meta as any, updatedAt: new Date() },
         }),
     ]);
+
+    const rowsAffected = (updateResult as any)?.rowCount ?? (updateResult as any)?.rows?.length ?? 0;
+    if (rowsAffected === 0) {
+      res.status(404).json({ error: `Item ${id} not found` });
+      return;
+    }
 
     res.json({ ok: true, meta });
   } catch (err) {
