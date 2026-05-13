@@ -18,7 +18,7 @@ export const pool = new Pool({
   connectionTimeoutMillis: 15_000,
 });
 
-pool.on("error", (err) => {
+pool.on("error", (err: Error) => {
   console.error("[db pool] unexpected error", err);
 });
 

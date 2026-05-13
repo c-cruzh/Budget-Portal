@@ -139,10 +139,10 @@ export function useBudgetApi(
     }
   }
 
+  const lastSavedRef = useRef<number>(0);
+
   async function patchFieldOnServer(id: string, field: string, value: any, commentOnly = false) {
     try {
-      savingCount.current++;
-      setSaving(true);
       const res = await fetch(API_URL, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -154,18 +154,16 @@ export function useBudgetApi(
         throw new Error(errData.error || `HTTP ${res.status}`);
       }
       const result = await res.json();
-      if (result.meta) setMeta(result.meta);
-      setLastSaved(new Date());
-      setError(null);
+      const now = Date.now();
+      if (now - lastSavedRef.current > 5000) {
+        lastSavedRef.current = now;
+        if (result.meta) setMeta(result.meta);
+        setLastSaved(new Date(now));
+      }
+      if (error) setError(null);
     } catch (err: any) {
       console.error("Failed to patch field:", err);
       setError(err.message || "Failed to save");
-    } finally {
-      savingCount.current--;
-      if (savingCount.current <= 0) {
-        savingCount.current = 0;
-        setSaving(false);
-      }
     }
   }
 
@@ -179,7 +177,7 @@ export function useBudgetApi(
     const timer = setTimeout(() => {
       pendingPatches.current.delete(key);
       patchFieldOnServer(id, field, value, commentOnly);
-    }, 50);
+    }, 0);
     pendingPatches.current.set(key, timer);
   }, []);
 

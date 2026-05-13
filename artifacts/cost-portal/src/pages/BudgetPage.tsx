@@ -162,7 +162,7 @@ function getFeeProductora(item: BudgetItem): number {
 const SEED_ITEMS = INITIAL_BUDGET_ITEMS.map(recalcItem);
 
 export default function BudgetPage() {
-  const { items, setItems, loading, saving, lastSaved, error, meta, saveCommentOnly, patchItem, saveFull } = useBudgetApi(SEED_ITEMS, recalcItem);
+  const { items, setItems, loading, error, meta, saveCommentOnly, patchItem, saveFull } = useBudgetApi(SEED_ITEMS, recalcItem);
   const { permissions, user } = useAuth();
   const canEdit = permissions.canEdit;
   const canComment = permissions.canComment;
@@ -526,20 +526,12 @@ export default function BudgetPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {saving ? (
-            <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-              <Loader2 className="w-3 h-3 animate-spin" /> Saving...
-            </span>
-          ) : error ? (
+          {error ? (
             <span className="flex items-center gap-1.5 text-[10px] text-destructive">
               <CloudOff className="w-3 h-3" /> {error}
             </span>
-          ) : lastSaved ? (
-            <span className="flex items-center gap-1.5 text-[10px] text-emerald-600">
-              <Cloud className="w-3 h-3" /> Saved {lastSaved.toLocaleTimeString()}
-            </span>
           ) : (
-            <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1.5 text-[10px] text-emerald-600">
               <Cloud className="w-3 h-3" /> Cloud sync active
             </span>
           )}
