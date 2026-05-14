@@ -5,7 +5,7 @@ import {
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
   Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star
 } from "lucide-react";
-import { INITIAL_BUDGET_ITEMS, type BudgetItem } from "@/data/budgetData";
+import { INITIAL_BUDGET_ITEMS, type BudgetItem, type QuoteOption } from "@/data/budgetData";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useAuth } from "@/hooks/useAuth";
 import { ComboInput } from "@/components/ComboInput";
@@ -138,9 +138,21 @@ function ToggleCell({ value, onToggle, labelOn, labelOff }: { value: boolean | s
   );
 }
 
+function getApprovedQuote(item: BudgetItem) {
+  if (!item.quotes || item.quotes.length === 0) return null;
+  return item.quotes.find(q => q.id === item.approvedQuoteId) || item.quotes[0];
+}
+
 function recalcItem(item: BudgetItem): BudgetItem {
   const qty = Number(item.qty) || 0;
   const dias = Number(item.qtyDias) || 1;
+  const approved = getApprovedQuote(item);
+  if (approved) {
+    item.precioUnitario = Number(approved.precioUnitario) || 0;
+    item.proveedor = approved.label ?? "";
+    item.cotizacion = (approved.notes && approved.notes.length > 0) ? approved.notes : (approved.label ?? "");
+    item.cotizacionLink = approved.link ?? "";
+  }
   const precio = Number(item.precioUnitario) || 0;
   const byDias = item.porDias === "SI";
   item.subtotal = byDias ? qty * dias * precio : qty * precio;
@@ -342,6 +354,90 @@ export default function BudgetPage() {
         if (item.id !== id) return item;
         const updated = { ...item, [field]: item[field] === "SI" ? "NO" : "SI" };
         return recalc(updated);
+      });
+      const changed = next.find(i => i.id === id);
+      if (changed) {
+        const { id: _id, ...rest } = changed;
+        Object.entries(rest).forEach(([k, v]) => patchItem(id, k, v));
+      }
+      return next;
+    });
+  }, [setItems, patchItem]);
+
+  const newQuoteId = () => (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const addQuote = useCallback((id: string) => {
+    setItems(prev => {
+      const next = prev.map(item => {
+        if (item.id !== id) return item;
+        const existingQuotes = item.quotes || [];
+        let quotes: QuoteOption[];
+        let approvedQuoteId = item.approvedQuoteId;
+        if (existingQuotes.length === 0) {
+          const firstId = newQuoteId();
+          const secondId = newQuoteId();
+          quotes = [
+            { id: firstId, label: item.proveedor || "Opción 1", precioUnitario: Number(item.precioUnitario) || 0, link: item.cotizacionLink || "", notes: item.cotizacion || "" },
+            { id: secondId, label: "", precioUnitario: 0, link: "", notes: "" },
+          ];
+          approvedQuoteId = firstId;
+        } else {
+          quotes = [...existingQuotes, { id: newQuoteId(), label: "", precioUnitario: 0, link: "", notes: "" }];
+        }
+        const updated = recalc({ ...item, quotes, approvedQuoteId });
+        return updated;
+      });
+      const changed = next.find(i => i.id === id);
+      if (changed) {
+        const { id: _id, ...rest } = changed;
+        Object.entries(rest).forEach(([k, v]) => patchItem(id, k, v));
+      }
+      return next;
+    });
+  }, [setItems, patchItem]);
+
+  const updateQuote = useCallback((id: string, quoteId: string, field: keyof QuoteOption, value: any) => {
+    setItems(prev => {
+      const next = prev.map(item => {
+        if (item.id !== id) return item;
+        const quotes = (item.quotes || []).map(q => q.id === quoteId ? { ...q, [field]: value } : q);
+        return recalc({ ...item, quotes });
+      });
+      const changed = next.find(i => i.id === id);
+      if (changed) {
+        const { id: _id, ...rest } = changed;
+        Object.entries(rest).forEach(([k, v]) => patchItem(id, k, v));
+      }
+      return next;
+    });
+  }, [setItems, patchItem]);
+
+  const removeQuote = useCallback((id: string, quoteId: string) => {
+    setItems(prev => {
+      const next = prev.map(item => {
+        if (item.id !== id) return item;
+        const quotes = (item.quotes || []).filter(q => q.id !== quoteId);
+        let approvedQuoteId = item.approvedQuoteId;
+        if (quotes.length === 0) {
+          return recalc({ ...item, quotes: [], approvedQuoteId: "" });
+        }
+        if (approvedQuoteId === quoteId) approvedQuoteId = quotes[0].id;
+        return recalc({ ...item, quotes, approvedQuoteId });
+      });
+      const changed = next.find(i => i.id === id);
+      if (changed) {
+        const { id: _id, ...rest } = changed;
+        Object.entries(rest).forEach(([k, v]) => patchItem(id, k, v));
+      }
+      return next;
+    });
+  }, [setItems, patchItem]);
+
+  const setApprovedQuote = useCallback((id: string, quoteId: string) => {
+    setItems(prev => {
+      const next = prev.map(item => {
+        if (item.id !== id) return item;
+        return recalc({ ...item, approvedQuoteId: quoteId });
       });
       const changed = next.find(i => i.id === id);
       if (changed) {
@@ -870,7 +966,19 @@ export default function BudgetPage() {
                         )}
                       </td>
                       <td className="px-2 py-1.5 text-right align-top font-mono">
-                        {item.precioUnitario > 0 ? (
+                        {item.quotes && item.quotes.length > 0 ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center gap-1 text-right font-mono text-xs text-emerald-700 cursor-help">
+                                ${(item.precioUnitario || 0).toFixed(2)}
+                                <span className="text-[8px] px-1 py-0.5 rounded bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 font-sans font-medium">{item.quotes.length}</span>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs">
+                              Precio de la cotización aprobada ({item.quotes.length} opciones). Cambia desde la columna Cotización.
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : item.precioUnitario > 0 ? (
                           <EditableCell value={String(item.precioUnitario)} onSave={v => updateItem(item.id, "precioUnitario", parseFloat(v) || 0)} className="text-right font-mono text-xs" type="number" prefix="$" disabled={!canEdit} />
                         ) : (
                           <EditableCell value="0" onSave={v => updateItem(item.id, "precioUnitario", parseFloat(v) || 0)} className="text-right font-mono text-xs text-muted-foreground/40" type="number" disabled={!canEdit} />
@@ -975,6 +1083,81 @@ export default function BudgetPage() {
                           <div className="flex flex-col gap-0.5">
                             <span className="text-[10px] text-muted-foreground/25 italic">No aplica</span>
                           </div>
+                        ) : item.quotes && item.quotes.length > 0 ? (
+                          <div className="flex flex-col gap-1 min-w-[220px]">
+                            {item.quotes.map(q => {
+                              const isApproved = (item.approvedQuoteId || item.quotes![0].id) === q.id;
+                              return (
+                                <div
+                                  key={q.id}
+                                  className={cn(
+                                    "flex items-center gap-1 rounded border px-1 py-0.5",
+                                    isApproved ? "bg-emerald-500/10 border-emerald-500/30" : "bg-muted/20 border-border/40"
+                                  )}
+                                >
+                                  <button
+                                    onClick={canEdit ? () => setApprovedQuote(item.id, q.id) : undefined}
+                                    title={isApproved ? "Cotización aprobada" : "Marcar como aprobada"}
+                                    className={cn(
+                                      "shrink-0 w-3.5 h-3.5 rounded-full border flex items-center justify-center transition-colors",
+                                      isApproved ? "bg-emerald-500 border-emerald-500" : "border-muted-foreground/40 hover:border-emerald-500",
+                                      !canEdit && "cursor-default"
+                                    )}
+                                  >
+                                    {isApproved && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                                  </button>
+                                  <div className="flex-1 min-w-0 flex flex-col">
+                                    <EditableCell
+                                      value={q.label}
+                                      onSave={v => updateQuote(item.id, q.id, "label", v)}
+                                      className="text-[10px] text-foreground font-medium truncate"
+                                      placeholder="proveedor..."
+                                      disabled={!canEdit}
+                                    />
+                                    <EditableCell
+                                      value={String(q.precioUnitario || 0)}
+                                      onSave={v => updateQuote(item.id, q.id, "precioUnitario", parseFloat(v) || 0)}
+                                      className={cn("text-[10px] font-mono", isApproved ? "text-emerald-700 font-semibold" : "text-muted-foreground")}
+                                      type="number"
+                                      prefix="$"
+                                      disabled={!canEdit}
+                                    />
+                                    <div className="flex items-center gap-0.5">
+                                      {q.link && (
+                                        <a href={q.link} target="_blank" rel="noopener noreferrer" className="shrink-0 text-blue-500 hover:text-blue-600" title={q.link}>
+                                          <ExternalLink className="w-2.5 h-2.5" />
+                                        </a>
+                                      )}
+                                      <EditableCell
+                                        value={q.link || ""}
+                                        onSave={v => updateQuote(item.id, q.id, "link", v)}
+                                        className={q.link ? "text-blue-500 text-[9px] truncate max-w-[80px]" : "text-blue-400/40 text-[9px]"}
+                                        placeholder="+ link"
+                                        disabled={!canEdit}
+                                      />
+                                    </div>
+                                  </div>
+                                  {canEdit && (
+                                    <button
+                                      onClick={() => removeQuote(item.id, q.id)}
+                                      className="shrink-0 text-muted-foreground/40 hover:text-red-500 transition-colors p-0.5"
+                                      title="Eliminar cotización"
+                                    >
+                                      <Trash2 className="w-2.5 h-2.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            {canEdit && (
+                              <button
+                                onClick={() => addQuote(item.id)}
+                                className="text-[9px] text-muted-foreground hover:text-primary flex items-center gap-0.5 px-1 py-0.5 rounded hover:bg-muted/30 transition-colors self-start"
+                              >
+                                <Plus className="w-2.5 h-2.5" /> Agregar opción
+                              </button>
+                            )}
+                          </div>
                         ) : STATUS_HAS_COTIZACION.has(item.statusCotizacion || "") ? (
                           <div className="flex flex-col gap-0.5">
                             <EditableCell value={item.cotizacion} onSave={v => updateItem(item.id, "cotizacion", v)} className="text-muted-foreground text-[10px]" placeholder="cotizacion..." disabled={!canEdit} />
@@ -986,6 +1169,15 @@ export default function BudgetPage() {
                               )}
                               <EditableCell value={item.cotizacionLink || ""} onSave={v => updateItem(item.id, "cotizacionLink", v)} className={item.cotizacionLink ? "text-blue-500 text-[9px] truncate max-w-[100px]" : "text-blue-400/40 text-[9px]"} placeholder="+ link" disabled={!canEdit} />
                             </div>
+                            {canEdit && (
+                              <button
+                                onClick={() => addQuote(item.id)}
+                                className="text-[9px] text-muted-foreground/60 hover:text-primary flex items-center gap-0.5 transition-colors self-start mt-0.5"
+                                title="Agregar otra cotización para comparar"
+                              >
+                                <Plus className="w-2.5 h-2.5" /> comparar opciones
+                              </button>
+                            )}
                           </div>
                         ) : (
                           <div className="flex flex-col gap-0.5">
@@ -999,6 +1191,15 @@ export default function BudgetPage() {
                               )}
                               <EditableCell value={item.cotizacionLink || ""} onSave={v => updateItem(item.id, "cotizacionLink", v)} className={item.cotizacionLink ? "text-blue-500 text-[9px] truncate max-w-[100px]" : "text-blue-400/40 text-[9px]"} placeholder="+ link" disabled={!canEdit} />
                             </div>
+                            {canEdit && (
+                              <button
+                                onClick={() => addQuote(item.id)}
+                                className="text-[9px] text-muted-foreground/60 hover:text-primary flex items-center gap-0.5 transition-colors self-start mt-0.5"
+                                title="Agregar otra cotización para comparar"
+                              >
+                                <Plus className="w-2.5 h-2.5" /> comparar opciones
+                              </button>
+                            )}
                           </div>
                         )}
                       </td>

@@ -1,3 +1,11 @@
+export interface QuoteOption {
+  id: string;
+  label: string;
+  precioUnitario: number;
+  link?: string;
+  notes?: string;
+}
+
 export interface BudgetItem {
   id: string;
   evento: string;
@@ -37,6 +45,8 @@ export interface BudgetItem {
   mitigable?: boolean;
   mitigNote?: string;
   niceToHave?: boolean;
+  quotes?: QuoteOption[];
+  approvedQuoteId?: string;
 }
 
 export const INITIAL_BUDGET_ITEMS: BudgetItem[] = [
@@ -212,7 +222,7 @@ export const INITIAL_BUDGET_ITEMS: BudgetItem[] = [
   { id: "170", evento: "BEFORE/AFTER MAIN EVENT", area: "HOSPITALITY", centroCosto: "AIRPORT RECEPTION ASSITANCE", item: "SERVICIO SALA VIP @ SAL", descripcion: "\"Recpcion de viajeros por personal especializado quienes:\n1) Le reciben en la puerta de salida, luego es trasladado a nuestra sala VIP\n2) Realizan sus trámites migratorios mientras permanece comodamente en sala VIP (No incluye el pago de Tarjeta Migratoria de Ingreso para extranjeros, US$ 12.00 según aplique.)\n3) Recoge el equipaje del pasajero y realiza tramites de Aduana (No está incluido el uso de carretilla para movilizar el equipaje, valor US$ 3.00 por carretilla)\n4) Una vez sellado el pasaporte y con el equipaje, se entrega al pasajero\nSale por la puerta de entrada principal (egreso VIP) del aeropuerto con acceso prioritario a parqueo de acceso a nuestro proveedor de transporte. \"", notas: "", inKind: true, agencyFee: false, qty: 30, uom: "SERVICIOS", porDias: "NO", qtyDias: 1, precioUnitario: 35, subtotal: 1050, aplicaFee: "NO", fee: 0, subtotalConFee: 1050, iva: 136.5, total: 1186.5, cotizacion: "https://www.cepa.gob.sv/servicios/servicio-vip-pasajeros-del-aies/", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false },
   { id: "171", evento: "BEFORE/AFTER MAIN EVENT", area: "MOBILITY", centroCosto: "TERRESTRIAL TRANSPORTATION", item: "ARRIVALS / TRASLADO DE LLEGADAS", descripcion: "TRASLADOS AEROPUERTO > HYATT.", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "SERVICIO", porDias: "NO", qtyDias: 1, precioUnitario: 325, subtotal: 325, aplicaFee: "NO", fee: 0, subtotalConFee: 325, iva: 42.25, total: 367.25, cotizacion: "31-03-2026 CAMILA CRUZ (Por confirmar) MICROBUS HIACE 2 MODIF.pdf", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false },
   { id: "172", evento: "BEFORE/AFTER MAIN EVENT", area: "HOSPITALITY", centroCosto: "ACCOMODATIONS", item: "BLOQUE DE 30 HABITACIONES PARA LA ATENCION Y HOSPEDAJE DE PONENTES INTERNACIONALES Y STAFF ORGANIZADOR", descripcion: "", notas: "", inKind: true, agencyFee: false, qty: 1, uom: "PAQUETE", porDias: "NO", qtyDias: 1, precioUnitario: 18270, subtotal: 18270, aplicaFee: "NO", fee: 0, subtotalConFee: 18270, iva: 2375.1, total: 20645.1, cotizacion: "https://drive.google.com/drive/folders/1sgi9vNZHe5ucyLvVQM9qN9ZIoD0Qug2t?usp=sharing", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false },
-  { id: "173", evento: "BEFORE/AFTER MAIN EVENT", area: "HOSPITALITY", centroCosto: "AMENITIES", item: "WELCOME KITS (SPEAKERS + ORGANIZERS) 30", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 30, uom: "PAQUETE", porDias: "NO", qtyDias: 1, precioUnitario: 35, subtotal: 1050, aplicaFee: "NO", fee: 0, subtotalConFee: 1050, iva: 136.5, total: 1186.5, cotizacion: "Cotización Insumos Varios Final - The Rack", cotizacionLink: "", documento: "Cotización Caro Pa's Coffee" },
+  { id: "173", evento: "BEFORE/AFTER MAIN EVENT", area: "HOSPITALITY", centroCosto: "AMENITIES", item: "WELCOME KITS (SPEAKERS + ORGANIZERS) 30", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 30, uom: "PAQUETE", porDias: "NO", qtyDias: 1, precioUnitario: 35, subtotal: 1050, aplicaFee: "NO", fee: 0, subtotalConFee: 1050, iva: 136.5, total: 1186.5, cotizacion: "Cotización Insumos Varios Final - The Rack", cotizacionLink: "", documento: "Cotización Caro Pa's Coffee", proveedor: "", validarCosto: false, contratarAparte: false },
   { id: "174", evento: "BEFORE/AFTER MAIN EVENT", area: "HOSPITALITY", centroCosto: "AMENITIES", item: "IN ROOM WELCOME KIT DELIVERY SERVICE", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "SERVICIO", porDias: "NO", qtyDias: 1, precioUnitario: 2, subtotal: 2, aplicaFee: "NO", fee: 0, subtotalConFee: 2, iva: 0.26, total: 2.26, cotizacion: "Cotización Final HC SS", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false },
   { id: "175", evento: "BEFORE/AFTER MAIN EVENT", area: "MOBILITY", centroCosto: "TERRESTRIAL TRANSPORTATION", item: "IN-CITY TRIPS / TRASLADO EN SS", descripcion: "TODOS LOS TRASLADOS DE HOTEL, ESEN, MONARCA DURANTE SU ESTADIA EN SS.", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "SERVICIO", porDias: "NO", qtyDias: 1, precioUnitario: 1305, subtotal: 1305, aplicaFee: "NO", fee: 0, subtotalConFee: 1305, iva: 169.65, total: 1474.65, cotizacion: "31-03-2026 CAMILA CRUZ (Por confirmar) MICROBUS HIACE 2 MODIF.pdf", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false },
   { id: "176", evento: "MAIN EVENT", area: "MOBILITY", centroCosto: "TERRESTRIAL TRANSPORTATION", item: "UBER BUDGET (EVENT CODE DISCOUNT SUBSIDY)", descripcion: "PARA ASEGURAR UNA BUENA EXPERIENCIA, EN VISTA DEL PARQUEO LIMITADO  RELATIVO AL AFORO, SE CONTEMPLARA BRINDAR CODIGOS DE DESCUENTO EN RIDES, UN MONTO A UTILIZAR PARA MINIMIZAR VOLUMEN DE CARROS. SE CONTEMPLA UN DROP-OFF ZONE EN ZONA \"VALET\" ESEN.", notas: "", inKind: false, agencyFee: false, qty: 250, uom: "PAQUETE", porDias: "NO", qtyDias: 1, precioUnitario: 10, subtotal: 2500, aplicaFee: "NO", fee: 0, subtotalConFee: 2500, iva: 0, total: 2500, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false },
