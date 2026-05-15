@@ -5,7 +5,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { motion } from "framer-motion";
 import {
   LayoutDashboard, TableProperties, Plane, Menu, X, ChevronRight,
-  Wine, Coffee, Sandwich, LogOut, Info, Eye, MessageSquare, Pencil
+  Wine, Coffee, Sandwich, LogOut, Info, Eye, MessageSquare, Pencil,
+  HandCoins
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -16,6 +17,7 @@ import AviancaPage from "@/pages/AviancaPage";
 import CoctelPage from "@/pages/CoctelPage";
 import BarBebidasPage from "@/pages/BarBebidasPage";
 import LunchPage from "@/pages/LunchPage";
+import SponsorsPage from "@/pages/SponsorsPage";
 import LoginPage from "@/pages/LoginPage";
 import NotFound from "@/pages/not-found";
 
@@ -28,6 +30,7 @@ const NAV_ITEMS = [
   { path: "/coctel", label: "Coctel (Delibanquetes)", icon: Wine },
   { path: "/bar-bebidas", label: "Bar & Bebidas", icon: Coffee },
   { path: "/lunch", label: "Lunch & Coffee Breaks", icon: Sandwich },
+  { path: "/sponsors", label: "Sponsors & Cash", icon: HandCoins },
 ];
 
 function NavLink({ item }: { item: typeof NAV_ITEMS[number] }) {
@@ -164,11 +167,12 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
         <div className="px-4 pt-5 pb-4 border-b border-sidebar-border">
           <div className="flex items-start justify-between">
             <Link href="/" className="block hover:opacity-90 transition-opacity">
-              <img
-                src={`${import.meta.env.BASE_URL}emtech-logo.png`}
-                alt="EmTech Digital LATAM El Salvador 2026"
-                className="w-full max-w-[180px] h-auto"
-              />
+              <div className="flex flex-col leading-none">
+                <span className="text-2xl font-extrabold tracking-tight text-white">
+                  EmTech <span className="brand-gradient-text">AI</span>
+                </span>
+                <span className="text-[9px] text-sidebar-foreground/40 tracking-wider mt-1 uppercase">El Salvador 2026</span>
+              </div>
             </Link>
             <button
               onClick={onClose}
@@ -259,7 +263,7 @@ function Layout({ children }: { children: React.ReactNode }) {
           </button>
 
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground hidden sm:inline">EmTech Digital El Salvador 2026</span>
+            <span className="text-muted-foreground hidden sm:inline">EmTech AI El Salvador 2026</span>
             <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 hidden sm:inline" />
             <span className="font-semibold text-foreground">{currentPage.label}</span>
           </div>
@@ -300,6 +304,7 @@ function AppRouter() {
       <Route path="/coctel" component={() => <Layout><CoctelPage /></Layout>} />
       <Route path="/bar-bebidas" component={() => <Layout><BarBebidasPage /></Layout>} />
       <Route path="/lunch" component={() => <Layout><LunchPage /></Layout>} />
+      <Route path="/sponsors" component={() => <Layout><SponsorsPage /></Layout>} />
       <Route component={NotFound} />
     </Switch>
   );

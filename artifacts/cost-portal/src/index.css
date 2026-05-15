@@ -64,7 +64,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* LIGHT MODE — EmTech Digital black/orange branding */
+/* LIGHT MODE — EmTech AI black + cyan→blue gradient branding */
 :root {
   --button-outline: rgba(0,0,0, .10);
   --badge-outline: rgba(0,0,0, .05);
@@ -72,40 +72,44 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  --background: 40 10% 96%;
+  --brand-cyan: 186 88% 48%;
+  --brand-blue: 218 96% 56%;
+  --brand-gradient: linear-gradient(90deg, hsl(var(--brand-cyan)) 0%, hsl(var(--brand-blue)) 100%);
+
+  --background: 220 16% 97%;
   --foreground: 0 0% 9%;
-  --border: 35 8% 88%;
-  --input: 35 8% 83%;
-  --ring: 33 90% 50%;
+  --border: 220 12% 88%;
+  --input: 220 12% 83%;
+  --ring: 218 96% 56%;
 
   --card: 0 0% 100%;
   --card-foreground: 0 0% 9%;
-  --card-border: 35 8% 90%;
+  --card-border: 220 12% 90%;
 
   --sidebar: 0 0% 0%;
-  --sidebar-foreground: 40 20% 95%;
+  --sidebar-foreground: 220 20% 96%;
   --sidebar-border: 0 0% 12%;
-  --sidebar-primary: 33 90% 50%;
+  --sidebar-primary: 218 96% 56%;
   --sidebar-primary-foreground: 0 0% 100%;
   --sidebar-accent: 0 0% 14%;
-  --sidebar-accent-foreground: 40 20% 95%;
-  --sidebar-ring: 33 90% 50%;
+  --sidebar-accent-foreground: 220 20% 96%;
+  --sidebar-ring: 218 96% 56%;
 
   --popover: 0 0% 100%;
   --popover-foreground: 0 0% 9%;
-  --popover-border: 35 8% 88%;
+  --popover-border: 220 12% 88%;
 
-  --primary: 33 90% 50%;
+  --primary: 218 96% 56%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 35 10% 95%;
+  --secondary: 220 16% 95%;
   --secondary-foreground: 0 0% 20%;
 
-  --muted: 35 10% 95%;
+  --muted: 220 16% 95%;
   --muted-foreground: 0 0% 40%;
 
-  --accent: 33 90% 95%;
-  --accent-foreground: 33 90% 35%;
+  --accent: 200 95% 94%;
+  --accent-foreground: 218 90% 35%;
 
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
@@ -126,10 +130,10 @@
   --tracking-normal: 0em;
   --spacing: 0.25rem;
 
-  --chart-1: 33 90% 50%;
-  --chart-2: 25 85% 55%;
+  --chart-1: 218 96% 56%;
+  --chart-2: 186 88% 48%;
   --chart-3: 0 0% 25%;
-  --chart-4: 45 90% 50%;
+  --chart-4: 245 80% 60%;
   --chart-5: 142 71% 45%;
 
   /* Border utilities */
@@ -231,6 +235,17 @@
 
 .row-inkind-bg {
   background-color: hsl(40 20% 95%);
+}
+
+.brand-gradient-text {
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.brand-gradient-bg {
+  background: var(--brand-gradient);
 }
 
 .sticky-col-0 {

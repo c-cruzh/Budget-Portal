@@ -29,11 +29,12 @@ export default function LoginPage() {
     <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <img
-            src={`${import.meta.env.BASE_URL}emtech-logo.png`}
-            alt="EmTech Digital LATAM El Salvador 2026"
-            className="h-16 mx-auto mb-6"
-          />
+          <div className="mb-6 flex flex-col items-center leading-none">
+            <span className="text-4xl font-extrabold tracking-tight text-white">
+              EmTech <span className="brand-gradient-text">AI</span>
+            </span>
+            <span className="text-[10px] text-zinc-500 tracking-[0.2em] mt-2 uppercase">El Salvador 2026</span>
+          </div>
           <h1 className="text-xl font-semibold text-white mb-1">Organizers Portal</h1>
           <p className="text-sm text-zinc-500">Sign in to access the cost management portal</p>
         </div>
