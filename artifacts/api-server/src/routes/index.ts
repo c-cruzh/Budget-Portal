@@ -9,6 +9,7 @@ import subEventsRouter from "./sub-events";
 import flightsRouter from "./flights";
 import hotelRouter from "./hotel";
 import networkingCocktailRouter from "./networking-cocktail";
+import tasksBoardRouter from "./tasks-board";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(subEventsRouter);
 router.use(flightsRouter);
 router.use(hotelRouter);
 router.use(networkingCocktailRouter);
+router.use(tasksBoardRouter);
 
 export default router;

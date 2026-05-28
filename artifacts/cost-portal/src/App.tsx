@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard, TableProperties, Plane, Bus, Menu, X, ChevronRight,
   Wine, Coffee, Sandwich, LogOut, Info, Eye, MessageSquare, Pencil,
-  HandCoins, History, Calendar, BedDouble
+  HandCoins, History, Calendar, BedDouble, ListChecks
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -22,6 +22,7 @@ import LunchPage from "@/pages/LunchPage";
 import SponsorsPage from "@/pages/SponsorsPage";
 import HistoryPage from "@/pages/HistoryPage";
 import AgendaPage from "@/pages/AgendaPage";
+import TasksBoardPage from "@/pages/TasksBoardPage";
 import LoginPage from "@/pages/LoginPage";
 import NotFound from "@/pages/not-found";
 
@@ -46,6 +47,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: "/lunch", label: "Lunch & Coffee Breaks", icon: Sandwich, deprecated: true },
   { path: "/sponsors", label: "Sponsors & Cash", icon: HandCoins },
   { path: "/history", label: "Historial", icon: History },
+  { path: "/tasks", label: "Mis Tareas", icon: ListChecks },
 ];
 
 function NavLink({ item }: { item: NavItem }) {
@@ -337,6 +339,7 @@ function AppRouter() {
       <Route path="/sponsors" component={() => <Layout><SponsorsPage /></Layout>} />
       <Route path="/agenda" component={() => <Layout><AgendaPage /></Layout>} />
       <Route path="/history" component={() => <Layout><HistoryPage /></Layout>} />
+      <Route path="/tasks" component={() => <Layout><TasksBoardPage /></Layout>} />
       <Route component={NotFound} />
     </Switch>
   );
