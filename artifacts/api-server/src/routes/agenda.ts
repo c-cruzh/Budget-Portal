@@ -25,7 +25,7 @@ function storageKey(key: string) {
 router.get("/agenda/:key", async (req, res) => {
   try {
     const session = req.session as any;
-    if (!session?.userOrg) {
+    if (!session?.userId) {
       res.status(401).json({ error: "Authentication required" });
       return;
     }

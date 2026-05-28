@@ -86,7 +86,7 @@ export async function ensureBudgetSubEventDefaults(): Promise<void> {
 router.get("/sub-events", async (req, res) => {
   try {
     const session = req.session as any;
-    if (!session?.userOrg) {
+    if (!session?.userId) {
       res.status(401).json({ error: "Authentication required" });
       return;
     }
