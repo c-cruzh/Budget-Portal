@@ -1,9 +1,10 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
-import { Plus, Trash2, ChevronLeft, ChevronRight, Cloud, CloudOff, Loader2, ListChecks, Flag, Calendar as CalendarIcon, User, Link2 } from "lucide-react";
+import { Plus, Trash2, ChevronLeft, ChevronRight, Cloud, CloudOff, Loader2, ListChecks, Flag, Calendar as CalendarIcon, User, Link2, AlertTriangle, Sparkles } from "lucide-react";
 import { useTasksBoardApi } from "@/hooks/useTasksBoardApi";
-import { STATUS_ORDER, STATUS_LABEL, PRIORITY_LABEL, type TaskStatus, type TaskPriority, type BoardTask } from "@/data/tasksBoardData";
+import { STATUS_ORDER, STATUS_LABEL, PRIORITY_LABEL, FLAGGED_RRV_SOURCE_TYPE, type TaskStatus, type TaskPriority, type BoardTask } from "@/data/tasksBoardData";
+import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,14 +25,62 @@ const STATUS_STYLE: Record<TaskStatus, string> = {
 };
 
 export default function TasksBoardPage() {
-  const { state, loading, saving, lastSaved, error, meta, addTask, updateTask, deleteTask } = useTasksBoardApi();
+  const { state, setState, loading, saving, lastSaved, error, meta, addTask, updateTask, deleteTask } = useTasksBoardApi();
   const [editing, setEditing] = useState<BoardTask | null>(null);
   const [draft, setDraft] = useState<Partial<BoardTask>>({});
   const [showNew, setShowNew] = useState(false);
+  const [onlyFlaggedRRV, setOnlyFlaggedRRV] = useState(false);
+  const [seeding, setSeeding] = useState(false);
+
+  const flaggedCount = useMemo(
+    () => state.tasks.filter(t => t.sourceType === FLAGGED_RRV_SOURCE_TYPE).length,
+    [state.tasks]
+  );
+  const flaggedUnmatched = useMemo(
+    () => state.tasks.filter(t => t.sourceType === FLAGGED_RRV_SOURCE_TYPE && t.unmatched).length,
+    [state.tasks]
+  );
+
+  const visibleTasks = useMemo(
+    () => onlyFlaggedRRV ? state.tasks.filter(t => t.sourceType === FLAGGED_RRV_SOURCE_TYPE) : state.tasks,
+    [state.tasks, onlyFlaggedRRV]
+  );
+
+  const handleSeedFlagged = async () => {
+    if (seeding) return;
+    setSeeding(true);
+    try {
+      const res = await fetch("/api/tasks-board/seed-flagged-items", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      toast({
+        title: "Tareas Resize/Rescope/Validate",
+        description: `${data.created} creadas · ${data.skipped} ya existían · ${data.matched} vinculadas al Budget · ${data.unmatched} sin vincular (de ${data.total} ítems)`,
+      });
+      // Reload tasks board state from server to pick up the new tasks
+      try {
+        const r2 = await fetch("/api/tasks-board", { credentials: "include" });
+        if (r2.ok) {
+          const d2 = await r2.json();
+          if (d2.state && Array.isArray(d2.state.tasks)) {
+            setState({ tasks: d2.state.tasks });
+          }
+        }
+      } catch {}
+      setOnlyFlaggedRRV(true);
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "No se pudo generar las tareas", variant: "destructive" });
+    } finally {
+      setSeeding(false);
+    }
+  };
 
   const byStatus = useMemo(() => {
     const m: Record<TaskStatus, BoardTask[]> = { todo: [], doing: [], done: [] };
-    for (const t of state.tasks) m[t.status].push(t);
+    for (const t of visibleTasks) m[t.status].push(t);
     for (const s of STATUS_ORDER) {
       m[s].sort((a, b) => {
         const pOrder = { high: 0, med: 1, low: 2 } as const;
@@ -40,7 +89,7 @@ export default function TasksBoardPage() {
       });
     }
     return m;
-  }, [state.tasks]);
+  }, [visibleTasks]);
 
   const counts = { total: state.tasks.length, todo: byStatus.todo.length, doing: byStatus.doing.length, done: byStatus.done.length };
 
@@ -83,11 +132,44 @@ export default function TasksBoardPage() {
         </div>
         <div className="flex items-center gap-3">
           <SyncIndicator loading={loading} saving={saving} lastSaved={lastSaved} error={error} />
+          <Button size="sm" variant="outline" onClick={handleSeedFlagged} disabled={seeding || loading} className="gap-2" title="Crea una tarea por cada uno de los 27 ítems flagged que necesitan Resize / Rescope / Validate. Idempotente.">
+            {seeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            Generar tareas R/R/V (27)
+          </Button>
           <Button size="sm" onClick={() => { setDraft({ priority: "med", status: "todo" }); setShowNew(true); }} className="gap-2">
             <Plus className="w-4 h-4" /> Nueva tarea
           </Button>
         </div>
       </motion.div>
+
+      {flaggedCount > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setOnlyFlaggedRRV(v => !v)}
+            className={cn(
+              "text-[11px] px-2 py-1 rounded border inline-flex items-center gap-1.5 transition-colors",
+              onlyFlaggedRRV
+                ? "bg-amber-500/15 text-amber-700 border-amber-500/40"
+                : "bg-amber-500/5 text-amber-700 border-amber-500/20 hover:bg-amber-500/10"
+            )}
+            title="Filtrar para ver solo los ítems flagged que requieren Resize / Rescope / Validate"
+          >
+            <Flag className="w-3 h-3" />
+            Resize/Rescope/Validate
+            <span className="font-mono">{flaggedCount}</span>
+            {flaggedUnmatched > 0 && (
+              <span className="ml-1 inline-flex items-center gap-0.5 text-red-600">
+                <AlertTriangle className="w-2.5 h-2.5" /> {flaggedUnmatched} sin vincular
+              </span>
+            )}
+          </button>
+          {onlyFlaggedRRV && (
+            <button onClick={() => setOnlyFlaggedRRV(false)} className="text-[11px] text-muted-foreground hover:text-foreground underline">
+              Ver todas
+            </button>
+          )}
+        </div>
+      )}
 
       {meta?.lastEditedBy && (
         <div className="text-[11px] text-muted-foreground">
@@ -259,12 +341,24 @@ function TaskCard({ task, onEdit, onDelete, onMove }: { task: BoardTask; onEdit:
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
-      {task.linkedBudgetItem && (
-        <Link href="/budget" className="mt-1.5 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 max-w-full" title={`Budget item #${task.linkedBudgetItem.id}: ${task.linkedBudgetItem.label}`}>
-          <Link2 className="w-2.5 h-2.5 flex-shrink-0" />
-          <span className="truncate">{task.linkedBudgetItem.label}</span>
-        </Link>
-      )}
+      <div className="flex flex-wrap items-center gap-1 mt-1.5">
+        {task.sourceType === FLAGGED_RRV_SOURCE_TYPE && (
+          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 border border-amber-500/20" title="Ítem flagged: requiere Resize / Rescope / Validate">
+            <Flag className="w-2.5 h-2.5" /> R/R/V
+          </span>
+        )}
+        {task.unmatched && (
+          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-600 border border-red-500/20" title="No se pudo vincular a un ítem del Budget. Vincular manualmente.">
+            <AlertTriangle className="w-2.5 h-2.5" /> sin vincular
+          </span>
+        )}
+        {task.linkedBudgetItem && (
+          <Link href="/budget" className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 max-w-full" title={`Budget item #${task.linkedBudgetItem.id}: ${task.linkedBudgetItem.label}`}>
+            <Link2 className="w-2.5 h-2.5 flex-shrink-0" />
+            <span className="truncate">{task.linkedBudgetItem.label}</span>
+          </Link>
+        )}
+      </div>
       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
         <span className={cn("text-[10px] px-1.5 py-0.5 rounded border inline-flex items-center gap-1", PRIORITY_STYLE[task.priority])}>
           <Flag className="w-2.5 h-2.5" /> {PRIORITY_LABEL[task.priority]}

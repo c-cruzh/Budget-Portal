@@ -20,7 +20,12 @@ export interface BoardTask {
   createdAt: string;
   updatedAt: string;
   linkedBudgetItem?: LinkedBudgetItem;
+  sourceKey?: string;
+  sourceType?: string;
+  unmatched?: boolean;
 }
+
+export const FLAGGED_RRV_SOURCE_TYPE = "flagged-rrv";
 
 export interface TasksBoardState {
   tasks: BoardTask[];

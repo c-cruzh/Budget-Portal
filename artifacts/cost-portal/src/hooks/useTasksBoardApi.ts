@@ -143,6 +143,9 @@ function merge(persisted: any): TasksBoardState {
               centroCosto: typeof t.linkedBudgetItem.centroCosto === "string" ? t.linkedBudgetItem.centroCosto : undefined,
             }
           : undefined,
+        sourceKey: typeof t?.sourceKey === "string" ? t.sourceKey : undefined,
+        sourceType: typeof t?.sourceType === "string" ? t.sourceType : undefined,
+        unmatched: typeof t?.unmatched === "boolean" ? t.unmatched : undefined,
       }))
     : [];
   return { tasks };
