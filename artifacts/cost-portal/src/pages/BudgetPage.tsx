@@ -21,6 +21,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { ComboInput } from "@/components/ComboInput";
 import { SubEventsManagerDialog } from "@/components/SubEventsManagerDialog";
 import { SplitByDayDialog } from "@/components/SplitByDayDialog";
+import { BulkSplitByDayDialog } from "@/components/BulkSplitByDayDialog";
 import { toast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -293,6 +294,7 @@ export default function BudgetPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editItem, setEditItem] = useState<Partial<BudgetItem>>({});
   const [splitItem, setSplitItem] = useState<BudgetItem | null>(null);
+  const [bulkSplitOpen, setBulkSplitOpen] = useState(false);
   const [taskForItem, setTaskForItem] = useState<{ link: LinkedBudgetItem; notes: string } | null>(null);
   const [newItem, setNewItem] = useState<Partial<BudgetItem>>({
     evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "",
@@ -2120,6 +2122,7 @@ export default function BudgetPage() {
         onToggleFlag={(flag, on) => bulkUpdate(it => ({ ...it, [flag]: on } as BudgetItem))}
         onMoveArea={(a) => bulkUpdate(it => ({ ...it, area: a }))}
         onMoveCentro={(c) => bulkUpdate(it => ({ ...it, centroCosto: c }))}
+        onSplitByDay={() => setBulkSplitOpen(true)}
         statusOptions={STATUS_COTIZACION_OPTIONS.filter(Boolean)}
         proveedorOptions={proveedores.filter(p => p !== "ALL")}
         areaOptions={areas.filter(a => a !== "ALL")}
@@ -2152,6 +2155,30 @@ export default function BudgetPage() {
           toast({ title: "Item dividido en 2 filas por día" });
         }}
       />
+      <BulkSplitByDayDialog
+        open={bulkSplitOpen}
+        onOpenChange={setBulkSplitOpen}
+        originals={items.filter(i => selectedIds.has(i.id))}
+        subEvents={subEvents}
+        onApprove={(replacements) => {
+          if (replacements.length === 0) { setBulkSplitOpen(false); return; }
+          const byOrig = new Map(replacements.map(r => [r.originalId, r.newItems]));
+          setItems(prev => {
+            const next: BudgetItem[] = [];
+            for (const it of prev) {
+              const repl = byOrig.get(it.id);
+              if (repl) next.push(...repl);
+              else next.push(it);
+            }
+            saveFull(next);
+            return next;
+          });
+          setBulkSplitOpen(false);
+          setSelectedIds(new Set());
+          toast({ title: `${replacements.length} item${replacements.length === 1 ? "" : "s"} divididos por día` });
+        }}
+      />
+
       <CreateTaskFromItemDialog
         open={!!taskForItem}
         onOpenChange={(o) => { if (!o) setTaskForItem(null); }}
