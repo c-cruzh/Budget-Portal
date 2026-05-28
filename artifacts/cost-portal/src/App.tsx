@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard, TableProperties, Plane, Bus, Menu, X, ChevronRight,
   Wine, Coffee, Sandwich, LogOut, Info, Eye, MessageSquare, Pencil,
-  HandCoins, History
+  HandCoins, History, Calendar
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -20,6 +20,7 @@ import BarBebidasPage from "@/pages/BarBebidasPage";
 import LunchPage from "@/pages/LunchPage";
 import SponsorsPage from "@/pages/SponsorsPage";
 import HistoryPage from "@/pages/HistoryPage";
+import AgendaPage from "@/pages/AgendaPage";
 import LoginPage from "@/pages/LoginPage";
 import NotFound from "@/pages/not-found";
 
@@ -41,6 +42,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: "/bar-bebidas", label: "Bar & Bebidas", icon: Coffee },
   { path: "/lunch", label: "Lunch & Coffee Breaks", icon: Sandwich },
   { path: "/sponsors", label: "Sponsors & Cash", icon: HandCoins },
+  { path: "/agenda", label: "Agenda", icon: Calendar },
   { path: "/history", label: "Historial", icon: History },
 ];
 
@@ -330,6 +332,7 @@ function AppRouter() {
       <Route path="/bar-bebidas" component={() => <Layout><BarBebidasPage /></Layout>} />
       <Route path="/lunch" component={() => <Layout><LunchPage /></Layout>} />
       <Route path="/sponsors" component={() => <Layout><SponsorsPage /></Layout>} />
+      <Route path="/agenda" component={() => <Layout><AgendaPage /></Layout>} />
       <Route path="/history" component={() => <Layout><HistoryPage /></Layout>} />
       <Route component={NotFound} />
     </Switch>
