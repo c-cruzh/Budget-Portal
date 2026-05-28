@@ -6,14 +6,17 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "seed:main-event-agenda": "tsx src/seed-main-event-agenda.ts",
+    "seed:agenda-prod": "tsx src/seed-agenda-prod.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/pg": "^8.18.0",
     "tsx": "catalog:"
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
-    "drizzle-orm": "catalog:"
+    "drizzle-orm": "catalog:",
+    "pg": "^8.20.0"
   }
 }
