@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
-import { Plus, Trash2, ChevronLeft, ChevronRight, Cloud, CloudOff, Loader2, ListChecks, Flag, Calendar as CalendarIcon, User, Link2, CalendarRange, AlertTriangle, Sparkles } from "lucide-react";
+import { Plus, Trash2, ChevronLeft, ChevronRight, Cloud, CloudOff, Loader2, ListChecks, Flag, Calendar as CalendarIcon, User, Link2, CalendarRange, AlertTriangle, Sparkles, ShieldAlert } from "lucide-react";
 import { useTasksBoardApi } from "@/hooks/useTasksBoardApi";
 import { useAuth } from "@/hooks/useAuth";
 import { STATUS_ORDER, STATUS_LABEL, PRIORITY_LABEL, FLAGGED_RRV_SOURCE_TYPE, type TaskStatus, type TaskPriority, type BoardTask } from "@/data/tasksBoardData";
@@ -14,6 +14,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { cn } from "@/lib/utils";
 
 const MULTIDAY_SOURCE_KEY_PREFIX = "multiday-provider-validation:";
+const URGENT_TITLE_PREFIX = "URGENT TO VALIDATE";
+const URGENT_ID_PREFIX = "urgent-validate-";
+const isUrgent = (t: BoardTask) => t.id?.startsWith(URGENT_ID_PREFIX) || t.title?.startsWith(URGENT_TITLE_PREFIX);
 
 const PRIORITY_STYLE: Record<TaskPriority, string> = {
   low: "bg-slate-500/10 text-slate-500 border-slate-500/20",
@@ -38,6 +41,7 @@ export default function TasksBoardPage() {
   const [seeding, setSeeding] = useState(false);
   const [filterMultiday, setFilterMultiday] = useState(false);
   const [seedingMultiday, setSeedingMultiday] = useState(false);
+  const [filterUrgent, setFilterUrgent] = useState(false);
 
   const flaggedCount = useMemo(
     () => state.tasks.filter(t => t.sourceType === FLAGGED_RRV_SOURCE_TYPE).length,
@@ -51,13 +55,18 @@ export default function TasksBoardPage() {
     () => state.tasks.filter(t => t.sourceKey?.startsWith(MULTIDAY_SOURCE_KEY_PREFIX)).length,
     [state.tasks]
   );
+  const urgentCount = useMemo(
+    () => state.tasks.filter(isUrgent).length,
+    [state.tasks]
+  );
 
   const visibleTasks = useMemo(() => {
     let arr = state.tasks;
     if (onlyFlaggedRRV) arr = arr.filter(t => t.sourceType === FLAGGED_RRV_SOURCE_TYPE);
     if (filterMultiday) arr = arr.filter(t => t.sourceKey?.startsWith(MULTIDAY_SOURCE_KEY_PREFIX));
+    if (filterUrgent) arr = arr.filter(isUrgent);
     return arr;
-  }, [state.tasks, onlyFlaggedRRV, filterMultiday]);
+  }, [state.tasks, onlyFlaggedRRV, filterMultiday, filterUrgent]);
 
   const handleSeedFlagged = async () => {
     if (seeding) return;
@@ -238,6 +247,29 @@ export default function TasksBoardPage() {
           <button onClick={() => setFilterMultiday(false)} className="text-[11px] text-muted-foreground underline">
             Quitar filtro
           </button>
+        )}
+        {urgentCount > 0 && (
+          <>
+            <button
+              onClick={() => setFilterUrgent(v => !v)}
+              className={cn(
+                "text-[11px] px-2 py-1 rounded-full border inline-flex items-center gap-1.5 transition-colors",
+                filterUrgent
+                  ? "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/40"
+                  : "bg-muted/40 text-muted-foreground border-border hover:border-red-500/40"
+              )}
+              title="Tareas marcadas como URGENT TO VALIDATE"
+            >
+              <ShieldAlert className="w-3 h-3" />
+              URGENT to validate
+              <span className="ml-1 px-1.5 py-0.5 rounded bg-red-500/20 text-red-700 dark:text-red-300 font-mono text-[10px]">{urgentCount}</span>
+            </button>
+            {filterUrgent && (
+              <button onClick={() => setFilterUrgent(false)} className="text-[11px] text-muted-foreground underline">
+                Quitar filtro
+              </button>
+            )}
+          </>
         )}
       </div>
 
@@ -421,6 +453,11 @@ function TaskCard({ task, onEdit, onDelete, onMove }: { task: BoardTask; onEdit:
           <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30" title="Generada por: Multi-day provider cost — consult & validate">
             <CalendarRange className="w-2.5 h-2.5" />
             Multi-day validar
+          </span>
+        )}
+        {isUrgent(task) && (
+          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20" title="URGENT TO VALIDATE">
+            <ShieldAlert className="w-2.5 h-2.5" /> URGENT
           </span>
         )}
         {task.unmatched && (
