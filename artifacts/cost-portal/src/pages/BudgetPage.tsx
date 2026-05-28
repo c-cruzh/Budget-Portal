@@ -38,6 +38,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { EditableCell } from "@/components/EditableCell";
 import { SummaryCards } from "@/components/SummaryCards";
@@ -724,35 +725,32 @@ export default function BudgetPage() {
       </div>
 
       {subEventSummaries.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setFilterSubEvents(new Set())}
-            className={cn(
-              "text-[11px] px-2.5 py-1 rounded-full border font-medium transition-colors",
-              filterSubEvents.size === 0
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-card text-muted-foreground border-border hover:border-primary/40"
-            )}
+        <div className="flex flex-wrap items-center gap-2">
+          <Tabs
+            value={filterSubEvents.size === 1 ? Array.from(filterSubEvents)[0] : "all"}
+            onValueChange={(v) => setFilterSubEvents(v === "all" ? new Set() : new Set([v]))}
+            className="flex-1 min-w-0"
           >
-            Todos ({items.length})
-          </button>
-          {subEventSummaries.map(s => {
-            const active = filterSubEvents.has(s.id);
-            return (
-              <button
-                key={s.id}
-                onClick={() => toggleSubEventFilter(s.id)}
-                className={cn(
-                  "text-[11px] px-2.5 py-1 rounded-full border font-medium transition-colors flex items-center gap-1.5",
-                  active ? "border-transparent text-white" : "bg-card text-foreground border-border hover:border-primary/40"
-                )}
-                style={active ? { backgroundColor: s.color } : { borderLeft: `3px solid ${s.color}` }}
-              >
-                <span>{s.name}</span>
-                <span className={cn("text-[10px]", active ? "text-white/80" : "text-muted-foreground")}>({s.count})</span>
-              </button>
-            );
-          })}
+            <TabsList className="h-auto p-1 flex-wrap gap-1">
+              <TabsTrigger value="all" className="text-xs gap-1.5">
+                Todos <span className="text-[10px] text-muted-foreground">({items.length})</span>
+              </TabsTrigger>
+              {subEventSummaries.map(s => {
+                const active = filterSubEvents.has(s.id);
+                return (
+                  <TabsTrigger
+                    key={s.id}
+                    value={s.id}
+                    className="text-xs gap-1.5"
+                    style={active ? { borderBottom: `2px solid ${s.color}` } : { borderLeft: `3px solid ${s.color}` }}
+                  >
+                    <span>{s.name}</span>
+                    <span className="text-[10px] text-muted-foreground">({s.count})</span>
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </Tabs>
           {canEdit && (
             <Button
               variant="outline"
