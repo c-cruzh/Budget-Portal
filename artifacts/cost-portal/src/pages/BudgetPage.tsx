@@ -245,6 +245,7 @@ export default function BudgetPage() {
   const [filterAccionReq, setFilterAccionReq] = useState(false);
   const [filterValidar, setFilterValidar] = useState(false);
   const [filterAparte, setFilterAparte] = useState(false);
+  const [filterNiceToHave, setFilterNiceToHave] = useState(false);
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -336,6 +337,7 @@ export default function BudgetPage() {
     if (filterAccionReq) out = out.filter(i => i.accionRequerida);
     if (filterValidar) out = out.filter(i => i.validarCosto);
     if (filterAparte) out = out.filter(i => i.contratarAparte);
+    if (filterNiceToHave) out = out.filter(i => i.niceToHave);
     if (search.trim()) {
       const q = search.toLowerCase();
       out = out.filter(i =>
@@ -350,7 +352,7 @@ export default function BudgetPage() {
       );
     }
     return out;
-  }, [items, filterSubEvents, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterQtyDias, filterPending, filterAccionReq, filterValidar, filterAparte, search]);
+  }, [items, filterSubEvents, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterQtyDias, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, { subEventId: string; evento: string; area: string; centroCosto: string; items: BudgetItem[] }>();
@@ -954,6 +956,7 @@ export default function BudgetPage() {
             { active: filterAccionReq, set: setFilterAccionReq, label: "Accion Req.", count: accionRequeridaCount, cls: "bg-orange-500/10 text-orange-600 border-orange-500/30" },
             { active: filterValidar, set: setFilterValidar, label: "A Validar", count: validarCount, cls: "bg-red-500/10 text-red-600 border-red-500/30" },
             { active: filterAparte, set: setFilterAparte, label: "Aparte", count: contratarAparteCount, cls: "bg-amber-500/10 text-amber-600 border-amber-500/30" },
+            { active: filterNiceToHave, set: setFilterNiceToHave, label: "Nice to Have", count: niceToHaveCount, cls: "bg-purple-500/10 text-purple-600 border-purple-500/30" },
           ] as const).map(p => (
             <button
               key={p.label}
@@ -967,9 +970,9 @@ export default function BudgetPage() {
               <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-semibold", p.active ? "bg-white/40" : "bg-muted text-muted-foreground")}>{p.count}</span>
             </button>
           ))}
-          {(filterProveedor !== "ALL" || filterProductora !== "ALL" || filterFeeEnCotiz !== "ALL" || filterCotizacion !== "ALL" || filterAsignado !== "ALL" || filterStatus !== "ALL" || filterInKind !== "ALL" || filterPrecio !== "ALL" || filterQtyDias.size > 0 || filterPending || filterAccionReq || filterValidar || filterAparte) && (
+          {(filterProveedor !== "ALL" || filterProductora !== "ALL" || filterFeeEnCotiz !== "ALL" || filterCotizacion !== "ALL" || filterAsignado !== "ALL" || filterStatus !== "ALL" || filterInKind !== "ALL" || filterPrecio !== "ALL" || filterQtyDias.size > 0 || filterPending || filterAccionReq || filterValidar || filterAparte || filterNiceToHave) && (
             <button
-              onClick={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterQtyDias(new Set()); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); }}
+              onClick={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterQtyDias(new Set()); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
               className="text-xs text-primary hover:underline"
             >Clear filters</button>
           )}
