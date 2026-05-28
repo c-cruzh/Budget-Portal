@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 
-export type AgendaKey = "lanzamiento" | "evento" | "completa";
+export type AgendaKey =
+  | "lanzamiento"
+  | "evento"
+  | "evento-dia-1"
+  | "evento-dia-2"
+  | "completa";
 
 export interface AgendaRow {
   id: string;

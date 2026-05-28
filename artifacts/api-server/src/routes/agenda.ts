@@ -4,7 +4,13 @@ import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
-const VALID_KEYS = new Set(["lanzamiento", "evento", "completa"]);
+const VALID_KEYS = new Set([
+  "lanzamiento",
+  "evento",
+  "evento-dia-1",
+  "evento-dia-2",
+  "completa",
+]);
 
 const ORG_PERMISSIONS: Record<string, { canEdit: boolean }> = {
   "C2 LABS": { canEdit: true },

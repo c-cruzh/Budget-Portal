@@ -201,14 +201,35 @@ function AgendaTab({ agendaKey, includeDate, emptyMessage }: AgendaTabProps) {
   );
 }
 
-const TAB_DEFS: Array<{
+interface TabDef {
   key: AgendaKey;
   value: string;
   label: string;
   description: string;
   includeDate: boolean;
   emptyMessage: string;
-}> = [
+}
+
+const MAIN_EVENT_DAYS: TabDef[] = [
+  {
+    key: "evento-dia-1",
+    value: "evento-dia-1",
+    label: "Día 1",
+    description: "Programa del Día 1 del Main Event.",
+    includeDate: false,
+    emptyMessage: "Aún no hay actividades para el Día 1.",
+  },
+  {
+    key: "evento-dia-2",
+    value: "evento-dia-2",
+    label: "Día 2",
+    description: "Programa del Día 2 del Main Event.",
+    includeDate: false,
+    emptyMessage: "Aún no hay actividades para el Día 2.",
+  },
+];
+
+const TOP_TABS: Array<TabDef | { value: string; label: string; isMainEvent: true }> = [
   {
     key: "lanzamiento",
     value: "lanzamiento",
@@ -216,15 +237,8 @@ const TAB_DEFS: Array<{
     description: "Programa del evento de lanzamiento.",
     includeDate: false,
     emptyMessage: "Aún no hay actividades para el evento de lanzamiento.",
-  },
-  {
-    key: "evento",
-    value: "evento",
-    label: "Evento (Noviembre)",
-    description: "Programa del evento principal de noviembre, día por día.",
-    includeDate: false,
-    emptyMessage: "Aún no hay actividades para el evento de noviembre.",
-  },
+  } as TabDef,
+  { value: "main-event", label: "Main Event", isMainEvent: true },
   {
     key: "completa",
     value: "completa",
@@ -232,12 +246,43 @@ const TAB_DEFS: Array<{
     description: "Vista cronológica completa desde la llegada hasta la salida en noviembre.",
     includeDate: true,
     emptyMessage: "Aún no hay actividades en la agenda completa.",
-  },
+  } as TabDef,
 ];
+
+function MainEventTabs() {
+  const [day, setDay] = useState<string>("evento-dia-1");
+  const active = MAIN_EVENT_DAYS.find(d => d.value === day) || MAIN_EVENT_DAYS[0];
+  return (
+    <div className="space-y-3">
+      <Tabs value={day} onValueChange={setDay} className="w-full">
+        <TabsList className="h-auto p-1">
+          {MAIN_EVENT_DAYS.map(d => (
+            <TabsTrigger key={d.value} value={d.value} className="text-xs sm:text-sm">
+              {d.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <p className="text-xs text-muted-foreground mt-3 mb-1">{active.description}</p>
+        {MAIN_EVENT_DAYS.map(d => (
+          <TabsContent key={d.value} value={d.value} className="mt-3">
+            <AgendaTab
+              agendaKey={d.key}
+              includeDate={d.includeDate}
+              emptyMessage={d.emptyMessage}
+            />
+          </TabsContent>
+        ))}
+      </Tabs>
+    </div>
+  );
+}
 
 export default function AgendaPage() {
   const [tab, setTab] = useState<string>("lanzamiento");
-  const active = TAB_DEFS.find(t => t.value === tab) || TAB_DEFS[0];
+  const active = TOP_TABS.find(t => t.value === tab) || TOP_TABS[0];
+  const activeDescription = "isMainEvent" in active
+    ? "Programa del Main Event de noviembre, por día."
+    : (active as TabDef).description;
 
   return (
     <div className="space-y-6">
@@ -247,28 +292,32 @@ export default function AgendaPage() {
           <h1 className="text-2xl font-bold tracking-tight">Agenda</h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          Gestiona las tres agendas del EmTech Digital El Salvador 2026.
+          Gestiona las agendas del EmTech AI El Salvador 2026.
         </p>
       </div>
 
       <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList className="h-auto p-1">
-          {TAB_DEFS.map(t => (
+          {TOP_TABS.map(t => (
             <TabsTrigger key={t.value} value={t.value} className="text-xs sm:text-sm">
               {t.label}
             </TabsTrigger>
           ))}
         </TabsList>
 
-        <p className="text-xs text-muted-foreground mt-3 mb-1">{active.description}</p>
+        <p className="text-xs text-muted-foreground mt-3 mb-1">{activeDescription}</p>
 
-        {TAB_DEFS.map(t => (
+        {TOP_TABS.map(t => (
           <TabsContent key={t.value} value={t.value} className="mt-4">
-            <AgendaTab
-              agendaKey={t.key}
-              includeDate={t.includeDate}
-              emptyMessage={t.emptyMessage}
-            />
+            {"isMainEvent" in t ? (
+              <MainEventTabs />
+            ) : (
+              <AgendaTab
+                agendaKey={(t as TabDef).key}
+                includeDate={(t as TabDef).includeDate}
+                emptyMessage={(t as TabDef).emptyMessage}
+              />
+            )}
           </TabsContent>
         ))}
       </Tabs>
