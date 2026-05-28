@@ -271,23 +271,12 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 text-sm">
-          <div className="flex items-start gap-2">
-            <Handshake className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-            <div>
-              <p className="font-semibold text-amber-700">Avianca / Key Institute Convention</p>
-              <p className="text-muted-foreground text-xs mt-1">$22,500 cash + $22,500 in-kind commitment pending formal documentation. In-kind covers a PR dinner/event. Once signed, Avianca covers the full flight block.</p>
-            </div>
-          </div>
-        </div>
-        <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-sm">
-          <div className="flex items-start gap-2">
-            <Handshake className="w-4 h-4 text-emerald-600 mt-0.5 shrink-0" />
-            <div>
-              <p className="font-semibold text-emerald-700">Andian — Potential Sponsor</p>
-              <p className="text-muted-foreground text-xs mt-1">Andian (lunch & coffee breaks caterer) could enter as a sponsor to improve budget viability. Negotiation in progress.</p>
-            </div>
+      <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 text-sm">
+        <div className="flex items-start gap-2">
+          <Handshake className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-semibold text-amber-700">Avianca / Key Institute Convention</p>
+            <p className="text-muted-foreground text-xs mt-1">$22,500 cash + $22,500 in-kind commitment pending formal documentation. In-kind covers a PR dinner/event. Once signed, Avianca covers the full flight block.</p>
           </div>
         </div>
       </div>
