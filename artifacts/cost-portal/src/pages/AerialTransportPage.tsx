@@ -1,127 +1,691 @@
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Plane, Users, Info, AlertTriangle, Handshake, Lock } from "lucide-react";
-import { AVIANCA_ROUTES, type AviancaRoute } from "@/data/budgetData";
-import { useLocalStorage } from "@/hooks/useLocalStorage";
-import { formatUSD } from "@/lib/utils";
+import {
+  Plane, Users, Handshake, Cloud, CloudOff, Loader2, ExternalLink,
+  TrendingDown, TrendingUp, CheckCircle2, ListChecks, MapPin, Calendar,
+} from "lucide-react";
+import { useFlightsApi } from "@/hooks/useFlightsApi";
+import { useAuth } from "@/hooks/useAuth";
+import type {
+  FlightOption, FlightRouteGroup, FlightStatus,
+} from "@/data/flightsData";
+import { formatUSD, cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+
+const STATUS_OPTIONS: FlightStatus[] = ["Pendiente", "En revisión", "Aprobado", "Reservado"];
+
+const STATUS_BADGE: Record<FlightStatus, string> = {
+  "Pendiente": "bg-gray-500/10 text-gray-500 border-gray-500/20",
+  "En revisión": "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  "Aprobado": "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+  "Reservado": "bg-violet-500/10 text-violet-600 border-violet-500/20",
+};
+
+const OPT_BADGE: Record<FlightOption["badge"], string> = {
+  "RECOMENDADO": "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+  "ALTERNATIVA": "bg-blue-500/10 text-blue-600 border-blue-500/20",
+  "ECONÓMICO": "bg-amber-500/10 text-amber-600 border-amber-500/20",
+};
+
+function getSelectedOption(route: FlightRouteGroup): FlightOption | undefined {
+  return route.options.find(o => o.id === route.selectedOptionId) ?? route.options[0];
+}
+
+interface ArrivalRow { date: string; time: string; origin: string; group: string; pax: number; flight: string; depTime: string }
+interface DepartureRow { date: string; time: string; destination: string; group: string; pax: number; flight: string; arrTime: string }
+
+const MONTH_ORDER = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+
+function dateSortKey(d: string): number {
+  // "16 nov 2026" → 20261116
+  const m = d.match(/^(\d+)\s+(\w+)\s+(\d{4})/);
+  if (!m) return 0;
+  const day = parseInt(m[1], 10);
+  const mon = MONTH_ORDER.indexOf(m[2].toLowerCase().slice(0, 3));
+  const year = parseInt(m[3], 10);
+  return year * 10000 + (mon + 1) * 100 + day;
+}
+
+function timeSortKey(t: string): number {
+  const m = t.match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return 9999;
+  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+}
+
+// Parses "17 nov 2026: SFO 13:20 → SAL 20:50" or "20 nov 2026: SAL → SFO"
+function parseSegment(s: string): { date: string; origin: string; originTime: string; dest: string; destTime: string } | null {
+  const m = s.match(/^(\d+\s+\w+\s+\d{4}):\s*([A-Z]{3})\s*(\S*)\s*→\s*([A-Z]{3})\s*(\S*)/);
+  if (!m) return null;
+  return {
+    date: m[1],
+    origin: m[2],
+    originTime: m[3] || "",
+    dest: m[4],
+    destTime: m[5] || "",
+  };
+}
+
+function deriveLogistics(routes: FlightRouteGroup[]): { arrivals: ArrivalRow[]; departures: DepartureRow[] } {
+  const arrivals: ArrivalRow[] = [];
+  const departures: DepartureRow[] = [];
+  for (const r of routes) {
+    const sel = getSelectedOption(r);
+    if (!sel) continue;
+    const flightLabel = `${sel.airline}${sel.flightNumbers.match(/AV\d+/) ? " " + sel.flightNumbers.match(/AV\d+/)![0] : ""}${sel.stops !== "Directo" ? ` (${sel.stops.replace(/^1 escala\s*/, "vía ").replace(/[()]/g, "")})` : ""}`;
+    const ida = parseSegment(sel.scheduleIda);
+    if (ida) {
+      // Arrival to SAL (or final destination)
+      arrivals.push({
+        date: ida.date,
+        time: ida.destTime || "Por confirmar",
+        origin: ida.origin,
+        group: r.label.replace(/^Grupo /, "Grupo "),
+        pax: r.pax,
+        flight: flightLabel,
+        depTime: ida.originTime || "Por confirmar",
+      });
+    }
+    const vuelta = parseSegment(sel.scheduleVuelta);
+    if (vuelta) {
+      departures.push({
+        date: vuelta.date,
+        time: vuelta.originTime || "Por confirmar",
+        destination: vuelta.dest,
+        group: r.label,
+        pax: r.pax,
+        flight: flightLabel,
+        arrTime: vuelta.destTime || "",
+      });
+    }
+  }
+  arrivals.sort((a, b) => dateSortKey(a.date) - dateSortKey(b.date) || timeSortKey(a.time) - timeSortKey(b.time));
+  departures.sort((a, b) => dateSortKey(a.date) - dateSortKey(b.date) || timeSortKey(a.time) - timeSortKey(b.time));
+  return { arrivals, departures };
+}
+
+function SyncIndicator({ saving, lastSaved, error }: { saving: boolean; lastSaved: Date | null; error: string | null }) {
+  if (error) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-red-500">
+        <CloudOff className="w-3.5 h-3.5" /> {error}
+      </span>
+    );
+  }
+  if (saving) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Guardando...
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+      <Cloud className="w-3.5 h-3.5 text-emerald-500" />
+      {lastSaved ? `Sincronizado ${lastSaved.toLocaleTimeString()}` : "Sincronizado"}
+    </span>
+  );
+}
 
 export default function AerialTransportPage() {
-  const [routes] = useLocalStorage<AviancaRoute[]>("avianca-routes-v2", AVIANCA_ROUTES);
+  const { state, setState, loading, saving, lastSaved, error, meta } = useFlightsApi();
+  const { user } = useAuth();
+  const canEdit = !!user;
+  const [tab, setTab] = useState("resumen");
 
-  const totalFlights = routes.reduce((s, r) => s + r.costoTotal, 0);
-  const totalPax = routes.reduce((s, r) => s + r.asientos, 0);
+  const derivedLogistics = useMemo(() => deriveLogistics(state.routes), [state.routes]);
+
+  const summary = useMemo(() => {
+    const rows = state.routes.map(r => {
+      const sel = getSelectedOption(r);
+      const perPax = sel?.pricePerPax ?? 0;
+      const subtotal = perPax * r.pax;
+      const originalTotal = r.originalPerPax * r.pax;
+      const initialTotal = r.initialLivePerPax * r.pax;
+      return {
+        route: r,
+        selected: sel,
+        perPax,
+        subtotal,
+        originalTotal,
+        initialTotal,
+        vsOriginal: subtotal - originalTotal,
+        vsInitial: subtotal - initialTotal,
+      };
+    });
+    const totalSelected = rows.reduce((s, r) => s + r.subtotal, 0);
+    const totalOriginal = rows.reduce((s, r) => s + r.originalTotal, 0);
+    const totalPax = state.routes.reduce((s, r) => s + r.pax, 0);
+    const decided = state.routes.filter(r => r.status === "Aprobado" || r.status === "Reservado").length;
+    return { rows, totalSelected, totalOriginal, totalPax, decided };
+  }, [state.routes]);
+
+  const updateRoute = (id: string, patch: Partial<FlightRouteGroup>) => {
+    setState(prev => ({
+      ...prev,
+      routes: prev.routes.map(r => r.id === id ? { ...r, ...patch } : r),
+    }));
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <span className="text-muted-foreground text-sm">Loading flights...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-8">
-      <div className="rounded-xl border-2 border-amber-500/40 bg-amber-500/10 p-4 flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
-        <div className="space-y-1">
-          <p className="font-semibold text-amber-700 flex items-center gap-2">
-            Sección deprecada — Bloqueada
-            <Lock className="w-3.5 h-3.5" />
-          </p>
-          <p className="text-sm text-amber-700/90">
-            Esta sección está deprecada. El total Avianca está cerrado en <span className="font-mono font-semibold">$56,980.03</span> all-inclusive (IVA y tasas incluidas) y no requiere ediciones. Se conserva solo como referencia histórica.
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {[
-          { label: "Total Flight Block", value: formatUSD(totalFlights), sub: "IVA & taxes already included", icon: Plane, color: "text-blue-500" },
-          { label: "Total Passengers", value: String(totalPax), sub: "Business Flex class", icon: Users, color: "text-indigo-500" },
-        ].map(card => (
-          <motion.div
-            key={card.label}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="rounded-xl border border-card-border bg-card p-5 shadow-sm"
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <div className={`w-9 h-9 rounded-lg bg-muted flex items-center justify-center ${card.color}`}>
-                <card.icon className="w-5 h-5" />
-              </div>
-              <p className="text-sm text-muted-foreground font-medium">{card.label}</p>
-            </div>
-            <p className="text-2xl font-bold text-foreground">{card.value}</p>
-            <p className="text-xs text-muted-foreground mt-1">{card.sub}</p>
-          </motion.div>
-        ))}
-      </div>
-
-      <section className="opacity-75">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-            <Plane className="w-4 h-4 text-blue-500" />
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="rounded-xl border border-card-border bg-gradient-to-br from-blue-500/10 to-indigo-500/10 p-5">
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-xl font-bold flex items-center gap-2">
+              <Plane className="w-5 h-5 text-blue-600" />
+              Vuelos San Salvador (SAL)
+              <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/20 ml-1">PRECIOS EN VIVO</Badge>
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Living document · 16/17 nov → 20 nov 2026 · {summary.totalPax} pasajeros · 5 grupos · 14 opciones válidas (regla escalas ≤5h)
+            </p>
           </div>
-          <h2 className="text-lg font-semibold">Avianca Flight Block</h2>
-          <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20 font-normal text-xs">Business Flex</Badge>
-          <Badge variant="outline" className="font-normal text-xs text-muted-foreground">Read-only</Badge>
-          <Tooltip>
-            <TooltipTrigger>
-              <Info className="w-4 h-4 text-muted-foreground cursor-help" />
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs text-xs">
-              Fares already include IVA, airport taxes, and all travel fees. No additional tax applies.
-            </TooltipContent>
-          </Tooltip>
+          <SyncIndicator saving={saving} lastSaved={lastSaved} error={error} />
         </div>
+        {meta && (
+          <p className="text-[11px] text-muted-foreground mt-2">
+            Última edición por {meta.lastEditedBy} ({meta.lastEditedByOrg}) · {new Date(meta.lastEditedAt).toLocaleString()}
+          </p>
+        )}
+      </div>
 
-        <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="text-left px-4 py-3 font-semibold text-muted-foreground">Route Group</th>
-                <th className="text-center px-4 py-3 font-semibold text-muted-foreground w-20">Seats</th>
-                <th className="text-right px-4 py-3 font-semibold text-muted-foreground w-32">Per Passenger</th>
-                <th className="text-right px-4 py-3 font-semibold text-muted-foreground w-32">Route Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {routes.map(route => (
-                <tr key={route.id} className="border-b border-border/50">
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <Plane className="w-3.5 h-3.5 text-muted-foreground" />
-                      <span className="font-medium">{route.grupo}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-center font-mono">{route.asientos}</td>
-                  <td className="px-4 py-3 text-right font-mono">${route.costoPorPasajero}</td>
-                  <td className="px-4 py-3 text-right font-mono font-semibold">{formatUSD(route.costoTotal)}</td>
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard label="Total seleccionado" value={formatUSD(summary.totalSelected)} sub={`${summary.totalPax} pax`} icon={Plane} color="bg-blue-500/10 text-blue-600" />
+        <KpiCard label="Cotización original" value={formatUSD(summary.totalOriginal)} sub="Baseline Avianca" icon={Users} color="bg-gray-500/10 text-gray-500" />
+        <KpiCard
+          label="Ahorro vs original"
+          value={formatUSD(Math.abs(summary.totalOriginal - summary.totalSelected))}
+          sub={`${summary.totalOriginal > 0 ? (((summary.totalOriginal - summary.totalSelected) / summary.totalOriginal) * 100).toFixed(1) : 0}% menor`}
+          icon={TrendingDown}
+          color="bg-emerald-500/10 text-emerald-600"
+        />
+        <KpiCard label="Decididos" value={`${summary.decided} / ${state.routes.length}`} sub="Aprobado o reservado" icon={CheckCircle2} color={summary.decided === state.routes.length ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600"} />
+      </div>
+
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
+        <TabsList className="grid grid-cols-3 lg:grid-cols-6 w-full">
+          <TabsTrigger value="resumen">Resumen</TabsTrigger>
+          <TabsTrigger value="ahorros">Ahorros</TabsTrigger>
+          <TabsTrigger value="logistica">Logística</TabsTrigger>
+          <TabsTrigger value="opciones">Opciones</TabsTrigger>
+          <TabsTrigger value="historial">Historial</TabsTrigger>
+          <TabsTrigger value="acciones">Acciones</TabsTrigger>
+        </TabsList>
+
+        {/* RESUMEN */}
+        <TabsContent value="resumen" className="space-y-4 mt-4">
+          {summary.rows.map(row => (
+            <ResumenCard
+              key={row.route.id}
+              row={row}
+              canEdit={canEdit}
+              onStatus={(s) => updateRoute(row.route.id, { status: s })}
+              onNotes={(n) => updateRoute(row.route.id, { notes: n })}
+              onPick={() => setTab("opciones")}
+            />
+          ))}
+          <TotalsStrip totalSelected={summary.totalSelected} totalOriginal={summary.totalOriginal} totalPax={summary.totalPax} />
+        </TabsContent>
+
+        {/* AHORROS */}
+        <TabsContent value="ahorros" className="space-y-4 mt-4">
+          <div className="rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-700 text-white p-5">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <p className="text-sm font-semibold opacity-90">Ahorro total vs cotización original Avianca</p>
+                <p className="text-3xl font-bold mt-1">{formatUSD(summary.totalOriginal - summary.totalSelected)}</p>
+                <p className="text-xs opacity-80 mt-1">
+                  {formatUSD(summary.totalSelected)} seleccionado · {formatUSD(summary.totalOriginal)} original
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-5xl font-extrabold leading-none">
+                  {summary.totalOriginal > 0 ? (((summary.totalOriginal - summary.totalSelected) / summary.totalOriginal) * 100).toFixed(1) : 0}%
+                </p>
+                <p className="text-xs opacity-80 mt-1">menor que el quote original</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-card-border bg-card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-muted-foreground text-xs uppercase tracking-wide">
+                <tr>
+                  <th className="text-left px-4 py-3">Ruta</th>
+                  <th className="text-right px-4 py-3">Pax</th>
+                  <th className="text-right px-4 py-3">$/pax actual</th>
+                  <th className="text-right px-4 py-3">$/pax original</th>
+                  <th className="text-right px-4 py-3">Subtotal actual</th>
+                  <th className="text-right px-4 py-3">Subtotal original</th>
+                  <th className="text-right px-4 py-3">Ahorro</th>
+                  <th className="text-right px-4 py-3">%</th>
                 </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-border bg-muted/30">
-                <td className="px-4 py-3 font-bold" colSpan={3}>TOTAL GENERAL (IVA & taxes included)</td>
-                <td className="px-4 py-3 text-right font-bold font-mono text-lg">{formatUSD(totalFlights)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {summary.rows.map(row => {
+                  const saving = row.originalTotal - row.subtotal;
+                  const pct = row.originalTotal > 0 ? (saving / row.originalTotal) * 100 : 0;
+                  return (
+                    <tr key={row.route.id} className="border-t border-border/50">
+                      <td className="px-4 py-3 font-medium">{row.route.label}</td>
+                      <td className="px-4 py-3 text-right font-mono">{row.route.pax}</td>
+                      <td className="px-4 py-3 text-right font-mono">${row.perPax}</td>
+                      <td className="px-4 py-3 text-right font-mono text-muted-foreground">${row.route.originalPerPax.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right font-mono">{formatUSD(row.subtotal)}</td>
+                      <td className="px-4 py-3 text-right font-mono text-muted-foreground">{formatUSD(row.originalTotal)}</td>
+                      <td className={cn("px-4 py-3 text-right font-mono font-semibold", saving >= 0 ? "text-emerald-600" : "text-red-500")}>
+                        {saving >= 0 ? "↓" : "↑"} {formatUSD(Math.abs(saving))}
+                      </td>
+                      <td className={cn("px-4 py-3 text-right font-mono", saving >= 0 ? "text-emerald-600" : "text-red-500")}>
+                        {pct >= 0 ? "-" : "+"}{Math.abs(pct).toFixed(1)}%
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr className="border-t-2 border-border bg-muted/30 font-semibold">
+                  <td className="px-4 py-3" colSpan={4}>TOTAL</td>
+                  <td className="px-4 py-3 text-right font-mono">{formatUSD(summary.totalSelected)}</td>
+                  <td className="px-4 py-3 text-right font-mono text-muted-foreground">{formatUSD(summary.totalOriginal)}</td>
+                  <td className="px-4 py-3 text-right font-mono text-emerald-600">↓ {formatUSD(summary.totalOriginal - summary.totalSelected)}</td>
+                  <td className="px-4 py-3 text-right font-mono text-emerald-600">
+                    -{summary.totalOriginal > 0 ? (((summary.totalOriginal - summary.totalSelected) / summary.totalOriginal) * 100).toFixed(1) : 0}%
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </TabsContent>
 
-        <div className="mt-4 space-y-3">
-          <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs text-muted-foreground space-y-2">
+        {/* LOGÍSTICA */}
+        <TabsContent value="logistica" className="space-y-6 mt-4">
+          <LogisticsSection
+            title="Arribos a SAL"
+            icon={MapPin}
+            rows={derivedLogistics.arrivals.map(a => ({
+              date: a.date,
+              time: a.time,
+              cityLabel: `Desde ${a.origin}`,
+              group: a.group,
+              pax: a.pax,
+              flight: a.flight,
+              otherTime: `Sale ${a.depTime}`,
+            }))}
+            otherTimeLabel="Salida origen"
+            cityLabel="Origen"
+          />
+          <LogisticsSection
+            title="Salidas desde SAL"
+            icon={Plane}
+            rows={derivedLogistics.departures.map(d => ({
+              date: d.date,
+              time: d.time,
+              cityLabel: `Hacia ${d.destination}`,
+              group: d.group,
+              pax: d.pax,
+              flight: d.flight,
+              otherTime: d.arrTime ? `Llega ${d.arrTime}` : "Por confirmar",
+            }))}
+            otherTimeLabel="Llegada destino"
+            cityLabel="Destino"
+          />
+        </TabsContent>
+
+        {/* OPCIONES */}
+        <TabsContent value="opciones" className="space-y-5 mt-4">
+          {state.routes.map(route => (
+            <div key={route.id} className="rounded-xl border border-card-border bg-card overflow-hidden">
+              <div className="px-5 py-3 border-b border-border bg-muted/30 flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <h3 className="font-semibold">{route.label}</h3>
+                  <p className="text-xs text-muted-foreground">{route.pax} pax · default {route.defaultFareClass}</p>
+                </div>
+                <Badge className={STATUS_BADGE[route.status]}>{route.status}</Badge>
+              </div>
+              <div className="divide-y divide-border/50">
+                {route.options.map(opt => {
+                  const isSelected = opt.id === route.selectedOptionId;
+                  return (
+                    <div key={opt.id} className={cn("px-5 py-4 grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-4 items-start", isSelected && "bg-emerald-500/5")}>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold">{opt.airline}</span>
+                          <Badge className={OPT_BADGE[opt.badge]}>{opt.badge}</Badge>
+                          <Badge variant="outline" className="text-[10px]">{opt.fareClass}</Badge>
+                          <span className="text-xs text-muted-foreground">{opt.flightNumbers}</span>
+                        </div>
+                        <p className="text-xs text-foreground/80 font-mono"><span className="font-semibold not-italic font-sans">Ida:</span> {opt.scheduleIda}</p>
+                        <p className="text-xs text-foreground/80 font-mono"><span className="font-semibold not-italic font-sans">Vuelta:</span> {opt.scheduleVuelta}</p>
+                        <p className="text-xs text-muted-foreground">{opt.duration} · {opt.stops}</p>
+                        <p className="text-[11px] text-muted-foreground leading-relaxed">{opt.includes}</p>
+                        <a href={opt.deepLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-1">
+                          <ExternalLink className="w-3 h-3" /> Validar en Google Flights
+                        </a>
+                      </div>
+                      <div className="text-right whitespace-nowrap">
+                        <p className="text-xs text-muted-foreground">Precio/pax</p>
+                        <p className="text-xl font-bold">${opt.pricePerPax}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Subtotal {route.pax} pax</p>
+                        <p className="text-sm font-semibold">{formatUSD(opt.pricePerPax * route.pax)}</p>
+                      </div>
+                      <button
+                        disabled={!canEdit || isSelected}
+                        onClick={() => updateRoute(route.id, { selectedOptionId: opt.id })}
+                        className={cn(
+                          "px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors whitespace-nowrap self-center",
+                          isSelected
+                            ? "bg-emerald-600 text-white border-emerald-600 cursor-default"
+                            : canEdit
+                              ? "bg-card border-border hover:bg-muted"
+                              : "bg-muted text-muted-foreground border-border cursor-not-allowed",
+                        )}
+                      >
+                        {isSelected ? "✓ Seleccionado" : "Seleccionar"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </TabsContent>
+
+        {/* HISTORIAL */}
+        <TabsContent value="historial" className="space-y-4 mt-4">
+          <div className="rounded-xl border border-card-border bg-card p-4">
+            <p className="text-sm text-muted-foreground">
+              Capturas de precio por opción a lo largo del tiempo. Cambios entre capturas se resaltan en verde (baja) o rojo (sube).
+            </p>
+          </div>
+          {state.routes.map(route => (
+            <div key={route.id} className="rounded-xl border border-card-border bg-card overflow-hidden">
+              <div className="px-5 py-3 border-b border-border bg-muted/30">
+                <h3 className="font-semibold">{route.label}</h3>
+                <p className="text-xs text-muted-foreground">Última captura: {route.lastCaptureDate}</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/20 text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="text-left px-4 py-2">Opción</th>
+                      <th className="text-left px-4 py-2">Airline</th>
+                      <th className="text-right px-4 py-2">Original</th>
+                      {state.history.map(h => (
+                        <th key={h.date} className="text-right px-4 py-2">{h.date}</th>
+                      ))}
+                      <th className="text-right px-4 py-2">Δ vs original</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {route.options.map(opt => {
+                      const capturedPrices = state.history.map(h => h.prices[opt.id]);
+                      const last = capturedPrices[capturedPrices.length - 1] ?? opt.pricePerPax;
+                      const vsOrig = last - route.originalPerPax;
+                      return (
+                        <tr key={opt.id} className={cn("border-t border-border/50", opt.id === route.selectedOptionId && "bg-emerald-500/5")}>
+                          <td className="px-4 py-2">
+                            <Badge className={cn(OPT_BADGE[opt.badge], "text-[10px]")}>{opt.badge}</Badge>
+                          </td>
+                          <td className="px-4 py-2">{opt.airline}</td>
+                          <td className="px-4 py-2 text-right font-mono text-muted-foreground">${route.originalPerPax.toFixed(2)}</td>
+                          {capturedPrices.map((p, i) => {
+                            const prev = i === 0 ? null : capturedPrices[i - 1];
+                            const delta = prev != null && p != null ? p - prev : null;
+                            return (
+                              <td key={i} className="px-4 py-2 text-right font-mono">
+                                ${p ?? "—"}
+                                {delta != null && delta !== 0 && (
+                                  <span className={cn("ml-1 text-[10px]", delta > 0 ? "text-red-500" : "text-emerald-600")}>
+                                    {delta > 0 ? "↑" : "↓"}{Math.abs(delta)}
+                                  </span>
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td className={cn("px-4 py-2 text-right font-mono font-semibold", vsOrig < 0 ? "text-emerald-600" : vsOrig > 0 ? "text-red-500" : "text-muted-foreground")}>
+                            {vsOrig === 0 ? "0" : `${vsOrig < 0 ? "↓" : "↑"} $${Math.abs(vsOrig).toFixed(0)}`}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </TabsContent>
+
+        {/* ACCIONES */}
+        <TabsContent value="acciones" className="space-y-4 mt-4">
+          <div className="rounded-xl border border-card-border bg-card p-5">
+            <h3 className="font-semibold flex items-center gap-2 mb-3">
+              <ListChecks className="w-4 h-4 text-amber-600" />
+              Próximos pasos & checklist
+            </h3>
+            <ul className="space-y-2 text-sm">
+              {state.nextSteps.map((step, i) => (
+                <li key={i} className="flex items-start gap-2 px-3 py-2 rounded-md border border-border/50 bg-muted/30">
+                  <span className="text-xs text-muted-foreground mt-0.5 font-mono w-5 shrink-0">{i + 1}.</span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="rounded-lg bg-amber-500/5 border border-amber-500/20 p-4 text-xs text-muted-foreground">
             <div className="flex items-start gap-2">
               <Handshake className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
               <div>
-                <p className="font-semibold text-amber-700">Avianca / Key Institute Sponsorship Convention — Pending Documentation</p>
-                <p className="mt-1">Avianca will commit $22,500 cash + $22,500 in-kind through a convention agreement with Key Institute. The in-kind portion covers a PR dinner/event during the event launch period (not directly for the main event). Once the documentation and agreement process is complete, Avianca will cover the full requested flight block under the negotiated terms and conditions.</p>
-                <p className="mt-1 text-amber-600 font-medium">Status: Awaiting formal documentation and signatures.</p>
+                <p className="font-semibold text-amber-700">Avianca / Key Institute Convention — Pendiente de documentación</p>
+                <p className="mt-1">
+                  Compromiso paralelo de Avianca con Key Institute: $22,500 cash + $22,500 in-kind. El in-kind cubre un evento PR durante el lanzamiento (no el evento principal). Una vez firmado, Avianca podría cubrir el bloque de vuelos bajo términos negociados — independiente del pricing de Google Flights mostrado arriba.
+                </p>
+                <p className="mt-1 text-amber-600 font-medium">Status: A la espera de documentación formal.</p>
               </div>
             </div>
           </div>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
 
-          <div className="p-3 rounded-lg bg-blue-500/5 border border-blue-500/15 text-xs text-muted-foreground space-y-1">
-            <p className="font-semibold text-blue-600">Additional Avianca Benefits Included:</p>
-            <p>15% discount on Economy fares for general attendees</p>
-            <p>20% discount on Business fares for general attendees</p>
-            <p>Unlimited discount code redemption portal for the event</p>
-          </div>
+function KpiCard({ label, value, sub, icon: Icon, color }: { label: string; value: string; sub: string; icon: any; color: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-xl border border-card-border bg-card p-4 shadow-sm"
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center", color)}>
+          <Icon className="w-3.5 h-3.5" />
         </div>
-      </section>
+        <p className="text-xs text-muted-foreground font-medium">{label}</p>
+      </div>
+      <p className="text-lg font-bold">{value}</p>
+      <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>
+    </motion.div>
+  );
+}
+
+function ResumenCard({ row, canEdit, onStatus, onNotes, onPick }: {
+  row: { route: FlightRouteGroup; selected: FlightOption | undefined; perPax: number; subtotal: number; originalTotal: number; vsOriginal: number; vsInitial: number; initialTotal: number };
+  canEdit: boolean;
+  onStatus: (s: FlightStatus) => void;
+  onNotes: (n: string) => void;
+  onPick: () => void;
+}) {
+  const { route, selected, perPax, subtotal, originalTotal, vsOriginal, vsInitial } = row;
+  return (
+    <div className="rounded-xl border border-card-border bg-card overflow-hidden">
+      <div className="px-5 py-3 border-b border-border bg-muted/30 flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h3 className="font-semibold">{route.label}</h3>
+          <p className="text-xs text-muted-foreground">
+            {route.pax} pax · {selected?.airline} · {selected?.fareClass} · {selected?.stops}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {canEdit ? (
+            <Select value={route.status} onValueChange={(v) => onStatus(v as FlightStatus)}>
+              <SelectTrigger className="h-8 text-xs w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          ) : (
+            <Badge className={STATUS_BADGE[route.status]}>{route.status}</Badge>
+          )}
+        </div>
+      </div>
+      <div className="p-5 grid grid-cols-1 lg:grid-cols-[2fr_1fr_1fr] gap-5">
+        <div className="space-y-1.5 text-sm">
+          {selected ? (
+            <>
+              <p className="font-mono text-xs"><span className="font-semibold font-sans">Ida:</span> {selected.scheduleIda}</p>
+              <p className="font-mono text-xs"><span className="font-semibold font-sans">Vuelta:</span> {selected.scheduleVuelta}</p>
+              <p className="text-xs text-muted-foreground">{selected.duration}</p>
+              <p className="text-[11px] text-muted-foreground border-t border-border/50 pt-2 mt-2">{selected.includes}</p>
+              <a href={selected.deepLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline mt-1">
+                <ExternalLink className="w-3 h-3" /> Validar en Google Flights
+              </a>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Sin opción seleccionada.</p>
+          )}
+        </div>
+        <div className="text-xs space-y-1">
+          <p className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">Varianza</p>
+          <p className={vsOriginal < 0 ? "text-emerald-600 font-medium" : vsOriginal > 0 ? "text-red-500 font-medium" : "text-muted-foreground"}>
+            vs Original (${route.originalPerPax.toFixed(2)}/pax): {vsOriginal < 0 ? "↓" : "↑"} ${Math.abs(vsOriginal / route.pax).toFixed(2)}/pax
+          </p>
+          <p className={vsInitial < 0 ? "text-emerald-600 font-medium" : vsInitial > 0 ? "text-red-500 font-medium" : "text-muted-foreground"}>
+            vs Inicial Live (${route.initialLivePerPax}/pax): {vsInitial === 0 ? "sin cambio" : `${vsInitial < 0 ? "↓" : "↑"} $${Math.abs(vsInitial / route.pax).toFixed(2)}/pax`}
+          </p>
+          <p className="text-muted-foreground pt-1">Última captura: {route.lastCaptureDate}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] uppercase text-muted-foreground font-semibold">Precio / pax</p>
+          <p className="text-2xl font-extrabold">${perPax}</p>
+          <p className="text-[10px] uppercase text-muted-foreground font-semibold mt-2">Subtotal ({route.pax} pax)</p>
+          <p className="text-lg font-bold">{formatUSD(subtotal)}</p>
+          <p className={cn("text-xs font-semibold mt-1", vsOriginal < 0 ? "text-emerald-600" : vsOriginal > 0 ? "text-red-500" : "text-muted-foreground")}>
+            {vsOriginal < 0 ? "↓" : vsOriginal > 0 ? "↑" : ""} {formatUSD(Math.abs(vsOriginal))} vs original
+          </p>
+        </div>
+      </div>
+      <div className="px-5 pb-4 -mt-1 flex items-start gap-3 flex-wrap">
+        <button onClick={onPick} className="text-xs text-blue-600 hover:underline">Cambiar opción →</button>
+      </div>
+      <div className="px-5 pb-5">
+        <label className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Notas</label>
+        <Textarea
+          value={route.notes}
+          onChange={(e) => onNotes(e.target.value)}
+          disabled={!canEdit}
+          placeholder="Notas para este grupo..."
+          className="mt-1 min-h-[60px] text-sm"
+        />
+      </div>
+    </div>
+  );
+}
+
+function TotalsStrip({ totalSelected, totalOriginal, totalPax }: { totalSelected: number; totalOriginal: number; totalPax: number }) {
+  const saving = totalOriginal - totalSelected;
+  const pct = totalOriginal > 0 ? (saving / totalOriginal) * 100 : 0;
+  return (
+    <div className="rounded-xl bg-[#1e3a5f] text-white p-5 flex items-center justify-between flex-wrap gap-4">
+      <div>
+        <p className="text-[10px] uppercase tracking-wide opacity-70">Total seleccionado</p>
+        <p className="text-2xl font-extrabold">{formatUSD(totalSelected)}</p>
+        <p className="text-xs opacity-70 mt-0.5">{totalPax} pax</p>
+      </div>
+      <div>
+        <p className="text-[10px] uppercase tracking-wide opacity-70">Original</p>
+        <p className="text-2xl font-extrabold opacity-80 line-through">{formatUSD(totalOriginal)}</p>
+      </div>
+      <div className="text-right">
+        <p className="text-[10px] uppercase tracking-wide opacity-70">Ahorro</p>
+        <p className="text-2xl font-extrabold text-emerald-300">
+          {saving >= 0 ? <TrendingDown className="inline w-5 h-5" /> : <TrendingUp className="inline w-5 h-5" />} {formatUSD(Math.abs(saving))}
+        </p>
+        <p className="text-xs opacity-80">{pct >= 0 ? "-" : "+"}{Math.abs(pct).toFixed(1)}% vs original</p>
+      </div>
+    </div>
+  );
+}
+
+function LogisticsSection({ title, icon: Icon, rows, otherTimeLabel, cityLabel }: {
+  title: string;
+  icon: any;
+  rows: { date: string; time: string; cityLabel: string; group: string; pax: number; flight: string; otherTime: string }[];
+  otherTimeLabel: string;
+  cityLabel: string;
+}) {
+  // Group by date
+  const byDate = new Map<string, typeof rows>();
+  for (const r of rows) {
+    if (!byDate.has(r.date)) byDate.set(r.date, []);
+    byDate.get(r.date)!.push(r);
+  }
+  return (
+    <div className="rounded-xl border border-card-border bg-card overflow-hidden">
+      <div className="px-5 py-3 border-b border-border bg-muted/30 flex items-center gap-2">
+        <Icon className="w-4 h-4 text-blue-600" />
+        <h3 className="font-semibold">{title}</h3>
+      </div>
+      {Array.from(byDate.entries()).map(([date, dateRows]) => (
+        <div key={date}>
+          <div className="px-5 py-2 bg-muted/20 border-t border-border/50 text-xs font-semibold flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-muted-foreground" /> {date}
+          </div>
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase text-muted-foreground">
+              <tr>
+                <th className="text-left px-5 py-2 w-24">Hora SAL</th>
+                <th className="text-left px-5 py-2">{cityLabel}</th>
+                <th className="text-left px-5 py-2">Grupo</th>
+                <th className="text-right px-5 py-2">Pax</th>
+                <th className="text-left px-5 py-2">Vuelo</th>
+                <th className="text-left px-5 py-2">{otherTimeLabel}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dateRows.map((r, i) => (
+                <tr key={i} className="border-t border-border/50">
+                  <td className="px-5 py-2 font-mono font-semibold">{r.time}</td>
+                  <td className="px-5 py-2">{r.cityLabel}</td>
+                  <td className="px-5 py-2">{r.group}</td>
+                  <td className="px-5 py-2 text-right font-mono">{r.pax}</td>
+                  <td className="px-5 py-2 text-xs">{r.flight}</td>
+                  <td className="px-5 py-2 text-xs text-muted-foreground">{r.otherTime}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
     </div>
   );
 }

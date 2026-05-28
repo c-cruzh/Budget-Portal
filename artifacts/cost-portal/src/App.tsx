@@ -38,7 +38,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: "/budget", label: "Budget Items", icon: TableProperties },
   { path: "/agenda", label: "Agenda", icon: Calendar },
   { path: "/travel/ground", label: "Ground Transport", icon: Bus, deprecated: true },
-  { path: "/travel/aerial", label: "Aerial Transport", icon: Plane, deprecated: true },
+  { path: "/travel/aerial", label: "Flights / Vuelos SAL", icon: Plane },
   { path: "/coctel", label: "Coctel (Delibanquetes)", icon: Wine, deprecated: true },
   { path: "/bar-bebidas", label: "Bar & Bebidas", icon: Coffee, deprecated: true },
   { path: "/lunch", label: "Lunch & Coffee Breaks", icon: Sandwich, deprecated: true },

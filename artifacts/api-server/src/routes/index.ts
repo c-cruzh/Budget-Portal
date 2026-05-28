@@ -6,6 +6,7 @@ import sponsorsRouter from "./sponsors";
 import auditRouter from "./audit";
 import agendaRouter from "./agenda";
 import subEventsRouter from "./sub-events";
+import flightsRouter from "./flights";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(sponsorsRouter);
 router.use(auditRouter);
 router.use(agendaRouter);
 router.use(subEventsRouter);
+router.use(flightsRouter);
 
 export default router;
