@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight, Info,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
-  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings
+  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2
 } from "lucide-react";
 import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, type BudgetItem, type QuoteOption, type SubEvent } from "@/data/budgetData";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
@@ -11,6 +11,8 @@ import { useSubEventsApi } from "@/hooks/useSubEventsApi";
 import { useAuth } from "@/hooks/useAuth";
 import { ComboInput } from "@/components/ComboInput";
 import { SubEventsManagerDialog } from "@/components/SubEventsManagerDialog";
+import { SplitByDayDialog } from "@/components/SplitByDayDialog";
+import { toast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface PortalUser {
@@ -247,6 +249,7 @@ export default function BudgetPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editItem, setEditItem] = useState<Partial<BudgetItem>>({});
+  const [splitItem, setSplitItem] = useState<BudgetItem | null>(null);
   const [newItem, setNewItem] = useState<Partial<BudgetItem>>({
     evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "",
     inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1,
@@ -1684,6 +1687,14 @@ export default function BudgetPage() {
                             </Tooltip>
                             <Tooltip>
                               <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => setSplitItem(item)}>
+                                  <Columns2 className="w-3 h-3" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Split por día</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-destructive" onClick={() => deleteItem(item.id)}>
                                   <Trash2 className="w-3 h-3" />
                                 </Button>
@@ -1952,6 +1963,24 @@ export default function BudgetPage() {
         items={items}
         canEdit={canEditTaxonomy}
         onSave={setSubEvents}
+      />
+
+      <SplitByDayDialog
+        open={!!splitItem}
+        onOpenChange={(o) => { if (!o) setSplitItem(null); }}
+        original={splitItem}
+        subEvents={subEvents}
+        onApprove={(newItems) => {
+          if (!splitItem) return;
+          const originalId = splitItem.id;
+          setItems(prev => {
+            const next = prev.filter(i => i.id !== originalId).concat(newItems);
+            saveFull(next);
+            return next;
+          });
+          setSplitItem(null);
+          toast({ title: "Item dividido en 2 filas por día" });
+        }}
       />
     </div>
   );
