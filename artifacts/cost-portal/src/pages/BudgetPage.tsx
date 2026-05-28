@@ -1,11 +1,18 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
-  Search, Download, Plus, ChevronRight, Info,
+  Search, Download, Plus, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, Info,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
   Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus
 } from "lucide-react";
 import { CreateTaskFromItemDialog } from "@/components/CreateTaskFromItemDialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
+import { FlagsChips, type FlagKey } from "@/components/budget/FlagsChips";
+import { ColumnsMenu } from "@/components/budget/ColumnsMenu";
+import { FiltersPopover, type ActiveFilterChip } from "@/components/budget/FiltersPopover";
+import { BulkActionsBar } from "@/components/budget/BulkActionsBar";
+import { BUDGET_COLUMNS, DEFAULT_VISIBLE } from "@/components/budget/columns";
 import type { LinkedBudgetItem } from "@/data/tasksBoardData";
 import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, type BudgetItem, type QuoteOption, type SubEvent } from "@/data/budgetData";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
@@ -114,6 +121,20 @@ function ColHeader({ label, info, align = "left" }: { label: string; info: strin
         {info}
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+function SortableHeader({ label, sortKey, current, dir, onSort, align = "left" }: { label: string; sortKey: string; current: string | null; dir: "asc" | "desc"; onSort: (key: string) => void; align?: "left" | "center" | "right" }) {
+  const active = current === sortKey;
+  const Icon = !active ? ChevronsUpDown : dir === "asc" ? ChevronUp : ChevronDown;
+  return (
+    <button
+      onClick={() => onSort(sortKey)}
+      className={cn("flex items-center gap-1 select-none hover:text-foreground transition-colors w-full", align === "right" && "justify-end", align === "center" && "justify-center", active && "text-primary")}
+    >
+      <span>{label}</span>
+      <Icon className="w-2.5 h-2.5 flex-shrink-0 opacity-60" />
+    </button>
   );
 }
 
@@ -249,7 +270,26 @@ export default function BudgetPage() {
   const [filterAparte, setFilterAparte] = useState(false);
   const [filterNiceToHave, setFilterNiceToHave] = useState(false);
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
+  const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set());
+  const [visibleColumns, setVisibleColumns] = useLocalStorage<string[]>("budget.visibleColumns.v1", DEFAULT_VISIBLE);
+  const [density, setDensity] = useLocalStorage<"compact" | "comfortable">("budget.density.v1", "compact");
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
+
+  const colVisible = useMemo(() => new Set(visibleColumns), [visibleColumns]);
+  const isCol = useCallback((id: string) => colVisible.has(id) || BUDGET_COLUMNS.find(c => c.id === id)?.always, [colVisible]);
+  const cellPadY = density === "comfortable" ? "py-2.5" : "py-1.5";
+  const cellTextSize = density === "comfortable" ? "text-sm" : "text-xs";
+
+  const toggleSort = useCallback((key: string) => {
+    setSortKey(prev => {
+      if (prev !== key) { setSortDir("asc"); return key; }
+      if (sortDir === "asc") { setSortDir("desc"); return key; }
+      return null;
+    });
+  }, [sortDir]);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editItem, setEditItem] = useState<Partial<BudgetItem>>({});
   const [splitItem, setSplitItem] = useState<BudgetItem | null>(null);
@@ -357,9 +397,46 @@ export default function BudgetPage() {
     return out;
   }, [items, filterSubEvents, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterQtyDias, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
 
+  const sorted = useMemo(() => {
+    if (!sortKey) return filtered;
+    const dir = sortDir === "asc" ? 1 : -1;
+    const get = (it: BudgetItem): string | number => {
+      switch (sortKey) {
+        case "item": return (it.item || "").toLowerCase();
+        case "qty": return Number(it.qty) || 0;
+        case "precioUnit": return Number(it.precioUnitario) || 0;
+        case "dias": return Number(it.qtyDias) || 0;
+        case "total": return Number(it.total) || 0;
+        case "proveedor": return (it.proveedor || "").toLowerCase();
+        case "status": return (it.statusCotizacion || "").toLowerCase();
+        case "assigned": return (it.assignedTo || "").toLowerCase();
+        default: return 0;
+      }
+    };
+    return [...filtered].sort((a, b) => {
+      const va = get(a); const vb = get(b);
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+  }, [filtered, sortKey, sortDir]);
+
+  const parentKeyOf = useCallback((it: BudgetItem) => {
+    return `${(it.item || "").trim().toLowerCase()}|${it.area || ""}|${it.centroCosto || ""}|${it.evento || ""}`;
+  }, []);
+
+  const multiDayGroups = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const it of items) {
+      const k = parentKeyOf(it);
+      counts.set(k, (counts.get(k) || 0) + 1);
+    }
+    return counts;
+  }, [items, parentKeyOf]);
+
   const grouped = useMemo(() => {
     const map = new Map<string, { subEventId: string; evento: string; area: string; centroCosto: string; items: BudgetItem[] }>();
-    filtered.forEach(item => {
+    sorted.forEach(item => {
       const seId = item.subEventId || "__unassigned__";
       const cc = item.centroCosto || "(Sin centro)";
       const key = `${seId}__${item.area}__${cc}`;
@@ -376,7 +453,48 @@ export default function BudgetPage() {
       return a[1].centroCosto.localeCompare(b[1].centroCosto);
     });
     return new Map(entries);
-  }, [filtered, subEventOrder]);
+  }, [sorted, subEventOrder]);
+
+  type RenderRow =
+    | { kind: "single"; item: BudgetItem }
+    | { kind: "parent"; key: string; sample: BudgetItem; children: BudgetItem[]; total: number; sumQty: number; sumDias: number };
+
+  const renderRowsByGroup = useMemo(() => {
+    const out = new Map<string, RenderRow[]>();
+    for (const [gKey, group] of grouped.entries()) {
+      const byParent = new Map<string, BudgetItem[]>();
+      const order: string[] = [];
+      for (const it of group.items) {
+        const k = parentKeyOf(it);
+        if (!byParent.has(k)) { byParent.set(k, []); order.push(k); }
+        byParent.get(k)!.push(it);
+      }
+      const rows: RenderRow[] = [];
+      for (const k of order) {
+        const arr = byParent.get(k)!;
+        const totalAcross = (multiDayGroups.get(k) || 1);
+        if (arr.length > 1 || totalAcross > 1 && arr.length === totalAcross) {
+          if (arr.length > 1) {
+            rows.push({
+              kind: "parent",
+              key: `${gKey}::${k}`,
+              sample: arr[0],
+              children: arr,
+              total: arr.reduce((s, x) => s + x.total, 0),
+              sumQty: arr.reduce((s, x) => s + (Number(x.qty) || 0), 0),
+              sumDias: arr.reduce((s, x) => s + (Number(x.qtyDias) || 0), 0),
+            });
+          } else {
+            rows.push({ kind: "single", item: arr[0] });
+          }
+        } else {
+          rows.push({ kind: "single", item: arr[0] });
+        }
+      }
+      out.set(gKey, rows);
+    }
+    return out;
+  }, [grouped, parentKeyOf, multiDayGroups]);
 
   const subEventSummaries = useMemo(() => {
     const buckets = new Map<string, { id: string; name: string; color: string; cash: number; inKind: number; pending: number; count: number }>();
@@ -669,6 +787,68 @@ export default function BudgetPage() {
     });
   };
 
+  const toggleParent = (key: string) => {
+    setExpandedParents(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectAllVisible = useCallback(() => {
+    setSelectedIds(prev => {
+      const visibleIds = filtered.map(i => i.id);
+      const allSelected = visibleIds.every(id => prev.has(id));
+      if (allSelected) {
+        const next = new Set(prev);
+        for (const id of visibleIds) next.delete(id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const id of visibleIds) next.add(id);
+      return next;
+    });
+  }, [filtered]);
+
+  const bulkUpdate = useCallback((mutator: (item: BudgetItem) => BudgetItem) => {
+    setItems(prev => {
+      const next = prev.map(it => selectedIds.has(it.id) ? recalcItem(mutator(it)) : it);
+      saveFull(next);
+      return next;
+    });
+  }, [setItems, saveFull, selectedIds]);
+
+  const bulkDelete = useCallback(() => {
+    setItems(prev => {
+      const next = prev.filter(i => !selectedIds.has(i.id));
+      saveFull(next);
+      return next;
+    });
+    setSelectedIds(new Set());
+    toast({ title: "Items borrados", description: `${selectedIds.size} items eliminados` });
+  }, [setItems, saveFull, selectedIds]);
+
+  const bulkExportCsv = useCallback(() => {
+    const rows = items.filter(i => selectedIds.has(i.id));
+    const headers = ["item", "evento", "area", "centroCosto", "qty", "precioUnitario", "total", "proveedor", "statusCotizacion"];
+    const csv = [headers.join(","), ...rows.map(r => headers.map(h => `"${String((r as any)[h] ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "Budget_Selection.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }, [items, selectedIds]);
+
   const totalBudget = useMemo(() => filtered.reduce((s, i) => s + i.total, 0), [filtered]);
   const cashSinFee = useMemo(() => filtered.filter(i => !i.inKind && i.total > 0).reduce((s, i) => s + i.subtotal + i.iva + (i.turismo || 0), 0), [filtered]);
   const totalInKindCount = useMemo(() => filtered.filter(i => i.inKind).length, [filtered]);
@@ -844,13 +1024,35 @@ export default function BudgetPage() {
             <SelectContent>{centros.map(c => <SelectItem key={c} value={c}>{c === "ALL" ? "All Centers" : c}</SelectItem>)}</SelectContent>
           </Select>
           <div className="flex gap-2 ml-auto">
+            <ColumnsMenu visible={visibleColumns} onChange={setVisibleColumns} density={density} onDensityChange={setDensity} />
             <Button variant="outline" size="sm" onClick={exportCSV} className="gap-2"><Download className="w-4 h-4" />Export CSV</Button>
             {canEdit && (
               <Button size="sm" onClick={() => setShowAddModal(true)} className="gap-2"><Plus className="w-4 h-4" />Add Item</Button>
             )}
           </div>
         </div>
-        <div className="flex flex-wrap gap-3 items-center">
+        <FiltersPopover
+          active={(() => {
+            const chips: ActiveFilterChip[] = [];
+            if (filterProveedor !== "ALL") chips.push({ key: "prov", label: `Prov: ${filterProveedor}`, onClear: () => setFilterProveedor("ALL") });
+            if (filterProductora !== "ALL") chips.push({ key: "via", label: `Via Productora: ${filterProductora}`, onClear: () => setFilterProductora("ALL") });
+            if (filterFeeEnCotiz !== "ALL") chips.push({ key: "fee", label: `Fee Cotiz: ${filterFeeEnCotiz}`, onClear: () => setFilterFeeEnCotiz("ALL") });
+            if (filterCotizacion !== "ALL") chips.push({ key: "cot", label: `Cot: ${filterCotizacion}`, onClear: () => setFilterCotizacion("ALL") });
+            if (filterAsignado !== "ALL") chips.push({ key: "asg", label: `Asig: ${filterAsignado}`, onClear: () => setFilterAsignado("ALL") });
+            if (filterStatus !== "ALL") chips.push({ key: "st", label: `Status: ${filterStatus}`, onClear: () => setFilterStatus("ALL") });
+            if (filterInKind !== "ALL") chips.push({ key: "ik", label: `In-Kind: ${filterInKind}`, onClear: () => setFilterInKind("ALL") });
+            if (filterPrecio !== "ALL") chips.push({ key: "pr", label: `Precio: ${filterPrecio}`, onClear: () => setFilterPrecio("ALL") });
+            if (filterQtyDias.size > 0) chips.push({ key: "qd", label: `Días: ${Array.from(filterQtyDias).sort().join(",")}`, onClear: () => setFilterQtyDias(new Set()) });
+            if (filterPending) chips.push({ key: "pn", label: "Pending Quotes", onClear: () => setFilterPending(false) });
+            if (filterAccionReq) chips.push({ key: "ar", label: "Acción Req.", onClear: () => setFilterAccionReq(false) });
+            if (filterValidar) chips.push({ key: "vl", label: "A Validar", onClear: () => setFilterValidar(false) });
+            if (filterAparte) chips.push({ key: "ap", label: "Aparte", onClear: () => setFilterAparte(false) });
+            if (filterNiceToHave) chips.push({ key: "nh", label: "Nice to Have", onClear: () => setFilterNiceToHave(false) });
+            return chips;
+          })()}
+          onClearAll={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterQtyDias(new Set()); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
+        >
+          <div className="flex flex-wrap gap-3 items-center">
           <Select value={filterProveedor} onValueChange={setFilterProveedor}>
             <SelectTrigger className="w-[200px] bg-card border-card-border text-xs"><SelectValue placeholder="Provider" /></SelectTrigger>
             <SelectContent>{proveedores.map(p => <SelectItem key={p} value={p}>{p === "ALL" ? "All Providers" : p}</SelectItem>)}</SelectContent>
@@ -954,6 +1156,9 @@ export default function BudgetPage() {
               )}
             </PopoverContent>
           </Popover>
+        </div>
+        </FiltersPopover>
+        <div className="flex flex-wrap gap-2 items-center">
           {([
             { active: filterPending, set: setFilterPending, label: "Pending Quotes", count: pendingCount, cls: "bg-orange-500/10 text-orange-600 border-orange-500/30" },
             { active: filterAccionReq, set: setFilterAccionReq, label: "Accion Req.", count: accionRequeridaCount, cls: "bg-orange-500/10 text-orange-600 border-orange-500/30" },
@@ -965,7 +1170,7 @@ export default function BudgetPage() {
               key={p.label}
               onClick={() => p.set(!p.active)}
               className={cn(
-                "h-9 px-3 rounded-md border text-xs flex items-center gap-1.5 transition-colors",
+                "h-8 px-2.5 rounded-md border text-xs flex items-center gap-1.5 transition-colors",
                 p.active ? p.cls : "bg-card border-card-border text-foreground hover:border-border"
               )}
             >
@@ -973,99 +1178,94 @@ export default function BudgetPage() {
               <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-semibold", p.active ? "bg-white/40" : "bg-muted text-muted-foreground")}>{p.count}</span>
             </button>
           ))}
-          {(filterProveedor !== "ALL" || filterProductora !== "ALL" || filterFeeEnCotiz !== "ALL" || filterCotizacion !== "ALL" || filterAsignado !== "ALL" || filterStatus !== "ALL" || filterInKind !== "ALL" || filterPrecio !== "ALL" || filterQtyDias.size > 0 || filterPending || filterAccionReq || filterValidar || filterAparte || filterNiceToHave) && (
-            <button
-              onClick={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterQtyDias(new Set()); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
-              className="text-xs text-primary hover:underline"
-            >Clear filters</button>
-          )}
           <span className="text-xs text-muted-foreground ml-auto">{filtered.length} of {items.length} items</span>
         </div>
       </div>
 
       <div className="rounded-xl border border-card-border bg-card overflow-hidden shadow-sm">
         <div className="overflow-auto max-h-[calc(100vh-280px)] budget-scroll">
-          <table className="w-full text-xs">
+          <style>{`
+            ${BUDGET_COLUMNS.filter(c => !c.always && !colVisible.has(c.id)).map(c => `.budget-table [data-col="${c.id}"]{display:none;}`).join("\n")}
+            .budget-table.density-comfortable td { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+            .budget-table.density-compact td { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+          `}</style>
+          <table className={cn("w-full budget-table", density === "comfortable" ? "text-sm density-comfortable" : "text-xs density-compact")}>
             <thead className="sticky top-0 z-10 shadow-[0_1px_3px_rgba(0,0,0,0.3)]">
               <tr className="text-[10px] uppercase tracking-wider">
-                <th className="sticky-col-0 px-2 py-2.5 w-6 bg-[hsl(var(--muted))] border-b border-border"></th>
-                <th className="sticky-col-1 text-center px-1 py-2.5 font-semibold text-muted-foreground w-10 bg-[hsl(var(--muted))] border-b border-border">
+                <th className="sticky-col-0 px-2 py-2.5 w-8 bg-[hsl(var(--muted))] border-b border-border">
+                  {canEdit && (
+                    <Checkbox
+                      checked={filtered.length > 0 && filtered.every(i => selectedIds.has(i.id))}
+                      onCheckedChange={() => selectAllVisible()}
+                      aria-label="Seleccionar todos los visibles"
+                    />
+                  )}
+                </th>
+                <th data-col="review" className="sticky-col-1 text-center px-1 py-2.5 font-semibold text-muted-foreground w-10 bg-[hsl(var(--muted))] border-b border-border">
                   <ColHeader label="Rev." info="Marcar como revisado. Muestra quién lo revisó y cuándo." align="center" />
                 </th>
-                <th className="sticky-col-2 text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[200px] bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Item" info="Nombre del producto, servicio o recurso necesario para el evento." />
+                <th data-col="item" className="sticky-col-2 text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[200px] bg-[hsl(var(--muted))] border-b border-border">
+                  <SortableHeader label="Item" sortKey="item" current={sortKey} dir={sortDir} onSort={toggleSort} />
                 </th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Centro Costo" info="Categoría de gasto dentro del área (ej: Staff, Señalética, AV, Catering)." />
+                <th data-col="centroCosto" className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Centro Costo" info="Categoría de gasto dentro del área." />
                 </th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-14 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="In-Kind" info="Contribución en especie — donada o proporcionada por un sponsor/venue sin costo directo." align="center" />
+                <th data-col="qty" className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-12 bg-[hsl(var(--muted))] border-b border-border">
+                  <SortableHeader label="Qty" sortKey="qty" current={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
                 </th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-10 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Qty" info="Cantidad de unidades requeridas." align="center" />
+                <th data-col="uom" className="text-left px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="UoM" info="Unidad de medida." />
                 </th>
-                <th className="text-left px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="UoM" info="Unidad de medida (persona, unidad, servicio, m², etc.)." />
+                <th data-col="tipo" className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Tipo" info="Por Día / One-Time." align="center" />
                 </th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Tipo" info="SI = contratación por días (Qty × Días × Precio). NO = contratación fija (Qty × Precio)." align="center" />
+                <th data-col="dias" className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-12 bg-[hsl(var(--muted))] border-b border-border">
+                  <SortableHeader label="Dias" sortKey="dias" current={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
                 </th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-10 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Dias" info="Número de días que se requiere el servicio (aplica solo si Tipo = SI)." align="center" />
+                <th data-col="precioUnit" className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
+                  <SortableHeader label="P. Unit." sortKey="precioUnit" current={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
                 </th>
-                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="P. Unit." info="Precio unitario por unidad/día del item." align="right" />
+                <th data-col="subtotal" className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Subtotal" info="Qty × P.Unit (× Días si aplica)." align="right" />
                 </th>
-                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Subtotal" info="Qty × P.Unit (× Días si aplica). Sin fee ni IVA." align="right" />
+                <th data-col="viaProductora" className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Via Productora" info="Se contrata a través de Aurora 360." align="center" />
                 </th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Via Productora" info="Indica si este item se contrata a través de Aurora 360 (productora del evento)." align="center" />
+                <th data-col="feeEnCotiz" className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Fee en Cotiz." info="Fee 20% incluido en cotización." align="center" />
                 </th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Fee en Cotiz.?" info="SI = el fee de 20% ya está incluido en la cotización del proveedor. NO = se aplica fee adicional del 20%." align="center" />
+                <th data-col="fee" className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Fee 20%" info="Fee de gestión de la productora." align="right" />
                 </th>
-                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Fee 20%" info="Fee de gestión de la productora (20% sobre subtotal). Si el fee ya está incluido en la cotización, se muestra en gris para referencia pero no suma al total." align="right" />
+                <th data-col="iva" className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="IVA" info="IVA 13% sobre subtotal + fee." align="right" />
                 </th>
-                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="IVA" info="Impuesto al Valor Agregado (13% sobre subtotal + fee). Exento si el item tiene IVA exento marcado." align="right" />
+                <th data-col="turismo" className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Turismo" info="Impuesto de turismo del 5%." align="right" />
                 </th>
-                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Turismo" info="Impuesto de turismo del 5% sobre subtotal + fee. Aplica solo a items marcados. Es adicional al IVA." align="right" />
+                <th data-col="total" className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-24 bg-[hsl(var(--muted))] border-b border-border">
+                  <SortableHeader label="Total" sortKey="total" current={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
                 </th>
-                <th className="text-right px-2 py-2.5 font-semibold text-muted-foreground w-24 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Total" info="Monto final = Subtotal + Fee (si no incluido) + IVA + Turismo. Este es el costo real que se pagará." align="right" />
+                <th data-col="cotizacion" className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Cotizacion" info="Código de cotización." />
                 </th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Cotizacion" info="Código o referencia de la cotización del proveedor (ej: A001, PENDING, VOLUNTARIO, NA)." />
+                <th data-col="status" className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[110px] bg-[hsl(var(--muted))] border-b border-border">
+                  <SortableHeader label="Status" sortKey="status" current={sortKey} dir={sortDir} onSort={toggleSort} />
                 </th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[110px] bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Status" info="Estado actual del proceso de cotización para este item (Recibida, Pendiente, No Aplica, etc.)." />
+                <th data-col="soloPresup" className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Solo Presup." info="Item solo presupuestado." align="center" />
                 </th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Solo Presup." info="Item solo presupuestado — aún no tiene cotización formal. El monto es un estimado/guesstimate." align="center" />
+                <th data-col="proveedor" className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">
+                  <SortableHeader label="Proveedor" sortKey="proveedor" current={sortKey} dir={sortDir} onSort={toggleSort} />
                 </th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[90px] bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Proveedor" info="Nombre del proveedor o empresa que suministra este item." />
+                <th data-col="assigned" className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[100px] bg-[hsl(var(--muted))] border-b border-border">
+                  <SortableHeader label="Assigned" sortKey="assigned" current={sortKey} dir={sortDir} onSort={toggleSort} />
                 </th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[100px] bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Assigned" info="Persona responsable de gestionar o dar seguimiento a este item." />
+                <th data-col="imgRef" className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[80px] bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Img. Ref." info="Imagen de referencia." />
                 </th>
-                <th className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[80px] bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Img. Ref." info="Link a imagen de referencia del producto o servicio." />
-                </th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Validar" info="Marcar items con posible costo inflado que necesitan validación con otros proveedores." align="center" />
-                </th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Aparte" info="Marcar items que deben contratarse por aparte (sin productora) para evitar el fee del 20%." align="center" />
-                </th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Acción Req." info="Items que requieren una acción o seguimiento específico por parte del equipo." align="center" />
-                </th>
-                <th className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Nice to Have" info="Items deseables pero no esenciales. Pueden eliminarse si se necesita recortar presupuesto." align="center" />
+                <th data-col="flags" className="text-left px-2 py-2.5 font-semibold text-muted-foreground min-w-[140px] bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Flags" info="In-Kind, Validar, Aparte, Acción Req., Nice to Have — click para marcar." />
                 </th>
                 {canEdit && <th className="w-8 px-1 py-2.5 bg-[hsl(var(--muted))] border-b border-border"></th>}
               </tr>
@@ -1103,14 +1303,15 @@ export default function BudgetPage() {
                         {hasInKind && <Badge className="text-[10px] bg-amber-500/15 text-amber-600 border-amber-500/20 font-normal py-0">In-Kind</Badge>}
                       </div>
                     </td>
-                    <td className="px-2 py-2" colSpan={16}></td>
-                    <td className="px-2 py-2 text-right font-semibold" colSpan={16}>
+                    <td className="px-2 py-2" colSpan={14}></td>
+                    <td className="px-2 py-2 text-right font-semibold" colSpan={canEdit ? 9 : 8}>
 
                       {groupTotal > 0 ? <span className="text-primary text-xs">{formatUSD(groupTotal)}</span> : <span className="text-muted-foreground text-[10px]">In-Kind / $0</span>}
                     </td>
                   </tr>,
 
-                  ...(isExpanded ? group.items.map(item => (
+                  ...(isExpanded ? (renderRowsByGroup.get(key) ?? []).flatMap(__row => {
+                    const renderItemTr = (item: BudgetItem) => (
                     <tr
                       key={item.id}
                       className={cn(
@@ -1118,12 +1319,16 @@ export default function BudgetPage() {
                         item.inKind ? "bg-amber-500/5" : "hover:bg-muted/20"
                       )}
                     >
-                      <td className={cn("sticky-col-0 px-2 py-1.5 align-top", item.inKind ? "row-inkind-bg" : "bg-background")}>
-                        {item.inKind && (
-                          <Tooltip><TooltipTrigger><Tag className="w-3 h-3 text-amber-500" /></TooltipTrigger><TooltipContent>In-Kind</TooltipContent></Tooltip>
+                      <td className={cn("sticky-col-0 px-2 py-1.5 align-top text-center", item.inKind ? "row-inkind-bg" : "bg-background")}>
+                        {canEdit && (
+                          <Checkbox
+                            checked={selectedIds.has(item.id)}
+                            onCheckedChange={() => toggleSelect(item.id)}
+                            aria-label="Seleccionar item"
+                          />
                         )}
                       </td>
-                      <td className={cn("sticky-col-1 px-1 py-1.5 text-center align-top", item.inKind ? "row-inkind-bg" : "bg-background")}>
+                      <td data-col="review" className={cn("sticky-col-1 px-1 py-1.5 text-center align-top", item.inKind ? "row-inkind-bg" : "bg-background")}>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
@@ -1207,23 +1412,16 @@ export default function BudgetPage() {
                           <EditableCell value={item.notas} onSave={v => canEdit ? updateItem(item.id, "notas", v) : updateComment(item.id, "notas", v)} className="text-muted-foreground/30 text-[9px] italic truncate max-w-[120px]" placeholder="+ nota" disabled={!canEdit && !canComment} />
                         </div>
                       </td>
-                      <td className="px-2 py-1.5 align-top">
+                      <td data-col="centroCosto" className="px-2 py-1.5 align-top">
                         <EditableCell value={item.centroCosto} onSave={v => updateItem(item.id, "centroCosto", v)} className="text-muted-foreground text-xs" disabled={!canEdit} />
                       </td>
-                      <td className="px-1 py-1.5 text-center align-top">
-                        {canEdit ? (
-                          <ToggleCell value={item.inKind} onToggle={() => toggleField(item.id, "inKind")} labelOn="SI" labelOff="NO" />
-                        ) : (
-                          <span className={cn("text-[10px] px-2 py-0.5 rounded border font-medium", item.inKind ? "bg-primary/10 text-primary border-primary/20" : "bg-muted/50 text-muted-foreground/50 border-border/50")}>{item.inKind ? "SI" : "NO"}</span>
-                        )}
-                      </td>
-                      <td className="px-1 py-1.5 text-center align-top">
+                      <td data-col="qty" className="px-1 py-1.5 text-center align-top">
                         <EditableCell value={String(item.qty)} onSave={v => updateItem(item.id, "qty", v)} className="text-center font-mono text-xs" type="number" disabled={!canEdit} />
                       </td>
-                      <td className="px-1 py-1.5 align-top">
+                      <td data-col="uom" className="px-1 py-1.5 align-top">
                         <EditableCell value={item.uom} onSave={v => updateItem(item.id, "uom", v)} className="text-muted-foreground text-xs" disabled={!canEdit} />
                       </td>
-                      <td className="px-1 py-1.5 text-center align-top">
+                      <td data-col="tipo" className="px-1 py-1.5 text-center align-top">
                         <button
                           onClick={canEdit ? () => toggleStringField(item.id, "porDias") : undefined}
                           className={cn(
@@ -1237,14 +1435,14 @@ export default function BudgetPage() {
                           {item.porDias === "SI" ? "Por Dia" : "One-Time"}
                         </button>
                       </td>
-                      <td className="px-1 py-1.5 text-center align-top">
+                      <td data-col="dias" className="px-1 py-1.5 text-center align-top">
                         {item.porDias === "SI" ? (
                           <EditableCell value={String(item.qtyDias)} onSave={v => updateItem(item.id, "qtyDias", v)} className="text-center font-mono text-xs" type="number" disabled={!canEdit} />
                         ) : (
                           <span className="text-muted-foreground/30 text-xs">--</span>
                         )}
                       </td>
-                      <td className="px-2 py-1.5 text-right align-top font-mono">
+                      <td data-col="precioUnit" className="px-2 py-1.5 text-right align-top font-mono">
                         {item.quotes && item.quotes.length > 0 ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -1263,10 +1461,10 @@ export default function BudgetPage() {
                           <EditableCell value="0" onSave={v => updateItem(item.id, "precioUnitario", parseFloat(v) || 0)} className="text-right font-mono text-xs text-muted-foreground/40" type="number" disabled={!canEdit} />
                         )}
                       </td>
-                      <td className="px-2 py-1.5 text-right align-top font-mono text-muted-foreground">
+                      <td data-col="subtotal" className="px-2 py-1.5 text-right align-top font-mono text-muted-foreground">
                         {item.subtotal > 0 ? formatUSD(item.subtotal) : "--"}
                       </td>
-                      <td className="px-1 py-1.5 text-center align-top">
+                      <td data-col="viaProductora" className="px-1 py-1.5 text-center align-top">
                         <button
                           onClick={canEdit ? () => toggleField(item.id, "agencyFee") : undefined}
                           className={cn(
@@ -1280,7 +1478,7 @@ export default function BudgetPage() {
                           {item.agencyFee ? "Aurora 360" : "No"}
                         </button>
                       </td>
-                      <td className="px-1 py-1.5 text-center align-top">
+                      <td data-col="feeEnCotiz" className="px-1 py-1.5 text-center align-top">
                         {item.agencyFee ? (
                           <button
                             onClick={canEdit ? () => toggleStringField(item.id, "aplicaFee") : undefined}
@@ -1298,7 +1496,7 @@ export default function BudgetPage() {
                           <span className="text-muted-foreground/30 text-[10px]">--</span>
                         )}
                       </td>
-                      <td className="px-2 py-1.5 text-right align-top font-mono">
+                      <td data-col="fee" className="px-2 py-1.5 text-right align-top font-mono">
                         {item.fee > 0 ? (
                           <span className="text-muted-foreground">{formatUSD(item.fee)}</span>
                         ) : (item.feeIncluido || 0) > 0 ? (
@@ -1314,7 +1512,7 @@ export default function BudgetPage() {
                           <span className="text-muted-foreground/30">--</span>
                         )}
                       </td>
-                      <td className="px-2 py-1.5 text-right align-top">
+                      <td data-col="iva" className="px-2 py-1.5 text-right align-top">
                         {item.exentoIva ? (
                           <button
                             onClick={canEdit ? () => { updateItem(item.id, "exentoIva", false); } : undefined}
@@ -1334,7 +1532,7 @@ export default function BudgetPage() {
                           >--</span>
                         )}
                       </td>
-                      <td className="px-2 py-1.5 text-right align-top">
+                      <td data-col="turismo" className="px-2 py-1.5 text-right align-top">
                         {item.aplicaTurismo ? (
                           <button
                             onClick={canEdit ? () => { updateItem(item.id, "aplicaTurismo", false); } : undefined}
@@ -1348,7 +1546,7 @@ export default function BudgetPage() {
                           >--</span>
                         )}
                       </td>
-                      <td className="px-2 py-1.5 text-right align-top">
+                      <td data-col="total" className="px-2 py-1.5 text-right align-top">
                         {item.inKind ? (
                           <span className="text-amber-600 font-semibold text-xs">In-Kind</span>
                         ) : item.total > 0 ? (
@@ -1357,7 +1555,7 @@ export default function BudgetPage() {
                           <span className="text-muted-foreground">$0.00</span>
                         )}
                       </td>
-                      <td className="px-2 py-1.5 align-top">
+                      <td data-col="cotizacion" className="px-2 py-1.5 align-top">
                         {STATUS_NO_COTIZACION.has(item.statusCotizacion || "") ? (
                           <div className="flex flex-col gap-0.5">
                             <span className="text-[10px] text-muted-foreground/25 italic">No aplica</span>
@@ -1482,7 +1680,7 @@ export default function BudgetPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-2 py-1.5 align-top">
+                      <td data-col="status" className="px-2 py-1.5 align-top">
                         {canEdit ? (
                           <Select
                             value={item.statusCotizacion || "__none__"}
@@ -1516,7 +1714,7 @@ export default function BudgetPage() {
                           <span className="text-[10px] text-muted-foreground/30">--</span>
                         )}
                       </td>
-                      <td className="px-1 py-1.5 text-center align-top">
+                      <td data-col="soloPresup" className="px-1 py-1.5 text-center align-top">
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
@@ -1539,10 +1737,10 @@ export default function BudgetPage() {
                           </TooltipContent>
                         </Tooltip>
                       </td>
-                      <td className="px-2 py-1.5 align-top">
+                      <td data-col="proveedor" className="px-2 py-1.5 align-top">
                         <EditableCell value={item.proveedor || ""} onSave={v => updateItem(item.id, "proveedor", v)} className="text-muted-foreground text-xs" placeholder="proveedor..." disabled={!canEdit} />
                       </td>
-                      <td className="px-2 py-1.5 align-top">
+                      <td data-col="assigned" className="px-2 py-1.5 align-top">
                         {canEdit ? (
                           <Select
                             value={item.assignedTo || "__none__"}
@@ -1575,7 +1773,7 @@ export default function BudgetPage() {
                           <span className="text-[10px] text-muted-foreground/30">--</span>
                         )}
                       </td>
-                      <td className="px-2 py-1.5 align-top">
+                      <td data-col="imgRef" className="px-2 py-1.5 align-top">
                         {item.documento ? (
                           <div className="flex flex-col gap-0.5">
                             <a href={item.documento} target="_blank" rel="noopener noreferrer" className="flex items-center gap-0.5 text-[10px] text-blue-500 hover:text-blue-600 truncate max-w-[100px]">
@@ -1588,97 +1786,8 @@ export default function BudgetPage() {
                           <EditableCell value="" onSave={v => updateItem(item.id, "documento", v)} className="text-blue-400/40 text-[9px]" placeholder="+ link img" disabled={!canEdit} />
                         )}
                       </td>
-                      <td className="px-1 py-1.5 text-center align-top">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              onClick={canEdit ? () => toggleField(item.id, "validarCosto") : undefined}
-                              className={cn(
-                                "inline-flex items-center justify-center w-6 h-6 rounded transition-colors",
-                                !canEdit && "cursor-default",
-                                item.validarCosto
-                                  ? "bg-red-500/15 text-red-500 border border-red-500/30"
-                                  : "bg-muted/30 text-muted-foreground/25 border border-transparent"
-                              )}
-                            >
-                              <AlertTriangle className="w-3.5 h-3.5" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-[200px] text-xs">
-                            {item.validarCosto
-                              ? "Marcado: validar costo / cotizar con otros proveedores"
-                              : canEdit ? "Click para marcar como costo a validar" : "Validar costo"}
-                          </TooltipContent>
-                        </Tooltip>
-                      </td>
-                      <td className="px-1 py-1.5 text-center align-top">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              onClick={canEdit ? () => toggleField(item.id, "contratarAparte") : undefined}
-                              className={cn(
-                                "inline-flex items-center justify-center w-6 h-6 rounded transition-colors",
-                                !canEdit && "cursor-default",
-                                item.contratarAparte
-                                  ? "bg-amber-500/15 text-amber-600 border border-amber-500/30"
-                                  : "bg-muted/30 text-muted-foreground/25 border border-transparent"
-                              )}
-                            >
-                              <ShieldAlert className="w-3.5 h-3.5" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-[200px] text-xs">
-                            {item.contratarAparte
-                              ? "Marcado: contratar por aparte para evitar costos inflados"
-                              : canEdit ? "Click para marcar como contratar por aparte" : "Contratar aparte"}
-                          </TooltipContent>
-                        </Tooltip>
-                      </td>
-                      <td className="px-1 py-1.5 text-center align-top">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              onClick={canEdit ? () => toggleField(item.id, "accionRequerida") : undefined}
-                              className={cn(
-                                "inline-flex items-center justify-center w-6 h-6 rounded transition-colors",
-                                !canEdit && "cursor-default",
-                                item.accionRequerida
-                                  ? "bg-orange-500/15 text-orange-500 border border-orange-500/30"
-                                  : "bg-muted/30 text-muted-foreground/25 border border-transparent"
-                              )}
-                            >
-                              <Flag className="w-3.5 h-3.5" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-[200px] text-xs">
-                            {item.accionRequerida
-                              ? "Acción requerida — este item necesita seguimiento"
-                              : canEdit ? "Click para marcar como acción requerida" : "Acción requerida"}
-                          </TooltipContent>
-                        </Tooltip>
-                      </td>
-                      <td className="px-1 py-1.5 text-center align-top">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              onClick={canEdit ? () => toggleField(item.id, "niceToHave") : undefined}
-                              className={cn(
-                                "inline-flex items-center justify-center w-6 h-6 rounded transition-colors",
-                                !canEdit && "cursor-default",
-                                item.niceToHave
-                                  ? "bg-purple-500/15 text-purple-500 border border-purple-500/30"
-                                  : "bg-muted/30 text-muted-foreground/25 border border-transparent"
-                              )}
-                            >
-                              <Star className={cn("w-3.5 h-3.5", item.niceToHave && "fill-purple-500")} />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-[200px] text-xs">
-                            {item.niceToHave
-                              ? "Nice to Have — deseable pero no esencial"
-                              : canEdit ? "Click para marcar como nice to have" : "Nice to have"}
-                          </TooltipContent>
-                        </Tooltip>
+                      <td data-col="flags" className="px-2 py-1.5 align-top">
+                        <FlagsChips item={item} canEdit={canEdit} onToggle={(k) => toggleField(item.id, k as any)} />
                       </td>
                       {canEdit && (
                         <td className="px-1 py-1.5 align-top">
@@ -1722,7 +1831,35 @@ export default function BudgetPage() {
                         </td>
                       )}
                     </tr>
-                  )) : [])
+                    );
+                    if (__row.kind === "single") return [renderItemTr(__row.item)];
+                    const __pex = expandedParents.has(__row.key);
+                    const __parentRow = (
+                      <tr
+                        key={`p-${__row.key}`}
+                        className="bg-primary/5 border-y border-primary/20 cursor-pointer hover:bg-primary/10 select-none"
+                        onClick={() => toggleParent(__row.key)}
+                      >
+                        <td className="sticky-col-0 px-2 py-1.5 text-center bg-primary/5">
+                          <motion.div animate={{ rotate: __pex ? 90 : 0 }} className="inline-block">
+                            <ChevronRight className="w-3 h-3 text-primary" />
+                          </motion.div>
+                        </td>
+                        <td className="sticky-col-1 bg-primary/5" />
+                        <td className="sticky-col-2 px-2 py-1.5 bg-primary/5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-foreground text-xs">{__row.sample.item}</span>
+                            <Badge variant="outline" className="text-[10px] py-0">×{__row.children.length} días</Badge>
+                            {!__pex && <span className="text-[10px] text-muted-foreground">click para expandir</span>}
+                          </div>
+                        </td>
+                        <td colSpan={canEdit ? 21 : 20} className="px-2 py-1.5 text-right bg-primary/5">
+                          <span className="font-semibold text-primary text-xs">{formatUSD(__row.total)}</span>
+                        </td>
+                      </tr>
+                    );
+                    return [__parentRow, ...(__pex ? __row.children.map(renderItemTr) : [])];
+                  }) : [])
                 ];
               })}
             </tbody>
@@ -1733,12 +1870,12 @@ export default function BudgetPage() {
                 <td className="sticky-col-2 px-2 py-3 font-semibold text-muted-foreground text-xs bg-[hsl(var(--muted))]">
                   TOTAL -- {filtered.length} items
                 </td>
-                <td colSpan={19} className="px-3 py-3">
+                <td colSpan={14} className="px-3 py-3">
                 </td>
                 <td className="px-2 py-3 text-right font-bold text-sm text-primary font-mono">
                   {formatUSD(totalBudget)}
                 </td>
-                <td colSpan={11}></td>
+                <td colSpan={canEdit ? 8 : 7}></td>
               </tr>
             </tfoot>
           </table>
@@ -1972,6 +2109,22 @@ export default function BudgetPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <BulkActionsBar
+        count={selectedIds.size}
+        onClear={() => setSelectedIds(new Set())}
+        onDelete={bulkDelete}
+        onExportCsv={bulkExportCsv}
+        onSetStatus={(s) => bulkUpdate(it => ({ ...it, statusCotizacion: s }))}
+        onSetProveedor={(p) => bulkUpdate(it => ({ ...it, proveedor: p }))}
+        onToggleFlag={(flag, on) => bulkUpdate(it => ({ ...it, [flag]: on } as BudgetItem))}
+        onMoveArea={(a) => bulkUpdate(it => ({ ...it, area: a }))}
+        onMoveCentro={(c) => bulkUpdate(it => ({ ...it, centroCosto: c }))}
+        statusOptions={STATUS_COTIZACION_OPTIONS.filter(Boolean)}
+        proveedorOptions={proveedores.filter(p => p !== "ALL")}
+        areaOptions={areas.filter(a => a !== "ALL")}
+        centroOptions={Array.from(new Set(items.map(i => i.centroCosto).filter(Boolean))).sort()}
+      />
 
       <SubEventsManagerDialog
         open={showSubEventsManager}

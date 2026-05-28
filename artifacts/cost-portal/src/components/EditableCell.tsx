@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { Edit3 } from "lucide-react";
 
 interface EditableCellProps {
   value: string;
@@ -77,15 +76,15 @@ export function EditableCell({ value, onSave, className, type = "text", prefix, 
     <button
       onClick={() => setEditing(true)}
       className={cn(
-        "group flex items-center gap-1 text-left cursor-pointer hover:text-primary transition-colors rounded px-0.5 -mx-0.5",
+        "group inline-flex items-center text-left cursor-text transition-colors rounded-sm px-0.5 -mx-0.5",
+        "border-b border-dashed border-border/40 hover:border-primary/60 hover:text-primary",
         "focus:outline-none focus-visible:ring-1 focus-visible:ring-primary",
         className
       )}
-      title="Click to edit"
+      title="Click para editar"
     >
       {prefix && value && <span className="text-muted-foreground text-xs">{prefix}</span>}
       <span>{value || <span className="text-muted-foreground/40 italic text-xs">{placeholder || "—"}</span>}</span>
-      <Edit3 className="w-2.5 h-2.5 opacity-0 group-hover:opacity-40 transition-opacity flex-shrink-0" />
     </button>
   );
 }
