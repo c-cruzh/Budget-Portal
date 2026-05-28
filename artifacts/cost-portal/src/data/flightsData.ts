@@ -1,5 +1,18 @@
 export type FlightStatus = "Pendiente" | "En revisión" | "Aprobado" | "Reservado";
 
+export type SeatPreference = "Ventana" | "Pasillo" | "Sin preferencia";
+export type BaggageOption = "Carry-on" | "23kg" | "32kg" | "2 x 23kg";
+
+export interface Passenger {
+  id: string;
+  name: string;
+  email: string;
+  passport: string;
+  seatPreference: SeatPreference;
+  baggage: BaggageOption;
+  notes?: string;
+}
+
 export interface FlightOption {
   id: string;
   airline: string;
@@ -29,6 +42,7 @@ export interface FlightRouteGroup {
   initialLivePerPax: number;
   lastCaptureDate: string;
   options: FlightOption[];
+  passengers: Passenger[];
 }
 
 export interface FlightHistoryEntry {
@@ -81,6 +95,7 @@ export const INITIAL_FLIGHTS_STATE: FlightsState = {
       originalPerPax: 887.76,
       initialLivePerPax: 728,
       lastCaptureDate: "2026-05-27",
+      passengers: [],
       options: [
         {
           id: "sfo-1",
@@ -139,6 +154,7 @@ export const INITIAL_FLIGHTS_STATE: FlightsState = {
       originalPerPax: 773.76,
       initialLivePerPax: 449,
       lastCaptureDate: "2026-05-27",
+      passengers: [],
       options: [
         {
           id: "bos-econ-1",
@@ -197,6 +213,7 @@ export const INITIAL_FLIGHTS_STATE: FlightsState = {
       originalPerPax: 1811.76,
       initialLivePerPax: 1344,
       lastCaptureDate: "2026-05-27",
+      passengers: [],
       options: [
         {
           id: "bos-biz-1",
@@ -241,6 +258,7 @@ export const INITIAL_FLIGHTS_STATE: FlightsState = {
       originalPerPax: 441.74,
       initialLivePerPax: 297,
       lastCaptureDate: "2026-05-27",
+      passengers: [],
       options: [
         {
           id: "mex-1",
@@ -299,6 +317,7 @@ export const INITIAL_FLIGHTS_STATE: FlightsState = {
       originalPerPax: 530.10,
       initialLivePerPax: 362,
       lastCaptureDate: "2026-05-27",
+      passengers: [],
       options: [
         {
           id: "mde-1",

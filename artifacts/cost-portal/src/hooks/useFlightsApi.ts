@@ -26,6 +26,10 @@ export function useFlightsApi() {
     (async () => {
       try {
         const res = await fetch(API_URL, { credentials: "include" });
+        if (res.status === 401 || res.status === 403) {
+          // Not authenticated / not authorized — keep seed data, no error.
+          return;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (cancelled) return;
@@ -114,6 +118,7 @@ function mergeWithSeed(persisted: any): FlightsState {
       selectedOptionId,
       status: saved.status ?? seedRoute.status,
       notes: typeof saved.notes === "string" ? saved.notes : seedRoute.notes,
+      passengers: Array.isArray(saved.passengers) ? saved.passengers : seedRoute.passengers,
     };
   });
   return { ...seed, routes };

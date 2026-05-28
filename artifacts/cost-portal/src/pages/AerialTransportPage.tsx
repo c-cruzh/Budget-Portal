@@ -3,11 +3,12 @@ import { motion } from "framer-motion";
 import {
   Plane, Users, Handshake, Cloud, CloudOff, Loader2, ExternalLink,
   TrendingDown, TrendingUp, CheckCircle2, ListChecks, MapPin, Calendar,
+  UserPlus, Trash2, ChevronDown, ChevronRight, AlertTriangle,
 } from "lucide-react";
 import { useFlightsApi } from "@/hooks/useFlightsApi";
 import { useAuth } from "@/hooks/useAuth";
 import type {
-  FlightOption, FlightRouteGroup, FlightStatus,
+  FlightOption, FlightRouteGroup, FlightStatus, Passenger, SeatPreference, BaggageOption,
 } from "@/data/flightsData";
 import { formatUSD, cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +17,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 const STATUS_OPTIONS: FlightStatus[] = ["Pendiente", "En revisión", "Aprobado", "Reservado"];
 
@@ -34,6 +37,13 @@ const OPT_BADGE: Record<FlightOption["badge"], string> = {
 
 function getSelectedOption(route: FlightRouteGroup): FlightOption | undefined {
   return route.options.find(o => o.id === route.selectedOptionId) ?? route.options[0];
+}
+
+// Effective pax = roster length if non-empty, else the route's baseline pax.
+// This way the roster auto-derives pricing/logistics once organizers populate
+// it, while empty rosters preserve the current baseline behavior.
+function effectivePax(route: FlightRouteGroup): number {
+  return route.passengers.length > 0 ? route.passengers.length : route.pax;
 }
 
 interface ArrivalRow { date: string; time: string; origin: string; group: string; pax: number; flight: string; depTime: string }
@@ -76,6 +86,7 @@ function deriveLogistics(routes: FlightRouteGroup[]): { arrivals: ArrivalRow[]; 
   for (const r of routes) {
     const sel = getSelectedOption(r);
     if (!sel) continue;
+    const pax = effectivePax(r);
     const flightLabel = `${sel.airline}${sel.flightNumbers.match(/AV\d+/) ? " " + sel.flightNumbers.match(/AV\d+/)![0] : ""}${sel.stops !== "Directo" ? ` (${sel.stops.replace(/^1 escala\s*/, "vía ").replace(/[()]/g, "")})` : ""}`;
     const ida = parseSegment(sel.scheduleIda);
     if (ida) {
@@ -85,7 +96,7 @@ function deriveLogistics(routes: FlightRouteGroup[]): { arrivals: ArrivalRow[]; 
         time: ida.destTime || "Por confirmar",
         origin: ida.origin,
         group: r.label.replace(/^Grupo /, "Grupo "),
-        pax: r.pax,
+        pax,
         flight: flightLabel,
         depTime: ida.originTime || "Por confirmar",
       });
@@ -97,7 +108,7 @@ function deriveLogistics(routes: FlightRouteGroup[]): { arrivals: ArrivalRow[]; 
         time: vuelta.originTime || "Por confirmar",
         destination: vuelta.dest,
         group: r.label,
-        pax: r.pax,
+        pax,
         flight: flightLabel,
         arrTime: vuelta.destTime || "",
       });
@@ -133,8 +144,8 @@ function SyncIndicator({ saving, lastSaved, error }: { saving: boolean; lastSave
 
 export default function AerialTransportPage() {
   const { state, setState, loading, saving, lastSaved, error, meta } = useFlightsApi();
-  const { user } = useAuth();
-  const canEdit = !!user;
+  const { user, permissions } = useAuth();
+  const canEdit = !!user && permissions.canEdit;
   const [tab, setTab] = useState("resumen");
 
   const derivedLogistics = useMemo(() => deriveLogistics(state.routes), [state.routes]);
@@ -143,12 +154,14 @@ export default function AerialTransportPage() {
     const rows = state.routes.map(r => {
       const sel = getSelectedOption(r);
       const perPax = sel?.pricePerPax ?? 0;
-      const subtotal = perPax * r.pax;
-      const originalTotal = r.originalPerPax * r.pax;
-      const initialTotal = r.initialLivePerPax * r.pax;
+      const pax = effectivePax(r);
+      const subtotal = perPax * pax;
+      const originalTotal = r.originalPerPax * pax;
+      const initialTotal = r.initialLivePerPax * pax;
       return {
         route: r,
         selected: sel,
+        pax,
         perPax,
         subtotal,
         originalTotal,
@@ -159,7 +172,7 @@ export default function AerialTransportPage() {
     });
     const totalSelected = rows.reduce((s, r) => s + r.subtotal, 0);
     const totalOriginal = rows.reduce((s, r) => s + r.originalTotal, 0);
-    const totalPax = state.routes.reduce((s, r) => s + r.pax, 0);
+    const totalPax = rows.reduce((s, r) => s + r.pax, 0);
     const decided = state.routes.filter(r => r.status === "Aprobado" || r.status === "Reservado").length;
     return { rows, totalSelected, totalOriginal, totalPax, decided };
   }, [state.routes]);
@@ -239,6 +252,7 @@ export default function AerialTransportPage() {
               canEdit={canEdit}
               onStatus={(s) => updateRoute(row.route.id, { status: s })}
               onNotes={(n) => updateRoute(row.route.id, { notes: n })}
+              onPassengers={(p) => updateRoute(row.route.id, { passengers: p })}
               onPick={() => setTab("opciones")}
             />
           ))}
@@ -526,21 +540,26 @@ function KpiCard({ label, value, sub, icon: Icon, color }: { label: string; valu
   );
 }
 
-function ResumenCard({ row, canEdit, onStatus, onNotes, onPick }: {
-  row: { route: FlightRouteGroup; selected: FlightOption | undefined; perPax: number; subtotal: number; originalTotal: number; vsOriginal: number; vsInitial: number; initialTotal: number };
+function ResumenCard({ row, canEdit, onStatus, onNotes, onPassengers, onPick }: {
+  row: { route: FlightRouteGroup; selected: FlightOption | undefined; pax: number; perPax: number; subtotal: number; originalTotal: number; vsOriginal: number; vsInitial: number; initialTotal: number };
   canEdit: boolean;
   onStatus: (s: FlightStatus) => void;
   onNotes: (n: string) => void;
+  onPassengers: (p: Passenger[]) => void;
   onPick: () => void;
 }) {
-  const { route, selected, perPax, subtotal, originalTotal, vsOriginal, vsInitial } = row;
+  const { route, selected, pax, perPax, subtotal, originalTotal, vsOriginal, vsInitial } = row;
+  const [showRoster, setShowRoster] = useState(false);
+  const rosterCount = route.passengers.length;
+  const mismatch = rosterCount > 0 && rosterCount !== route.pax;
+  const paxDerived = rosterCount > 0;
   return (
     <div className="rounded-xl border border-card-border bg-card overflow-hidden">
       <div className="px-5 py-3 border-b border-border bg-muted/30 flex items-center justify-between flex-wrap gap-2">
         <div>
           <h3 className="font-semibold">{route.label}</h3>
           <p className="text-xs text-muted-foreground">
-            {route.pax} pax · {selected?.airline} · {selected?.fareClass} · {selected?.stops}
+            {pax} pax{paxDerived && pax !== route.pax ? ` (roster · baseline ${route.pax})` : paxDerived ? " (roster)" : ""} · {selected?.airline} · {selected?.fareClass} · {selected?.stops}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -577,26 +596,48 @@ function ResumenCard({ row, canEdit, onStatus, onNotes, onPick }: {
         <div className="text-xs space-y-1">
           <p className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">Varianza</p>
           <p className={vsOriginal < 0 ? "text-emerald-600 font-medium" : vsOriginal > 0 ? "text-red-500 font-medium" : "text-muted-foreground"}>
-            vs Original (${route.originalPerPax.toFixed(2)}/pax): {vsOriginal < 0 ? "↓" : "↑"} ${Math.abs(vsOriginal / route.pax).toFixed(2)}/pax
+            vs Original (${route.originalPerPax.toFixed(2)}/pax): {vsOriginal < 0 ? "↓" : "↑"} ${Math.abs(vsOriginal / pax).toFixed(2)}/pax
           </p>
           <p className={vsInitial < 0 ? "text-emerald-600 font-medium" : vsInitial > 0 ? "text-red-500 font-medium" : "text-muted-foreground"}>
-            vs Inicial Live (${route.initialLivePerPax}/pax): {vsInitial === 0 ? "sin cambio" : `${vsInitial < 0 ? "↓" : "↑"} $${Math.abs(vsInitial / route.pax).toFixed(2)}/pax`}
+            vs Inicial Live (${route.initialLivePerPax}/pax): {vsInitial === 0 ? "sin cambio" : `${vsInitial < 0 ? "↓" : "↑"} $${Math.abs(vsInitial / pax).toFixed(2)}/pax`}
           </p>
           <p className="text-muted-foreground pt-1">Última captura: {route.lastCaptureDate}</p>
         </div>
         <div className="text-right">
           <p className="text-[10px] uppercase text-muted-foreground font-semibold">Precio / pax</p>
           <p className="text-2xl font-extrabold">${perPax}</p>
-          <p className="text-[10px] uppercase text-muted-foreground font-semibold mt-2">Subtotal ({route.pax} pax)</p>
+          <p className="text-[10px] uppercase text-muted-foreground font-semibold mt-2">Subtotal ({pax} pax)</p>
           <p className="text-lg font-bold">{formatUSD(subtotal)}</p>
           <p className={cn("text-xs font-semibold mt-1", vsOriginal < 0 ? "text-emerald-600" : vsOriginal > 0 ? "text-red-500" : "text-muted-foreground")}>
             {vsOriginal < 0 ? "↓" : vsOriginal > 0 ? "↑" : ""} {formatUSD(Math.abs(vsOriginal))} vs original
           </p>
         </div>
       </div>
-      <div className="px-5 pb-4 -mt-1 flex items-start gap-3 flex-wrap">
+      <div className="px-5 pb-4 -mt-1 flex items-center gap-3 flex-wrap">
         <button onClick={onPick} className="text-xs text-blue-600 hover:underline">Cambiar opción →</button>
+        <button
+          onClick={() => setShowRoster(s => !s)}
+          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+        >
+          {showRoster ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          Pasajeros ({rosterCount}/{route.pax})
+        </button>
+        {mismatch && (
+          <span className="inline-flex items-center gap-1 text-[11px] text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-0.5">
+            <AlertTriangle className="w-3 h-3" />
+            Roster ({rosterCount}) no coincide con pax ({route.pax})
+          </span>
+        )}
       </div>
+      {showRoster && (
+        <div className="px-5 pb-5">
+          <PassengerRoster
+            passengers={route.passengers}
+            canEdit={canEdit}
+            onChange={onPassengers}
+          />
+        </div>
+      )}
       <div className="px-5 pb-5">
         <label className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Notas</label>
         <Textarea
@@ -607,6 +648,166 @@ function ResumenCard({ row, canEdit, onStatus, onNotes, onPick }: {
           className="mt-1 min-h-[60px] text-sm"
         />
       </div>
+    </div>
+  );
+}
+
+const SEAT_OPTIONS: SeatPreference[] = ["Ventana", "Pasillo", "Sin preferencia"];
+const BAGGAGE_OPTIONS: BaggageOption[] = ["Carry-on", "23kg", "32kg", "2 x 23kg"];
+
+function makePassengerId(): string {
+  return `pax-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function PassengerRoster({ passengers, canEdit, onChange }: {
+  passengers: Passenger[];
+  canEdit: boolean;
+  onChange: (p: Passenger[]) => void;
+}) {
+  const updatePassenger = (id: string, patch: Partial<Passenger>) => {
+    onChange(passengers.map(p => p.id === id ? { ...p, ...patch } : p));
+  };
+  const addPassenger = () => {
+    onChange([...passengers, {
+      id: makePassengerId(),
+      name: "",
+      email: "",
+      passport: "",
+      seatPreference: "Sin preferencia",
+      baggage: "23kg",
+      notes: "",
+    }]);
+  };
+  const removePassenger = (id: string) => {
+    onChange(passengers.filter(p => p.id !== id));
+  };
+
+  return (
+    <div className="rounded-lg border border-border/60 bg-muted/20">
+      <div className="px-3 py-2 border-b border-border/50 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Users className="w-3.5 h-3.5 text-blue-600" />
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Roster ({passengers.length})
+          </span>
+        </div>
+        {canEdit && (
+          <Button size="sm" variant="outline" onClick={addPassenger} className="h-7 text-xs gap-1">
+            <UserPlus className="w-3 h-3" /> Añadir pasajero
+          </Button>
+        )}
+      </div>
+      {passengers.length === 0 ? (
+        <p className="px-3 py-4 text-xs text-muted-foreground text-center">
+          Sin pasajeros registrados. {canEdit ? "Añade el primero." : ""}
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-muted/30 text-muted-foreground text-[10px] uppercase tracking-wide">
+              <tr>
+                <th className="text-left px-2 py-2 w-8">#</th>
+                <th className="text-left px-2 py-2">Nombre</th>
+                <th className="text-left px-2 py-2">Email</th>
+                <th className="text-left px-2 py-2">Pasaporte</th>
+                <th className="text-left px-2 py-2">Asiento</th>
+                <th className="text-left px-2 py-2">Equipaje</th>
+                <th className="text-left px-2 py-2">Notas</th>
+                {canEdit && <th className="w-8"></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {passengers.map((p, i) => (
+                <tr key={p.id} className="border-t border-border/40">
+                  <td className="px-2 py-1.5 font-mono text-muted-foreground">{i + 1}</td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      value={p.name}
+                      onChange={(e) => updatePassenger(p.id, { name: e.target.value })}
+                      disabled={!canEdit}
+                      placeholder="Nombre completo"
+                      className="h-7 text-xs"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      type="email"
+                      value={p.email}
+                      onChange={(e) => updatePassenger(p.id, { email: e.target.value })}
+                      disabled={!canEdit}
+                      placeholder="email@…"
+                      className="h-7 text-xs"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      value={p.passport}
+                      onChange={(e) => updatePassenger(p.id, { passport: e.target.value })}
+                      disabled={!canEdit}
+                      placeholder="Núm. pasaporte"
+                      className="h-7 text-xs font-mono"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5">
+                    {canEdit ? (
+                      <Select
+                        value={p.seatPreference}
+                        onValueChange={(v) => updatePassenger(p.id, { seatPreference: v as SeatPreference })}
+                      >
+                        <SelectTrigger className="h-7 text-xs w-[130px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SEAT_OPTIONS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span>{p.seatPreference}</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-1.5">
+                    {canEdit ? (
+                      <Select
+                        value={p.baggage}
+                        onValueChange={(v) => updatePassenger(p.id, { baggage: v as BaggageOption })}
+                      >
+                        <SelectTrigger className="h-7 text-xs w-[110px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {BAGGAGE_OPTIONS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span>{p.baggage}</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Input
+                      value={p.notes ?? ""}
+                      onChange={(e) => updatePassenger(p.id, { notes: e.target.value })}
+                      disabled={!canEdit}
+                      placeholder="Alergias, dietas…"
+                      className="h-7 text-xs"
+                    />
+                  </td>
+                  {canEdit && (
+                    <td className="px-2 py-1.5">
+                      <button
+                        onClick={() => removePassenger(p.id)}
+                        className="text-muted-foreground hover:text-red-500"
+                        aria-label="Eliminar pasajero"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
