@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard, TableProperties, Plane, Bus, Menu, X, ChevronRight,
   Wine, Coffee, Sandwich, LogOut, Info, Eye, MessageSquare, Pencil,
-  HandCoins, History, Calendar
+  HandCoins, History, Calendar, BedDouble
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -15,6 +15,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import BudgetPage from "@/pages/BudgetPage";
 import GroundTransportPage from "@/pages/GroundTransportPage";
 import AerialTransportPage from "@/pages/AerialTransportPage";
+import HotelPage from "@/pages/HotelPage";
 import CoctelPage from "@/pages/CoctelPage";
 import BarBebidasPage from "@/pages/BarBebidasPage";
 import LunchPage from "@/pages/LunchPage";
@@ -39,6 +40,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: "/agenda", label: "Agenda", icon: Calendar },
   { path: "/travel/ground", label: "Ground Transport", icon: Bus, deprecated: true },
   { path: "/travel/aerial", label: "Flights / Vuelos SAL", icon: Plane },
+  { path: "/hotel", label: "Hotel / Acomodaciones SAL", icon: BedDouble },
   { path: "/coctel", label: "Coctel (Delibanquetes)", icon: Wine, deprecated: true },
   { path: "/bar-bebidas", label: "Bar & Bebidas", icon: Coffee, deprecated: true },
   { path: "/lunch", label: "Lunch & Coffee Breaks", icon: Sandwich, deprecated: true },
@@ -327,6 +329,7 @@ function AppRouter() {
       <Route path="/budget" component={() => <Layout><BudgetPage /></Layout>} />
       <Route path="/travel/ground" component={() => <Layout><GroundTransportPage /></Layout>} />
       <Route path="/travel/aerial" component={() => <Layout><AerialTransportPage /></Layout>} />
+      <Route path="/hotel" component={() => <Layout><HotelPage /></Layout>} />
       <Route path="/travel"><Redirect to="/travel/ground" /></Route>
       <Route path="/coctel" component={() => <Layout><CoctelPage /></Layout>} />
       <Route path="/bar-bebidas" component={() => <Layout><BarBebidasPage /></Layout>} />

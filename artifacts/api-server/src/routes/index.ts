@@ -7,6 +7,7 @@ import auditRouter from "./audit";
 import agendaRouter from "./agenda";
 import subEventsRouter from "./sub-events";
 import flightsRouter from "./flights";
+import hotelRouter from "./hotel";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(auditRouter);
 router.use(agendaRouter);
 router.use(subEventsRouter);
 router.use(flightsRouter);
+router.use(hotelRouter);
 
 export default router;
