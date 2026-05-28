@@ -103,6 +103,9 @@ export function useTasksBoardApi() {
       dueDate: partial.dueDate || "",
       createdAt: now,
       updatedAt: now,
+      sourceKey: partial.sourceKey,
+      sourceType: partial.sourceType,
+      unmatched: partial.unmatched,
     };
     setState(prev => ({ ...prev, tasks: [...prev.tasks, t] }));
     return t;

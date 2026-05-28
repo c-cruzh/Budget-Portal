@@ -1,8 +1,9 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
-import { Plus, Trash2, ChevronLeft, ChevronRight, Cloud, CloudOff, Loader2, ListChecks, Flag, Calendar as CalendarIcon, User, Link2, AlertTriangle, Sparkles } from "lucide-react";
+import { Plus, Trash2, ChevronLeft, ChevronRight, Cloud, CloudOff, Loader2, ListChecks, Flag, Calendar as CalendarIcon, User, Link2, CalendarRange, AlertTriangle, Sparkles } from "lucide-react";
 import { useTasksBoardApi } from "@/hooks/useTasksBoardApi";
+import { useAuth } from "@/hooks/useAuth";
 import { STATUS_ORDER, STATUS_LABEL, PRIORITY_LABEL, FLAGGED_RRV_SOURCE_TYPE, type TaskStatus, type TaskPriority, type BoardTask } from "@/data/tasksBoardData";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+
+const MULTIDAY_SOURCE_KEY_PREFIX = "multiday-provider-validation:";
 
 const PRIORITY_STYLE: Record<TaskPriority, string> = {
   low: "bg-slate-500/10 text-slate-500 border-slate-500/20",
@@ -26,11 +29,15 @@ const STATUS_STYLE: Record<TaskStatus, string> = {
 
 export default function TasksBoardPage() {
   const { state, setState, loading, saving, lastSaved, error, meta, addTask, updateTask, deleteTask } = useTasksBoardApi();
+  const { user } = useAuth();
+  const isAdmin = (user?.organization || "") === "C2 LABS";
   const [editing, setEditing] = useState<BoardTask | null>(null);
   const [draft, setDraft] = useState<Partial<BoardTask>>({});
   const [showNew, setShowNew] = useState(false);
   const [onlyFlaggedRRV, setOnlyFlaggedRRV] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [filterMultiday, setFilterMultiday] = useState(false);
+  const [seedingMultiday, setSeedingMultiday] = useState(false);
 
   const flaggedCount = useMemo(
     () => state.tasks.filter(t => t.sourceType === FLAGGED_RRV_SOURCE_TYPE).length,
@@ -40,11 +47,17 @@ export default function TasksBoardPage() {
     () => state.tasks.filter(t => t.sourceType === FLAGGED_RRV_SOURCE_TYPE && t.unmatched).length,
     [state.tasks]
   );
-
-  const visibleTasks = useMemo(
-    () => onlyFlaggedRRV ? state.tasks.filter(t => t.sourceType === FLAGGED_RRV_SOURCE_TYPE) : state.tasks,
-    [state.tasks, onlyFlaggedRRV]
+  const multidayCount = useMemo(
+    () => state.tasks.filter(t => t.sourceKey?.startsWith(MULTIDAY_SOURCE_KEY_PREFIX)).length,
+    [state.tasks]
   );
+
+  const visibleTasks = useMemo(() => {
+    let arr = state.tasks;
+    if (onlyFlaggedRRV) arr = arr.filter(t => t.sourceType === FLAGGED_RRV_SOURCE_TYPE);
+    if (filterMultiday) arr = arr.filter(t => t.sourceKey?.startsWith(MULTIDAY_SOURCE_KEY_PREFIX));
+    return arr;
+  }, [state.tasks, onlyFlaggedRRV, filterMultiday]);
 
   const handleSeedFlagged = async () => {
     if (seeding) return;
@@ -60,7 +73,6 @@ export default function TasksBoardPage() {
         title: "Tareas Resize/Rescope/Validate",
         description: `${data.created} creadas · ${data.skipped} ya existían · ${data.matched} vinculadas al Budget · ${data.unmatched} sin vincular (de ${data.total} ítems)`,
       });
-      // Reload tasks board state from server to pick up the new tasks
       try {
         const r2 = await fetch("/api/tasks-board", { credentials: "include" });
         if (r2.ok) {
@@ -75,6 +87,37 @@ export default function TasksBoardPage() {
       toast({ title: "Error", description: err.message || "No se pudo generar las tareas", variant: "destructive" });
     } finally {
       setSeeding(false);
+    }
+  };
+
+  const runSeedMultiday = async () => {
+    if (seedingMultiday) return;
+    setSeedingMultiday(true);
+    try {
+      const res = await fetch("/api/tasks-board/seed-multiday-validation", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      const s = data.summary || {};
+      toast({
+        title: "Multi-day validation tasks generadas",
+        description: `${s.created ?? 0} creadas · ${s.alreadyExisted ?? 0} ya existían · ${s.unmatched ?? 0} sin match (de ${s.total ?? 0}).`,
+      });
+      const reload = await fetch("/api/tasks-board", { credentials: "include" });
+      if (reload.ok) {
+        const r = await reload.json();
+        if (r?.state && Array.isArray(r.state.tasks)) {
+          setState({ tasks: r.state.tasks });
+        }
+      }
+      setFilterMultiday(true);
+    } catch (e: any) {
+      toast({ title: "Error", description: e?.message || "No se pudo generar las tareas", variant: "destructive" });
+    } finally {
+      setSeedingMultiday(false);
     }
   };
 
@@ -130,46 +173,73 @@ export default function TasksBoardPage() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <SyncIndicator loading={loading} saving={saving} lastSaved={lastSaved} error={error} />
           <Button size="sm" variant="outline" onClick={handleSeedFlagged} disabled={seeding || loading} className="gap-2" title="Crea una tarea por cada uno de los 27 ítems flagged que necesitan Resize / Rescope / Validate. Idempotente.">
             {seeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             Generar tareas R/R/V (27)
           </Button>
+          {isAdmin && (
+            <Button size="sm" variant="outline" onClick={runSeedMultiday} disabled={seedingMultiday} className="gap-2" title="Crea una tarea por cada ítem con costo multi-día del proveedor (idempotente)">
+              {seedingMultiday ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              Generar multi-day
+            </Button>
+          )}
           <Button size="sm" onClick={() => { setDraft({ priority: "med", status: "todo" }); setShowNew(true); }} className="gap-2">
             <Plus className="w-4 h-4" /> Nueva tarea
           </Button>
         </div>
       </motion.div>
 
-      {flaggedCount > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => setOnlyFlaggedRRV(v => !v)}
-            className={cn(
-              "text-[11px] px-2 py-1 rounded border inline-flex items-center gap-1.5 transition-colors",
-              onlyFlaggedRRV
-                ? "bg-amber-500/15 text-amber-700 border-amber-500/40"
-                : "bg-amber-500/5 text-amber-700 border-amber-500/20 hover:bg-amber-500/10"
-            )}
-            title="Filtrar para ver solo los ítems flagged que requieren Resize / Rescope / Validate"
-          >
-            <Flag className="w-3 h-3" />
-            Resize/Rescope/Validate
-            <span className="font-mono">{flaggedCount}</span>
-            {flaggedUnmatched > 0 && (
-              <span className="ml-1 inline-flex items-center gap-0.5 text-red-600">
-                <AlertTriangle className="w-2.5 h-2.5" /> {flaggedUnmatched} sin vincular
-              </span>
-            )}
-          </button>
-          {onlyFlaggedRRV && (
-            <button onClick={() => setOnlyFlaggedRRV(false)} className="text-[11px] text-muted-foreground hover:text-foreground underline">
-              Ver todas
+      <div className="flex flex-wrap items-center gap-2">
+        {flaggedCount > 0 && (
+          <>
+            <button
+              onClick={() => setOnlyFlaggedRRV(v => !v)}
+              className={cn(
+                "text-[11px] px-2 py-1 rounded border inline-flex items-center gap-1.5 transition-colors",
+                onlyFlaggedRRV
+                  ? "bg-amber-500/15 text-amber-700 border-amber-500/40"
+                  : "bg-amber-500/5 text-amber-700 border-amber-500/20 hover:bg-amber-500/10"
+              )}
+              title="Filtrar para ver solo los ítems flagged que requieren Resize / Rescope / Validate"
+            >
+              <Flag className="w-3 h-3" />
+              Resize/Rescope/Validate
+              <span className="font-mono">{flaggedCount}</span>
+              {flaggedUnmatched > 0 && (
+                <span className="ml-1 inline-flex items-center gap-0.5 text-red-600">
+                  <AlertTriangle className="w-2.5 h-2.5" /> {flaggedUnmatched} sin vincular
+                </span>
+              )}
             </button>
+            {onlyFlaggedRRV && (
+              <button onClick={() => setOnlyFlaggedRRV(false)} className="text-[11px] text-muted-foreground hover:text-foreground underline">
+                Ver todas
+              </button>
+            )}
+          </>
+        )}
+        <button
+          onClick={() => setFilterMultiday(v => !v)}
+          className={cn(
+            "text-[11px] px-2 py-1 rounded-full border inline-flex items-center gap-1.5 transition-colors",
+            filterMultiday
+              ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/40"
+              : "bg-muted/40 text-muted-foreground border-border hover:border-amber-500/40"
           )}
-        </div>
-      )}
+          title="Tareas generadas para ítems con costo multi-día del proveedor"
+        >
+          <CalendarRange className="w-3 h-3" />
+          Multi-day provider cost — pendiente validar
+          <span className="ml-1 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 font-mono text-[10px]">{multidayCount}</span>
+        </button>
+        {filterMultiday && (
+          <button onClick={() => setFilterMultiday(false)} className="text-[11px] text-muted-foreground underline">
+            Quitar filtro
+          </button>
+        )}
+      </div>
 
       {meta?.lastEditedBy && (
         <div className="text-[11px] text-muted-foreground">
@@ -341,10 +411,16 @@ function TaskCard({ task, onEdit, onDelete, onMove }: { task: BoardTask; onEdit:
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
-      <div className="flex flex-wrap items-center gap-1 mt-1.5">
+      <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
         {task.sourceType === FLAGGED_RRV_SOURCE_TYPE && (
           <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 border border-amber-500/20" title="Ítem flagged: requiere Resize / Rescope / Validate">
             <Flag className="w-2.5 h-2.5" /> R/R/V
+          </span>
+        )}
+        {task.sourceKey?.startsWith(MULTIDAY_SOURCE_KEY_PREFIX) && (
+          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30" title="Generada por: Multi-day provider cost — consult & validate">
+            <CalendarRange className="w-2.5 h-2.5" />
+            Multi-day validar
           </span>
         )}
         {task.unmatched && (
@@ -355,7 +431,7 @@ function TaskCard({ task, onEdit, onDelete, onMove }: { task: BoardTask; onEdit:
         {task.linkedBudgetItem && (
           <Link href="/budget" className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 max-w-full" title={`Budget item #${task.linkedBudgetItem.id}: ${task.linkedBudgetItem.label}`}>
             <Link2 className="w-2.5 h-2.5 flex-shrink-0" />
-            <span className="truncate">{task.linkedBudgetItem.label}</span>
+            <span className="truncate max-w-[200px]">{task.linkedBudgetItem.label}</span>
           </Link>
         )}
       </div>
@@ -373,11 +449,11 @@ function TaskCard({ task, onEdit, onDelete, onMove }: { task: BoardTask; onEdit:
             <CalendarIcon className="w-2.5 h-2.5" /> {task.dueDate}
           </span>
         )}
-        <div className="ml-auto flex items-center gap-0.5">
-          <button onClick={() => onMove(-1)} disabled={!canPrev} className={cn("p-0.5 rounded", canPrev ? "hover:bg-muted text-muted-foreground hover:text-foreground" : "text-muted-foreground/30 cursor-not-allowed")} title="Mover izquierda">
+        <div className="ml-auto flex items-center gap-1">
+          <button disabled={!canPrev} onClick={() => onMove(-1)} className="p-0.5 rounded hover:bg-muted disabled:opacity-30" title="Mover atrás">
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
-          <button onClick={() => onMove(1)} disabled={!canNext} className={cn("p-0.5 rounded", canNext ? "hover:bg-muted text-muted-foreground hover:text-foreground" : "text-muted-foreground/30 cursor-not-allowed")} title="Mover derecha">
+          <button disabled={!canNext} onClick={() => onMove(1)} className="p-0.5 rounded hover:bg-muted disabled:opacity-30" title="Mover adelante">
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -389,16 +465,37 @@ function TaskCard({ task, onEdit, onDelete, onMove }: { task: BoardTask; onEdit:
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{label}</label>
+      <label className="text-[11px] text-muted-foreground">{label}</label>
       {children}
     </div>
   );
 }
 
 function SyncIndicator({ loading, saving, lastSaved, error }: { loading: boolean; saving: boolean; lastSaved: Date | null; error: string | null }) {
-  if (loading) return <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Cargando…</span>;
-  if (error) return <span className="text-[11px] text-red-600 inline-flex items-center gap-1"><CloudOff className="w-3 h-3" /> {error}</span>;
-  if (saving) return <span className="text-[11px] text-blue-600 inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Guardando…</span>;
-  if (lastSaved) return <span className="text-[11px] text-emerald-600 inline-flex items-center gap-1"><Cloud className="w-3 h-3" /> Guardado {lastSaved.toLocaleTimeString()}</span>;
-  return <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1"><Cloud className="w-3 h-3" /> Listo</span>;
+  if (loading) {
+    return (
+      <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
+        <Loader2 className="w-3 h-3 animate-spin" /> Cargando…
+      </span>
+    );
+  }
+  if (error) {
+    return (
+      <span className="text-[11px] text-red-500 inline-flex items-center gap-1" title={error}>
+        <CloudOff className="w-3 h-3" /> Sin conexión
+      </span>
+    );
+  }
+  if (saving) {
+    return (
+      <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
+        <Loader2 className="w-3 h-3 animate-spin" /> Guardando…
+      </span>
+    );
+  }
+  return (
+    <span className="text-[11px] text-emerald-600 inline-flex items-center gap-1">
+      <Cloud className="w-3 h-3" /> {lastSaved ? `Guardado · ${lastSaved.toLocaleTimeString()}` : "Sincronizado"}
+    </span>
+  );
 }

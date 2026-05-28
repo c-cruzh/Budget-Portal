@@ -38,6 +38,7 @@ interface BudgetItemLike {
   item?: string;
   descripcion?: string;
   evento?: string;
+  notas?: string;
 }
 
 function findBestMatch(seed: { area: string; centroCosto: string; descripcion: string }, items: BudgetItemLike[]) {
@@ -187,7 +188,7 @@ const TaskSchema = z.object({
   createdAt: z.string().max(64),
   updatedAt: z.string().max(64),
   linkedBudgetItem: LinkedBudgetItemSchema.optional(),
-  sourceKey: z.string().max(128).optional(),
+  sourceKey: z.string().max(200).optional(),
   sourceType: z.string().max(64).optional(),
   unmatched: z.boolean().optional(),
 });
@@ -374,6 +375,178 @@ router.post("/tasks-board/seed-flagged-items", async (req, res) => {
   } catch (err) {
     console.error("Failed to seed flagged items:", err);
     res.status(500).json({ error: "Failed to seed flagged items" });
+  }
+});
+
+const MULTIDAY_SEED: Array<{ area: string; centroCosto: string; descripcion: string }> = [
+  { area: "LOBBY", centroCosto: "BOOTHS/STANDS", descripcion: "C2 LABS" },
+  { area: "LOBBY", centroCosto: "BOOTHS/STANDS", descripcion: "OPINNO" },
+  { area: "AUDITORIO/MAIN STAGE", centroCosto: "PRODUCCIÓN Y MONTAJE", descripcion: "Escenografía: tarima 12.20 x 3.66 x 0.30 con charol negro y gradas lateral derecho (POV hacia público)" },
+  { area: "AUDITORIO/MAIN STAGE", centroCosto: "ILUMINACIÓN", descripcion: "Escenografía: barras de luz para bañar fondo/pared principal auditorio" },
+  { area: "AUDITORIO/MAIN STAGE", centroCosto: "PRODUCCIÓN Y MONTAJE", descripcion: "Tarima para 2 cámaras a los laterales (1.20 x 1.20 x 0.50 m)" },
+  { area: "AUDITORIO/MAIN STAGE", centroCosto: "ILUMINACIÓN", descripcion: "Iluminación main stage para ponentes y participantes" },
+  { area: "AUDITORIO/MAIN STAGE", centroCosto: "AUDIO", descripcion: "Monitor para prensa" },
+  { area: "AUDITORIO/MAIN STAGE", centroCosto: "COMUNICACIÓN", descripcion: "Auriculares" },
+  { area: "LIVING SPACE (CAFETERIA)", centroCosto: "BOOTHS/STANDS", descripcion: "Booth Silver" },
+  { area: "TRANSPORTE DE EQUIPO Y/O ELEMENTOS DE PRODUCCIÓN & MONTAJE", centroCosto: "TRANSPORTE MOBILIARIO Y EQUIPO", descripcion: "Cubos acrílicos" },
+  { area: "AUDITORIO/MAIN STAGE", centroCosto: "PRODUCCIÓN AUDIOVISUAL", descripcion: "Blackmagic Design Studio 6K Pro + lentes montura EF" },
+  { area: "AUDITORIO/MAIN STAGE", centroCosto: "PRODUCCIÓN AUDIOVISUAL", descripcion: "Cámaras Sony a7S III + lentes montura E" },
+  { area: "AUDITORIO/MAIN STAGE", centroCosto: "PRODUCCIÓN AUDIOVISUAL", descripcion: "Cámaras PTZ OBSBOT + controlador" },
+  { area: "AUDITORIO/MAIN STAGE", centroCosto: "PRODUCCIÓN AUDIOVISUAL", descripcion: "Switcher Blackmagic ATEM Television Studio 4K SDI" },
+  { area: "AUDITORIO/MAIN STAGE", centroCosto: "PRODUCCIÓN AUDIOVISUAL", descripcion: "Computadora de alto rendimiento para gráficos y streaming" },
+  { area: "AUDITORIO/MAIN STAGE", centroCosto: "PRODUCCIÓN AUDIOVISUAL", descripcion: "Consola de audio RODECaster Pro" },
+  { area: "AUDITORIO/MAIN STAGE", centroCosto: "PRODUCCIÓN AUDIOVISUAL", descripcion: "Costos operativos, montaje técnico, transporte, logística y accesorios" },
+  { area: "AUDITORIO/MAIN STAGE", centroCosto: "PRODUCCIÓN AUDIOVISUAL", descripcion: "Pantallas de 43 pulgadas" },
+];
+
+export const MULTIDAY_SOURCE_KEY_PREFIX = "multiday-provider-validation:";
+
+function multidayTokens(s: string): Set<string> {
+  return new Set(normalize(s).split(" ").filter(t => t.length >= 3));
+}
+
+function scoreMultidayMatch(seed: { area: string; centroCosto: string; descripcion: string }, item: any): number {
+  const seedArea = normalize(seed.area);
+  const seedCentro = normalize(seed.centroCosto);
+  const itArea = normalize(item.area || "");
+  const itCentro = normalize(item.centroCosto || "");
+  let s = 0;
+  if (seedArea && itArea === seedArea) s += 100;
+  else if (seedArea && (itArea.includes(seedArea) || seedArea.includes(itArea))) s += 40;
+  else return 0;
+  if (seedCentro && itCentro === seedCentro) s += 50;
+  else if (seedCentro && (itCentro.includes(seedCentro) || seedCentro.includes(itCentro))) s += 20;
+
+  const seedTokens = multidayTokens(seed.descripcion);
+  const itemText = `${item.item || ""} ${item.descripcion || ""} ${item.notas || ""}`;
+  const itTokens = multidayTokens(itemText);
+  let overlap = 0;
+  for (const t of seedTokens) if (itTokens.has(t)) overlap++;
+  if (seedTokens.size > 0) {
+    const ratio = overlap / seedTokens.size;
+    s += Math.round(ratio * 100);
+  }
+  return s;
+}
+
+router.post("/tasks-board/seed-multiday-validation", async (req, res) => {
+  const auth = requireAuth(req, res);
+  if (!auth) return;
+  if (auth.userOrg !== "C2 LABS") {
+    res.status(403).json({ error: "Only C2 LABS can generate these tasks" });
+    return;
+  }
+  try {
+    const [tasksRow, budgetRow] = await Promise.all([
+      db.select().from(appState).where(eq(appState.key, KEY)).limit(1),
+      db.select().from(appState).where(eq(appState.key, BUDGET_KEY)).limit(1),
+    ]);
+
+    const currentState = (tasksRow.length > 0 ? tasksRow[0].value : null) as any;
+    const currentTasks: any[] = Array.isArray(currentState?.tasks) ? currentState.tasks : [];
+    const budgetItems: any[] = Array.isArray(budgetRow[0]?.value) ? (budgetRow[0].value as any[]) : [];
+
+    const existingKeys = new Set<string>(
+      currentTasks.map(t => t?.sourceKey).filter((k: any): k is string => typeof k === "string")
+    );
+
+    const now = new Date().toISOString();
+    let created = 0;
+    let alreadyExisted = 0;
+    let unmatchedCount = 0;
+    const newTasks: any[] = [];
+
+    MULTIDAY_SEED.forEach((seed, idx) => {
+      const sourceKey = `${MULTIDAY_SOURCE_KEY_PREFIX}${idx + 1}`;
+      if (existingKeys.has(sourceKey)) { alreadyExisted++; return; }
+
+      let bestScore = 0;
+      let bestItem: any = null;
+      for (const it of budgetItems) {
+        const sc = scoreMultidayMatch(seed, it);
+        if (sc > bestScore) { bestScore = sc; bestItem = it; }
+      }
+      const matched = bestScore >= 140 && bestItem;
+      if (!matched) unmatchedCount++;
+
+      const titleArea = seed.area;
+      const titleCentro = seed.centroCosto;
+      const titleConcept = matched ? (bestItem.item || seed.descripcion) : seed.descripcion;
+      const title = `${titleArea} — ${titleCentro} — ${titleConcept}`.slice(0, 500);
+
+      const notes = [
+        "Este ítem está costeado por el proveedor a más de un día. Hay que consultar al proveedor y validar el costo multi-día (alcance, días y precio).",
+        "",
+        `Área: ${seed.area}`,
+        `Categoría: ${seed.centroCosto}`,
+        `Concepto: ${seed.descripcion}`,
+        matched ? `Match con Budget item #${bestItem.id} (score ${bestScore}).` : "Unmatched — needs manual linking.",
+      ].join("\n").slice(0, 5000);
+
+      const task: any = {
+        id: typeof crypto !== "undefined" && (crypto as any).randomUUID
+          ? (crypto as any).randomUUID()
+          : `t-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 8)}`,
+        title,
+        notes,
+        status: "todo",
+        priority: "med",
+        assignee: "",
+        dueDate: "",
+        createdAt: now,
+        updatedAt: now,
+        sourceKey,
+        unmatched: !matched,
+      };
+      if (matched) {
+        task.linkedBudgetItem = {
+          id: String(bestItem.id),
+          label: String(bestItem.item || seed.descripcion).slice(0, 500),
+          evento: bestItem.evento ? String(bestItem.evento).slice(0, 200) : undefined,
+          area: bestItem.area ? String(bestItem.area).slice(0, 300) : undefined,
+          centroCosto: bestItem.centroCosto ? String(bestItem.centroCosto).slice(0, 200) : undefined,
+        };
+      }
+      newTasks.push(task);
+      created++;
+    });
+
+    const nextState = { tasks: [...currentTasks, ...newTasks] };
+    const parsed = StateSchema.safeParse(nextState);
+    if (!parsed.success) {
+      res.status(500).json({ error: "Generated state failed validation", issues: parsed.error.issues });
+      return;
+    }
+
+    const meta = {
+      lastEditedBy: auth.userName,
+      lastEditedByEmail: auth.userEmail,
+      lastEditedByOrg: auth.userOrg,
+      lastEditedAt: now,
+    };
+
+    await Promise.all([
+      db.insert(appState)
+        .values({ key: KEY, value: parsed.data, updatedAt: new Date() })
+        .onConflictDoUpdate({ target: appState.key, set: { value: parsed.data, updatedAt: new Date() } }),
+      db.insert(appState)
+        .values({ key: META_KEY, value: meta as any, updatedAt: new Date() })
+        .onConflictDoUpdate({ target: appState.key, set: { value: meta as any, updatedAt: new Date() } }),
+    ]);
+
+    res.json({
+      ok: true,
+      summary: {
+        total: MULTIDAY_SEED.length,
+        created,
+        alreadyExisted,
+        unmatched: unmatchedCount,
+      },
+      meta,
+    });
+  } catch (err) {
+    console.error("Failed to seed multi-day validation tasks:", err);
+    res.status(500).json({ error: "Failed to seed multi-day validation tasks" });
   }
 });
 
