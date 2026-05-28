@@ -1,8 +1,10 @@
 import { useMemo } from "react";
+import { createRoot } from "react-dom/client";
 import {
   BedDouble, Hotel, Cloud, CloudOff, Loader2, Users, Calendar,
-  TrendingDown, TrendingUp, AlertTriangle, CheckCircle2, RefreshCcw, Plane,
+  TrendingDown, TrendingUp, AlertTriangle, CheckCircle2, RefreshCcw, Plane, Printer,
 } from "lucide-react";
+import HotelPrintView from "@/components/HotelPrintView";
 import { useHotelApi } from "@/hooks/useHotelApi";
 import { useFlightsApi } from "@/hooks/useFlightsApi";
 import { useAuth } from "@/hooks/useAuth";
@@ -62,6 +64,12 @@ function fmtDateShort(d: Date | null): string {
   if (!d) return "—";
   const months = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
   return `${d.getUTCDate()} ${months[d.getUTCMonth()]}`;
+}
+
+function fmtDateFull(d: Date | null): string {
+  if (!d) return "—";
+  const months = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  return `${d.getUTCDate()} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
 function dateKey(d: Date): string {
@@ -203,6 +211,42 @@ export default function HotelPage() {
 
   const allDecided = totals.missing === 0;
 
+  const handlePrint = () => {
+    if (!allDecided) return;
+    const printRows = rows.map(r => ({
+      groupKey: r.group.key,
+      groupLabel: r.group.label,
+      pax: r.group.pax,
+      rooms: r.rooms,
+      checkIn: r.stay.checkIn,
+      checkOut: r.stay.checkOut,
+      nights: r.hasSelection ? r.stay.nights : 0,
+      subtotal: r.subtotal,
+    }));
+    const printCells = nightBreakdown.cells.map(c => ({
+      date: c.date, key: c.key, perGroup: c.perGroup, total: c.total,
+    }));
+
+    const w = window.open("", "_blank", "width=1100,height=850");
+    if (!w) return;
+    w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Solicitud de hotel — EmTech Digital El Salvador 2026</title></head><body><div id="root"></div></body></html>`);
+    w.document.close();
+    const mount = w.document.getElementById("root");
+    if (!mount) return;
+    const root = createRoot(mount);
+    root.render(
+      <HotelPrintView
+        rows={printRows}
+        nightBreakdown={printCells}
+        totals={{ totalRoomNights: totals.totalRoomNights, totalCost: totals.totalCost, totalPaxNights: totals.totalPaxNights }}
+        notes={state.notes}
+        rateBase={state.rateBase}
+        rateTotal={state.rateTotal}
+        generatedAt={new Date()}
+      />
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -218,7 +262,23 @@ export default function HotelPage() {
               ${HOTEL_RATE_BASE} base + IVA + Turismo = <b>${HOTEL_RATE_TOTAL.toFixed(2)}</b> por habitación/noche · 1 hab/pax · Noches derivadas de los vuelos seleccionados
             </p>
           </div>
-          <SyncIndicator saving={saving} lastSaved={lastSaved} error={error} />
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handlePrint}
+              disabled={!allDecided}
+              title={allDecided ? "Abre una versión imprimible para enviar al hotel" : `Selecciona vuelo para ${totals.missing} grupo(s) antes de imprimir`}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors",
+                allDecided
+                  ? "bg-purple-600 text-white border-purple-600 hover:bg-purple-700"
+                  : "bg-muted text-muted-foreground border-border cursor-not-allowed",
+              )}
+            >
+              <Printer className="w-3.5 h-3.5" /> Imprimir / Exportar PDF
+            </button>
+            <SyncIndicator saving={saving} lastSaved={lastSaved} error={error} />
+          </div>
         </div>
         {meta && (
           <p className="text-[11px] text-muted-foreground mt-2">
