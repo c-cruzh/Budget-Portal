@@ -1,10 +1,10 @@
-import { Switch, Route, Router as WouterRouter, Link, useLocation } from "wouter";
+import { Switch, Route, Router as WouterRouter, Link, useLocation, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { motion } from "framer-motion";
 import {
-  LayoutDashboard, TableProperties, Plane, Menu, X, ChevronRight,
+  LayoutDashboard, TableProperties, Plane, Bus, Menu, X, ChevronRight,
   Wine, Coffee, Sandwich, LogOut, Info, Eye, MessageSquare, Pencil,
   HandCoins, History
 } from "lucide-react";
@@ -13,7 +13,8 @@ import { useState } from "react";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import DashboardPage from "@/pages/DashboardPage";
 import BudgetPage from "@/pages/BudgetPage";
-import AviancaPage from "@/pages/AviancaPage";
+import GroundTransportPage from "@/pages/GroundTransportPage";
+import AerialTransportPage from "@/pages/AerialTransportPage";
 import CoctelPage from "@/pages/CoctelPage";
 import BarBebidasPage from "@/pages/BarBebidasPage";
 import LunchPage from "@/pages/LunchPage";
@@ -24,10 +25,18 @@ import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
 
-const NAV_ITEMS = [
+type NavItem = {
+  path: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  deprecated?: boolean;
+};
+
+const NAV_ITEMS: NavItem[] = [
   { path: "/", label: "Overview", icon: LayoutDashboard },
   { path: "/budget", label: "Budget Items", icon: TableProperties },
-  { path: "/travel", label: "Flights & Transfers", icon: Plane },
+  { path: "/travel/ground", label: "Ground Transport", icon: Bus },
+  { path: "/travel/aerial", label: "Aerial Transport", icon: Plane, deprecated: true },
   { path: "/coctel", label: "Coctel (Delibanquetes)", icon: Wine },
   { path: "/bar-bebidas", label: "Bar & Bebidas", icon: Coffee },
   { path: "/lunch", label: "Lunch & Coffee Breaks", icon: Sandwich },
@@ -35,7 +44,7 @@ const NAV_ITEMS = [
   { path: "/history", label: "Historial", icon: History },
 ];
 
-function NavLink({ item }: { item: typeof NAV_ITEMS[number] }) {
+function NavLink({ item }: { item: NavItem }) {
   const [location] = useLocation();
   const isActive = item.path === "/" ? location === "/" : location.startsWith(item.path);
   return (
@@ -45,11 +54,23 @@ function NavLink({ item }: { item: typeof NAV_ITEMS[number] }) {
         "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150",
         isActive
           ? "bg-primary text-primary-foreground shadow-sm"
-          : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+          : item.deprecated
+            ? "text-sidebar-foreground/40 hover:text-sidebar-foreground/70 hover:bg-sidebar-accent"
+            : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
       )}
     >
       <item.icon className="w-4 h-4 flex-shrink-0" />
-      {item.label}
+      <span className="flex-1">{item.label}</span>
+      {item.deprecated && (
+        <span className={cn(
+          "text-[9px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wide",
+          isActive
+            ? "bg-primary-foreground/20 text-primary-foreground"
+            : "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+        )}>
+          Deprecated
+        </span>
+      )}
     </Link>
   );
 }
@@ -302,7 +323,9 @@ function AppRouter() {
     <Switch>
       <Route path="/" component={() => <Layout><DashboardPage /></Layout>} />
       <Route path="/budget" component={() => <Layout><BudgetPage /></Layout>} />
-      <Route path="/travel" component={() => <Layout><AviancaPage /></Layout>} />
+      <Route path="/travel/ground" component={() => <Layout><GroundTransportPage /></Layout>} />
+      <Route path="/travel/aerial" component={() => <Layout><AerialTransportPage /></Layout>} />
+      <Route path="/travel"><Redirect to="/travel/ground" /></Route>
       <Route path="/coctel" component={() => <Layout><CoctelPage /></Layout>} />
       <Route path="/bar-bebidas" component={() => <Layout><BarBebidasPage /></Layout>} />
       <Route path="/lunch" component={() => <Layout><LunchPage /></Layout>} />
