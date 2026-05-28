@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard, TableProperties, Plane, Menu, X, ChevronRight,
   Wine, Coffee, Sandwich, LogOut, Info, Eye, MessageSquare, Pencil,
-  HandCoins
+  HandCoins, History
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -18,6 +18,7 @@ import CoctelPage from "@/pages/CoctelPage";
 import BarBebidasPage from "@/pages/BarBebidasPage";
 import LunchPage from "@/pages/LunchPage";
 import SponsorsPage from "@/pages/SponsorsPage";
+import HistoryPage from "@/pages/HistoryPage";
 import LoginPage from "@/pages/LoginPage";
 import NotFound from "@/pages/not-found";
 
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { path: "/bar-bebidas", label: "Bar & Bebidas", icon: Coffee },
   { path: "/lunch", label: "Lunch & Coffee Breaks", icon: Sandwich },
   { path: "/sponsors", label: "Sponsors & Cash", icon: HandCoins },
+  { path: "/history", label: "Historial", icon: History },
 ];
 
 function NavLink({ item }: { item: typeof NAV_ITEMS[number] }) {
@@ -305,6 +307,7 @@ function AppRouter() {
       <Route path="/bar-bebidas" component={() => <Layout><BarBebidasPage /></Layout>} />
       <Route path="/lunch" component={() => <Layout><LunchPage /></Layout>} />
       <Route path="/sponsors" component={() => <Layout><SponsorsPage /></Layout>} />
+      <Route path="/history" component={() => <Layout><HistoryPage /></Layout>} />
       <Route component={NotFound} />
     </Switch>
   );

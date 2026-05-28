@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, appState, withRetry } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { getAuditUser, writeAuditEntries, diffSponsors, diffScenario } from "../lib/audit";
 
 const router: IRouter = Router();
 
@@ -48,12 +49,22 @@ router.put("/sponsors", async (req, res) => {
       res.status(400).json({ error: "sponsors must be an array" });
       return;
     }
+    const existing = await db.select().from(appState).where(eq(appState.key, SPONSORS_KEY)).limit(1);
+    const oldSponsors = existing.length > 0 ? (existing[0].value as any[]) : null;
+
     await db.insert(appState)
       .values({ key: SPONSORS_KEY, value: sponsors, updatedAt: new Date() })
       .onConflictDoUpdate({
         target: appState.key,
         set: { value: sponsors, updatedAt: new Date() },
       });
+
+    const auditUser = getAuditUser(req);
+    if (auditUser) {
+      const entries = diffSponsors(auditUser, oldSponsors, sponsors);
+      if (entries.length) await writeAuditEntries(entries);
+    }
+
     res.json({ ok: true });
   } catch (err) {
     console.error("Failed to save sponsors:", err);
@@ -71,12 +82,22 @@ router.put("/sponsors/scenario", async (req, res) => {
       return;
     }
     const scenario = req.body;
+    const existing = await db.select().from(appState).where(eq(appState.key, SCENARIO_KEY)).limit(1);
+    const oldScenario = existing.length > 0 ? existing[0].value : null;
+
     await db.insert(appState)
       .values({ key: SCENARIO_KEY, value: scenario, updatedAt: new Date() })
       .onConflictDoUpdate({
         target: appState.key,
         set: { value: scenario, updatedAt: new Date() },
       });
+
+    const auditUser = getAuditUser(req);
+    if (auditUser) {
+      const entries = diffScenario(auditUser, oldScenario, scenario);
+      if (entries.length) await writeAuditEntries(entries);
+    }
+
     res.json({ ok: true });
   } catch (err) {
     console.error("Failed to save scenario:", err);

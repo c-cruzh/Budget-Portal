@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, appState, withRetry } from "@workspace/db";
 import { users } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
+import { getAuditUser, writeAuditEntries, diffBudgetItems } from "../lib/audit";
 
 const router: IRouter = Router();
 
@@ -66,6 +67,9 @@ router.put("/budget-items", async (req, res) => {
       lastEditedAt: new Date().toISOString(),
     };
 
+    const existing = await db.select().from(appState).where(eq(appState.key, BUDGET_KEY)).limit(1);
+    const oldItems = existing.length > 0 ? (existing[0].value as any[]) : null;
+
     await Promise.all([
       db.insert(appState)
         .values({ key: BUDGET_KEY, value: items, updatedAt: new Date() })
@@ -80,6 +84,12 @@ router.put("/budget-items", async (req, res) => {
           set: { value: meta as any, updatedAt: new Date() },
         }),
     ]);
+
+    const auditUser = getAuditUser(req);
+    if (auditUser) {
+      const entries = diffBudgetItems(auditUser, oldItems, items);
+      if (entries.length) await writeAuditEntries(entries);
+    }
 
     res.json({ ok: true, count: items.length, meta });
   } catch (err) {
@@ -123,6 +133,10 @@ router.patch("/budget-items", async (req, res) => {
     const valueJson = JSON.stringify(value);
     const fieldPath = `{${field}}`;
 
+    const existing = await db.select().from(appState).where(eq(appState.key, BUDGET_KEY)).limit(1);
+    const oldItems = existing.length > 0 ? (existing[0].value as any[]) : [];
+    const oldItem = oldItems.find((it: any) => it?.id === id);
+
     const [updateResult] = await Promise.all([
       db.execute(sql`
         UPDATE app_state
@@ -156,6 +170,21 @@ router.patch("/budget-items", async (req, res) => {
     if (rowsAffected === 0) {
       res.status(404).json({ error: `Item ${id} not found` });
       return;
+    }
+
+    const auditUser = getAuditUser(req);
+    if (auditUser && oldItem && JSON.stringify(oldItem[field]) !== JSON.stringify(value)) {
+      await writeAuditEntries([{
+        ...auditUser,
+        entityType: "budget-item",
+        entityId: id,
+        entityLabel: oldItem.item || oldItem.descripcion || id,
+        action: "UPDATE",
+        field,
+        oldValue: (oldItem[field] ?? null) as any,
+        newValue: (value ?? null) as any,
+        summary: `Editó ${field} en "${oldItem.item || id}"`,
+      }]);
     }
 
     res.json({ ok: true, meta });
