@@ -134,6 +134,15 @@ function merge(persisted: any): TasksBoardState {
         dueDate: typeof t?.dueDate === "string" ? t.dueDate : "",
         createdAt: typeof t?.createdAt === "string" ? t.createdAt : new Date().toISOString(),
         updatedAt: typeof t?.updatedAt === "string" ? t.updatedAt : new Date().toISOString(),
+        linkedBudgetItem: t?.linkedBudgetItem && typeof t.linkedBudgetItem === "object" && typeof t.linkedBudgetItem.id === "string"
+          ? {
+              id: t.linkedBudgetItem.id,
+              label: typeof t.linkedBudgetItem.label === "string" ? t.linkedBudgetItem.label : "",
+              evento: typeof t.linkedBudgetItem.evento === "string" ? t.linkedBudgetItem.evento : undefined,
+              area: typeof t.linkedBudgetItem.area === "string" ? t.linkedBudgetItem.area : undefined,
+              centroCosto: typeof t.linkedBudgetItem.centroCosto === "string" ? t.linkedBudgetItem.centroCosto : undefined,
+            }
+          : undefined,
       }))
     : [];
   return { tasks };

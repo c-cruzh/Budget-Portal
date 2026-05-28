@@ -1,6 +1,14 @@
 export type TaskStatus = "todo" | "doing" | "done";
 export type TaskPriority = "low" | "med" | "high";
 
+export interface LinkedBudgetItem {
+  id: string;
+  label: string;
+  evento?: string;
+  area?: string;
+  centroCosto?: string;
+}
+
 export interface BoardTask {
   id: string;
   title: string;
@@ -11,6 +19,7 @@ export interface BoardTask {
   dueDate: string;
   createdAt: string;
   updatedAt: string;
+  linkedBudgetItem?: LinkedBudgetItem;
 }
 
 export interface TasksBoardState {

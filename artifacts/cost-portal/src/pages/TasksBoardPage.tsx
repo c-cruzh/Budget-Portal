@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Plus, Trash2, ChevronLeft, ChevronRight, Cloud, CloudOff, Loader2, ListChecks, Flag, Calendar as CalendarIcon, User } from "lucide-react";
+import { Link } from "wouter";
+import { Plus, Trash2, ChevronLeft, ChevronRight, Cloud, CloudOff, Loader2, ListChecks, Flag, Calendar as CalendarIcon, User, Link2 } from "lucide-react";
 import { useTasksBoardApi } from "@/hooks/useTasksBoardApi";
 import { STATUS_ORDER, STATUS_LABEL, PRIORITY_LABEL, type TaskStatus, type TaskPriority, type BoardTask } from "@/data/tasksBoardData";
 import { Button } from "@/components/ui/button";
@@ -258,6 +259,12 @@ function TaskCard({ task, onEdit, onDelete, onMove }: { task: BoardTask; onEdit:
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
+      {task.linkedBudgetItem && (
+        <Link href="/budget" className="mt-1.5 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 max-w-full" title={`Budget item #${task.linkedBudgetItem.id}: ${task.linkedBudgetItem.label}`}>
+          <Link2 className="w-2.5 h-2.5 flex-shrink-0" />
+          <span className="truncate">{task.linkedBudgetItem.label}</span>
+        </Link>
+      )}
       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
         <span className={cn("text-[10px] px-1.5 py-0.5 rounded border inline-flex items-center gap-1", PRIORITY_STYLE[task.priority])}>
           <Flag className="w-2.5 h-2.5" /> {PRIORITY_LABEL[task.priority]}

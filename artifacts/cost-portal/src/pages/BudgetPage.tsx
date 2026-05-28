@@ -3,8 +3,10 @@ import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight, Info,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
-  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2
+  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus
 } from "lucide-react";
+import { CreateTaskFromItemDialog } from "@/components/CreateTaskFromItemDialog";
+import type { LinkedBudgetItem } from "@/data/tasksBoardData";
 import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, type BudgetItem, type QuoteOption, type SubEvent } from "@/data/budgetData";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useSubEventsApi } from "@/hooks/useSubEventsApi";
@@ -251,6 +253,7 @@ export default function BudgetPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editItem, setEditItem] = useState<Partial<BudgetItem>>({});
   const [splitItem, setSplitItem] = useState<BudgetItem | null>(null);
+  const [taskForItem, setTaskForItem] = useState<{ link: LinkedBudgetItem; notes: string } | null>(null);
   const [newItem, setNewItem] = useState<Partial<BudgetItem>>({
     evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "",
     inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1,
@@ -1698,6 +1701,17 @@ export default function BudgetPage() {
                             </Tooltip>
                             <Tooltip>
                               <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => setTaskForItem({
+                                  link: { id: item.id, label: item.item || "(sin nombre)", evento: item.evento, area: item.area, centroCosto: item.centroCosto },
+                                  notes: [item.descripcion, item.notas].filter(s => s && s.trim()).join("\n\n"),
+                                })}>
+                                  <ListPlus className="w-3 h-3" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Crear tarea</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-destructive" onClick={() => deleteItem(item.id)}>
                                   <Trash2 className="w-3 h-3" />
                                 </Button>
@@ -1984,6 +1998,12 @@ export default function BudgetPage() {
           setSplitItem(null);
           toast({ title: "Item dividido en 2 filas por día" });
         }}
+      />
+      <CreateTaskFromItemDialog
+        open={!!taskForItem}
+        onOpenChange={(o) => { if (!o) setTaskForItem(null); }}
+        linkedItem={taskForItem?.link || null}
+        defaultNotes={taskForItem?.notes}
       />
     </div>
   );

@@ -8,6 +8,14 @@ const router: IRouter = Router();
 const KEY = "tasks-board";
 const META_KEY = "tasks-board-meta";
 
+const LinkedBudgetItemSchema = z.object({
+  id: z.string().max(128),
+  label: z.string().max(500),
+  evento: z.string().max(200).optional(),
+  area: z.string().max(300).optional(),
+  centroCosto: z.string().max(200).optional(),
+});
+
 const TaskSchema = z.object({
   id: z.string().min(1).max(128),
   title: z.string().max(500),
@@ -18,6 +26,7 @@ const TaskSchema = z.object({
   dueDate: z.string().max(20),
   createdAt: z.string().max(64),
   updatedAt: z.string().max(64),
+  linkedBudgetItem: LinkedBudgetItemSchema.optional(),
 });
 const StateSchema = z.object({ tasks: z.array(TaskSchema).max(2000) });
 
