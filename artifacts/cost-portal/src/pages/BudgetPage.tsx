@@ -238,6 +238,7 @@ export default function BudgetPage() {
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [filterInKind, setFilterInKind] = useState("ALL");
   const [filterPrecio, setFilterPrecio] = useState("ALL");
+  const [filterQtyDias, setFilterQtyDias] = useState<Set<number>>(new Set());
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -285,6 +286,15 @@ export default function BudgetPage() {
     return hasBlank ? ["ALL", "(Sin asignar)", ...sorted] : ["ALL", ...sorted];
   }, [items]);
 
+  const qtyDiasOptions = useMemo(() => {
+    const vals = new Set<number>();
+    for (const i of items) {
+      const n = Number(i.qtyDias);
+      if (Number.isFinite(n) && n > 0) vals.add(n);
+    }
+    return Array.from(vals).sort((a, b) => a - b);
+  }, [items]);
+
   const statusOptions = useMemo(() => {
     const hasBlank = items.some(i => !(i.statusCotizacion || "").trim());
     const set = new Set(items.map(i => (i.statusCotizacion || "").trim()).filter(v => v.length > 0));
@@ -314,6 +324,7 @@ export default function BudgetPage() {
     else if (filterInKind === "NO") out = out.filter(i => !i.inKind);
     if (filterPrecio === "ZERO") out = out.filter(i => (Number(i.precioUnitario) || 0) === 0 && !i.inKind);
     else if (filterPrecio === "NONZERO") out = out.filter(i => (Number(i.precioUnitario) || 0) > 0);
+    if (filterQtyDias.size > 0) out = out.filter(i => filterQtyDias.has(Number(i.qtyDias)));
     if (search.trim()) {
       const q = search.toLowerCase();
       out = out.filter(i =>
@@ -328,7 +339,7 @@ export default function BudgetPage() {
       );
     }
     return out;
-  }, [items, filterSubEvents, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, search]);
+  }, [items, filterSubEvents, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterQtyDias, search]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, { subEventId: string; evento: string; area: string; centroCosto: string; items: BudgetItem[] }>();
@@ -872,9 +883,64 @@ export default function BudgetPage() {
               <SelectItem value="NONZERO">Con precio</SelectItem>
             </SelectContent>
           </Select>
-          {(filterProveedor !== "ALL" || filterProductora !== "ALL" || filterFeeEnCotiz !== "ALL" || filterCotizacion !== "ALL" || filterAsignado !== "ALL" || filterStatus !== "ALL" || filterInKind !== "ALL" || filterPrecio !== "ALL") && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                className={cn(
+                  "h-9 px-3 rounded-md border text-xs flex items-center gap-1.5 transition-colors",
+                  filterQtyDias.size > 0
+                    ? "bg-primary/10 text-primary border-primary/30"
+                    : "bg-card border-card-border text-foreground hover:border-border"
+                )}
+              >
+                <span>Cant. Días</span>
+                {filterQtyDias.size > 0 ? (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary font-semibold">
+                    {Array.from(filterQtyDias).sort((a, b) => a - b).join(", ")}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">Todos</span>
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-44 p-1" align="start">
+              {qtyDiasOptions.length === 0 ? (
+                <div className="text-xs text-muted-foreground px-2 py-1.5">Sin valores</div>
+              ) : (
+                qtyDiasOptions.map(n => {
+                  const checked = filterQtyDias.has(n);
+                  return (
+                    <button
+                      key={n}
+                      onClick={() => {
+                        setFilterQtyDias(prev => {
+                          const next = new Set(prev);
+                          if (next.has(n)) next.delete(n); else next.add(n);
+                          return next;
+                        });
+                      }}
+                      className={cn(
+                        "w-full flex items-center justify-between px-2 py-1.5 rounded text-xs hover:bg-muted",
+                        checked && "bg-primary/10 text-primary"
+                      )}
+                    >
+                      <span>{n} {n === 1 ? "día" : "días"}</span>
+                      {checked && <span className="text-[10px]">✓</span>}
+                    </button>
+                  );
+                })
+              )}
+              {filterQtyDias.size > 0 && (
+                <button
+                  onClick={() => setFilterQtyDias(new Set())}
+                  className="w-full text-left px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted rounded border-t border-border mt-1"
+                >Limpiar</button>
+              )}
+            </PopoverContent>
+          </Popover>
+          {(filterProveedor !== "ALL" || filterProductora !== "ALL" || filterFeeEnCotiz !== "ALL" || filterCotizacion !== "ALL" || filterAsignado !== "ALL" || filterStatus !== "ALL" || filterInKind !== "ALL" || filterPrecio !== "ALL" || filterQtyDias.size > 0) && (
             <button
-              onClick={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); }}
+              onClick={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterQtyDias(new Set()); }}
               className="text-xs text-primary hover:underline"
             >Clear filters</button>
           )}
