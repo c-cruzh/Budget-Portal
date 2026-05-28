@@ -732,23 +732,18 @@ export default function BudgetPage() {
             className="flex-1 min-w-0"
           >
             <TabsList className="h-auto p-1 flex-wrap gap-1">
-              <TabsTrigger value="all" className="text-xs gap-1.5">
-                Todos <span className="text-[10px] text-muted-foreground">({items.length})</span>
+              <TabsTrigger value="all" className="text-xs sm:text-sm">
+                Todos
               </TabsTrigger>
-              {subEventSummaries.map(s => {
-                const active = filterSubEvents.has(s.id);
-                return (
-                  <TabsTrigger
-                    key={s.id}
-                    value={s.id}
-                    className="text-xs gap-1.5"
-                    style={active ? { borderBottom: `2px solid ${s.color}` } : { borderLeft: `3px solid ${s.color}` }}
-                  >
-                    <span>{s.name}</span>
-                    <span className="text-[10px] text-muted-foreground">({s.count})</span>
-                  </TabsTrigger>
-                );
-              })}
+              {subEventSummaries.map(s => (
+                <TabsTrigger
+                  key={s.id}
+                  value={s.id}
+                  className="text-xs sm:text-sm"
+                >
+                  {s.name}
+                </TabsTrigger>
+              ))}
             </TabsList>
           </Tabs>
           {canEdit && (
