@@ -3,6 +3,7 @@ import { db, appState, withRetry } from "@workspace/db";
 import { users } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { getAuditUser, writeAuditEntries, diffBudgetItems } from "../lib/audit";
+import { ensureBudgetSubEventDefaults } from "./sub-events";
 
 const router: IRouter = Router();
 
@@ -17,6 +18,7 @@ const ORG_PERMISSIONS: Record<string, { canEdit: boolean; canComment: boolean }>
 
 router.get("/budget-items", async (_req, res) => {
   try {
+    try { await ensureBudgetSubEventDefaults(); } catch (e) { console.error("backfill subEventId failed:", e); }
     const [row, metaRow] = await withRetry(() => Promise.all([
       db.select().from(appState).where(eq(appState.key, BUDGET_KEY)).limit(1),
       db.select().from(appState).where(eq(appState.key, BUDGET_META_KEY)).limit(1),

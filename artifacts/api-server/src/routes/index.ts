@@ -5,6 +5,7 @@ import authRouter from "./auth";
 import sponsorsRouter from "./sponsors";
 import auditRouter from "./audit";
 import agendaRouter from "./agenda";
+import subEventsRouter from "./sub-events";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(budgetRouter);
 router.use(sponsorsRouter);
 router.use(auditRouter);
 router.use(agendaRouter);
+router.use(subEventsRouter);
 
 export default router;

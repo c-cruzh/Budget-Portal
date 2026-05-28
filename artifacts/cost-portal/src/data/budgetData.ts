@@ -6,8 +6,26 @@ export interface QuoteOption {
   notes?: string;
 }
 
+export interface SubEvent {
+  id: string;
+  name: string;
+  order: number;
+  color?: string;
+}
+
+export const DEFAULT_SUB_EVENTS: SubEvent[] = [
+  { id: "lanzamiento", name: "Lanzamiento", order: 0, color: "#a78bfa" },
+  { id: "dia-1", name: "Día 1", order: 1, color: "#60a5fa" },
+  { id: "dia-2", name: "Día 2", order: 2, color: "#34d399" },
+  { id: "cena-vip", name: "Cena VIP", order: 3, color: "#fbbf24" },
+  { id: "cena-ania", name: "Cena Privada ANIA", order: 4, color: "#f472b6" },
+];
+
+export const DEFAULT_SUB_EVENT_ID = "dia-2";
+
 export interface BudgetItem {
   id: string;
+  subEventId?: string;
   evento: string;
   area: string;
   centroCosto: string;

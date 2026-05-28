@@ -52,8 +52,70 @@ const TRACKED_BUDGET_FIELDS = [
   "inKind", "aplicaFee", "validarCosto", "contratarAparte", "agencyFee",
   "aplicaTurismo", "exentoIva", "niceToHave", "approvedQuoteId",
   "assignedTo", "soloPresupuestado", "accionRequerida", "reviewedBy",
-  "statusCotizacion", "mitigable", "mitigNote",
+  "statusCotizacion", "mitigable", "mitigNote", "subEventId",
 ];
+
+export function diffSubEvents(
+  user: AuditUser,
+  oldList: any[] | null | undefined,
+  newList: any[],
+): NewAuditLogEntry[] {
+  const entries: NewAuditLogEntry[] = [];
+  const oldMap = new Map<string, any>();
+  if (Array.isArray(oldList)) for (const s of oldList) if (s?.id) oldMap.set(s.id, s);
+  const newMap = new Map<string, any>();
+  for (const s of newList) if (s?.id) newMap.set(s.id, s);
+
+  for (const [id, s] of newMap) {
+    if (!oldMap.has(id)) {
+      entries.push({
+        ...user,
+        entityType: "sub-event",
+        entityId: id,
+        entityLabel: s.name || id,
+        action: "CREATE",
+        summary: `Creó sub-evento "${s.name || id}"`,
+      });
+    }
+  }
+  for (const [id, s] of oldMap) {
+    if (!newMap.has(id)) {
+      entries.push({
+        ...user,
+        entityType: "sub-event",
+        entityId: id,
+        entityLabel: s.name || id,
+        action: "DELETE",
+        summary: `Eliminó sub-evento "${s.name || id}"`,
+      });
+    }
+  }
+  const fields = ["name", "order", "color"];
+  for (const [id, n] of newMap) {
+    const o = oldMap.get(id);
+    if (!o) continue;
+    for (const f of fields) {
+      if (!valuesEqual(o[f], n[f])) {
+        entries.push({
+          ...user,
+          entityType: "sub-event",
+          entityId: id,
+          entityLabel: n.name || id,
+          action: "UPDATE",
+          field: f,
+          oldValue: normalize(o[f]) as any,
+          newValue: normalize(n[f]) as any,
+          summary: f === "name"
+            ? `Renombró sub-evento "${o.name}" → "${n.name}"`
+            : f === "order"
+              ? `Reordenó sub-evento "${n.name}" (${o.order} → ${n.order})`
+              : `Cambió color de sub-evento "${n.name}"`,
+        });
+      }
+    }
+  }
+  return entries;
+}
 
 export function diffBudgetItems(
   user: AuditUser,

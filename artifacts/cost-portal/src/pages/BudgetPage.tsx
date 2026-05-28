@@ -3,12 +3,15 @@ import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight, Info,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
-  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star
+  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings
 } from "lucide-react";
-import { INITIAL_BUDGET_ITEMS, type BudgetItem, type QuoteOption } from "@/data/budgetData";
+import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, type BudgetItem, type QuoteOption, type SubEvent } from "@/data/budgetData";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
+import { useSubEventsApi } from "@/hooks/useSubEventsApi";
 import { useAuth } from "@/hooks/useAuth";
 import { ComboInput } from "@/components/ComboInput";
+import { SubEventsManagerDialog } from "@/components/SubEventsManagerDialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface PortalUser {
   id: number;
@@ -175,11 +178,42 @@ const SEED_ITEMS = INITIAL_BUDGET_ITEMS.map(recalcItem);
 
 export default function BudgetPage() {
   const { items, setItems, loading, error, meta, saveCommentOnly, patchItem, saveFull } = useBudgetApi(SEED_ITEMS, recalcItem);
+  const { subEvents, setSubEvents } = useSubEventsApi();
   const { permissions, user } = useAuth();
   const canEdit = permissions.canEdit;
   const canComment = permissions.canComment;
+  const canEditTaxonomy = (user?.organization || "") === "C2 LABS";
   const [search, setSearch] = useState("");
   const [portalUsers, setPortalUsers] = useState<PortalUser[]>([]);
+  const [filterSubEvents, setFilterSubEvents] = useState<Set<string>>(new Set());
+  const [showSubEventsManager, setShowSubEventsManager] = useState(false);
+
+  const subEventMap = useMemo(() => {
+    const m = new Map<string, SubEvent>();
+    for (const s of subEvents) m.set(s.id, s);
+    return m;
+  }, [subEvents]);
+  const subEventOrder = useCallback((id: string | undefined) => {
+    if (!id) return 9999;
+    const s = subEventMap.get(id);
+    return s ? s.order : 9998;
+  }, [subEventMap]);
+  const subEventName = useCallback((id: string | undefined) => {
+    if (!id) return "Sin asignar";
+    return subEventMap.get(id)?.name || id;
+  }, [subEventMap]);
+  const subEventColor = useCallback((id: string | undefined) => {
+    if (!id) return "#94a3b8";
+    return subEventMap.get(id)?.color || "#94a3b8";
+  }, [subEventMap]);
+
+  const toggleSubEventFilter = (id: string) => {
+    setFilterSubEvents(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   useEffect(() => {
     (async () => {
@@ -208,7 +242,7 @@ export default function BudgetPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editItem, setEditItem] = useState<Partial<BudgetItem>>({});
   const [newItem, setNewItem] = useState<Partial<BudgetItem>>({
-    evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "",
+    evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "",
     inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1,
     precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0,
     cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "",
@@ -259,6 +293,7 @@ export default function BudgetPage() {
 
   const filtered = useMemo(() => {
     let out = items;
+    if (filterSubEvents.size > 0) out = out.filter(i => filterSubEvents.has(i.subEventId || "__unassigned__"));
     if (filterEvento !== "ALL") out = out.filter(i => i.evento === filterEvento);
     if (filterArea !== "ALL") out = out.filter(i => i.area === filterArea);
     if (filterCentro !== "ALL") out = out.filter(i => i.centroCosto === filterCentro);
@@ -292,17 +327,56 @@ export default function BudgetPage() {
       );
     }
     return out;
-  }, [items, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, search]);
+  }, [items, filterSubEvents, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, search]);
 
   const grouped = useMemo(() => {
-    const map = new Map<string, { evento: string; area: string; items: BudgetItem[] }>();
+    const map = new Map<string, { subEventId: string; evento: string; area: string; centroCosto: string; items: BudgetItem[] }>();
     filtered.forEach(item => {
-      const key = `${item.evento}_${item.area}`;
-      if (!map.has(key)) map.set(key, { evento: item.evento, area: item.area, items: [] });
+      const seId = item.subEventId || "__unassigned__";
+      const cc = item.centroCosto || "(Sin centro)";
+      const key = `${seId}__${item.area}__${cc}`;
+      if (!map.has(key)) map.set(key, { subEventId: seId, evento: item.evento, area: item.area, centroCosto: cc, items: [] });
       map.get(key)!.items.push(item);
     });
-    return map;
-  }, [filtered]);
+    const entries = Array.from(map.entries());
+    entries.sort((a, b) => {
+      const oa = subEventOrder(a[1].subEventId === "__unassigned__" ? undefined : a[1].subEventId);
+      const ob = subEventOrder(b[1].subEventId === "__unassigned__" ? undefined : b[1].subEventId);
+      if (oa !== ob) return oa - ob;
+      const ac = a[1].area.localeCompare(b[1].area);
+      if (ac !== 0) return ac;
+      return a[1].centroCosto.localeCompare(b[1].centroCosto);
+    });
+    return new Map(entries);
+  }, [filtered, subEventOrder]);
+
+  const subEventSummaries = useMemo(() => {
+    const buckets = new Map<string, { id: string; name: string; color: string; cash: number; inKind: number; pending: number; count: number }>();
+    const ensure = (id: string) => {
+      if (!buckets.has(id)) {
+        const isUnassigned = id === "__unassigned__";
+        buckets.set(id, {
+          id,
+          name: isUnassigned ? "Sin asignar" : subEventName(id),
+          color: isUnassigned ? "#94a3b8" : subEventColor(id),
+          cash: 0, inKind: 0, pending: 0, count: 0,
+        });
+      }
+      return buckets.get(id)!;
+    };
+    for (const s of subEvents) ensure(s.id);
+    for (const it of items) {
+      const id = it.subEventId || "__unassigned__";
+      const b = ensure(id);
+      b.count++;
+      if (it.inKind) b.inKind += it.total;
+      else b.cash += it.total;
+      if (it.cotizacion === "PENDING" || it.statusCotizacion === "Cotización Pending" || it.statusCotizacion === "Pendiente Cotizar") b.pending++;
+    }
+    const list = Array.from(buckets.values());
+    list.sort((a, b) => subEventOrder(a.id === "__unassigned__" ? undefined : a.id) - subEventOrder(b.id === "__unassigned__" ? undefined : b.id));
+    return list.filter(b => b.id !== "__unassigned__" || b.count > 0);
+  }, [items, subEvents, subEventName, subEventColor, subEventOrder]);
 
   const recalc = recalcItem;
 
@@ -547,7 +621,7 @@ export default function BudgetPage() {
       return next;
     });
     setShowAddModal(false);
-    setNewItem({ evento: "MAIN EVENT", area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, exentoIva: false, aplicaTurismo: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "" });
+    setNewItem({ evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, exentoIva: false, aplicaTurismo: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "" });
   }, [newItem, setItems, saveFull]);
 
   const updateComment = useCallback((id: string, field: "notas" | "descripcion", value: string) => {
@@ -584,14 +658,14 @@ export default function BudgetPage() {
 
   const exportCSV = () => {
     const headers = [
-      "EVENTO", "AREA/ZONA", "CENTRO DE COSTO", "ITEM", "DESCRIPCION", "NOTAS/OBSERVACIONES",
+      "SUB-EVENTO", "EVENTO", "AREA/ZONA", "CENTRO DE COSTO", "ITEM", "DESCRIPCION", "NOTAS/OBSERVACIONES",
       "IN-KIND?", "AURORA 360?", "QTY", "UoM", "CONTRATACION POR DIAS?", "QTY DIAS",
       "PRECIO UNITARIO", "SUBTOTAL", "VIA PRODUCTORA (AURORA 360)?", "FEE INCL. EN COTIZACION?",
       "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "SOLO PRESUPUESTADO?", "IMAGEN DE REFERENCIA", "PROVEEDOR",
       "REVIEWED BY", "VALIDAR COSTO?", "CONTRATAR APARTE?", "ACCIÓN REQUERIDA?", "NICE TO HAVE?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO", "STATUS COTIZACION"
     ];
     const rows = filtered.map(i => [
-      i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
+      subEventName(i.subEventId), i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
       i.inKind ? "SI" : "NO", i.agencyFee ? "SI" : "NO", i.qty, i.uom,
       i.porDias, i.qtyDias, i.precioUnitario, i.subtotal, i.agencyFee ? "SI" : "NO",
       i.aplicaFee, i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.soloPresupuestado ? "SI" : "NO", i.documento,
@@ -647,6 +721,70 @@ export default function BudgetPage() {
         )}>
           {permissions.label}
         </span>
+      </div>
+
+      {subEventSummaries.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setFilterSubEvents(new Set())}
+            className={cn(
+              "text-[11px] px-2.5 py-1 rounded-full border font-medium transition-colors",
+              filterSubEvents.size === 0
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-card text-muted-foreground border-border hover:border-primary/40"
+            )}
+          >
+            Todos ({items.length})
+          </button>
+          {subEventSummaries.map(s => {
+            const active = filterSubEvents.has(s.id);
+            return (
+              <button
+                key={s.id}
+                onClick={() => toggleSubEventFilter(s.id)}
+                className={cn(
+                  "text-[11px] px-2.5 py-1 rounded-full border font-medium transition-colors flex items-center gap-1.5",
+                  active ? "border-transparent text-white" : "bg-card text-foreground border-border hover:border-primary/40"
+                )}
+                style={active ? { backgroundColor: s.color } : { borderLeft: `3px solid ${s.color}` }}
+              >
+                <span>{s.name}</span>
+                <span className={cn("text-[10px]", active ? "text-white/80" : "text-muted-foreground")}>({s.count})</span>
+              </button>
+            );
+          })}
+          {canEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSubEventsManager(true)}
+              className="h-7 gap-1.5 ml-auto"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              Gestionar sub-eventos
+            </Button>
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+        {subEventSummaries.map(s => (
+          <div
+            key={s.id}
+            className="rounded-lg border border-card-border bg-card p-2.5 flex flex-col gap-1"
+            style={{ borderTop: `3px solid ${s.color}` }}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-foreground truncate" title={s.name}>{s.name}</span>
+              <span className="text-[10px] text-muted-foreground">{s.count}</span>
+            </div>
+            <div className="text-[11px] font-mono font-semibold text-primary">{formatUSD(s.cash)}</div>
+            <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
+              {s.inKind > 0 && <span className="text-amber-600">In-Kind {formatUSD(s.inKind)}</span>}
+              {s.pending > 0 && <span className="text-orange-600">{s.pending} pend.</span>}
+            </div>
+          </div>
+        ))}
       </div>
 
       <SummaryCards
@@ -857,7 +995,15 @@ export default function BudgetPage() {
                     </td>
                     <td className="sticky-col-1 px-2 py-2 bg-muted/30" colSpan={2}>
                       <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-white"
+                          style={{ backgroundColor: subEventColor(group.subEventId === "__unassigned__" ? undefined : group.subEventId) }}
+                        >
+                          {subEventName(group.subEventId === "__unassigned__" ? undefined : group.subEventId)}
+                        </span>
                         <span className="font-semibold text-foreground text-xs">{group.area}</span>
+                        <span className="text-muted-foreground text-[10px]">›</span>
+                        <span className="text-foreground text-xs">{group.centroCosto}</span>
                         <Badge variant="secondary" className="text-[10px] font-normal py-0">{group.evento === "MAIN EVENT" ? "Main Event" : group.evento === "MAIN EVENT VIP DINNER" ? "VIP Dinner" : "Pre/Post"}</Badge>
                         <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground py-0">{group.items.length} items</Badge>
                         {hasInKind && <Badge className="text-[10px] bg-amber-500/15 text-amber-600 border-amber-500/20 font-normal py-0">In-Kind</Badge>}
@@ -907,6 +1053,45 @@ export default function BudgetPage() {
                         </Tooltip>
                       </td>
                       <td className={cn("sticky-col-2 px-2 py-1.5 align-top max-w-[260px]", item.inKind ? "row-inkind-bg" : "bg-background")}>
+                        <div className="flex items-center gap-1 mb-0.5">
+                          {canEdit ? (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button
+                                  className="text-[9px] font-semibold px-1.5 py-0.5 rounded text-white hover:opacity-80 transition-opacity"
+                                  style={{ backgroundColor: subEventColor(item.subEventId) }}
+                                  title="Cambiar sub-evento"
+                                >
+                                  {subEventName(item.subEventId)}
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-48 p-1" align="start">
+                                <div className="flex flex-col gap-0.5">
+                                  {subEvents.map(s => (
+                                    <button
+                                      key={s.id}
+                                      onClick={() => updateItem(item.id, "subEventId", s.id)}
+                                      className={cn(
+                                        "flex items-center gap-2 px-2 py-1 rounded text-[11px] text-left hover:bg-muted transition-colors",
+                                        item.subEventId === s.id && "bg-muted font-semibold"
+                                      )}
+                                    >
+                                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color || "#94a3b8" }} />
+                                      <span>{s.name}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          ) : (
+                            <span
+                              className="text-[9px] font-semibold px-1.5 py-0.5 rounded text-white"
+                              style={{ backgroundColor: subEventColor(item.subEventId) }}
+                            >
+                              {subEventName(item.subEventId)}
+                            </span>
+                          )}
+                        </div>
                         <EditableCell value={item.item} onSave={v => updateItem(item.id, "item", v)} className="font-medium text-foreground text-xs" disabled={!canEdit} />
                         {(item.descripcion || item.notas) && (
                           <Tooltip>
@@ -1674,6 +1859,15 @@ export default function BudgetPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <SubEventsManagerDialog
+        open={showSubEventsManager}
+        onOpenChange={setShowSubEventsManager}
+        subEvents={subEvents}
+        items={items}
+        canEdit={canEditTaxonomy}
+        onSave={setSubEvents}
+      />
     </div>
   );
 }
