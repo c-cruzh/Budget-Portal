@@ -41,7 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: "/travel/ground", label: "Ground Transport", icon: Bus, deprecated: true },
   { path: "/travel/aerial", label: "Flights / Vuelos SAL", icon: Plane },
   { path: "/hotel", label: "Hotel / Acomodaciones SAL", icon: BedDouble },
-  { path: "/coctel", label: "Coctel (Delibanquetes)", icon: Wine, deprecated: true },
+  { path: "/coctel", label: "Networking Cocktail Day 2", icon: Wine },
   { path: "/bar-bebidas", label: "Bar & Bebidas", icon: Coffee, deprecated: true },
   { path: "/lunch", label: "Lunch & Coffee Breaks", icon: Sandwich, deprecated: true },
   { path: "/sponsors", label: "Sponsors & Cash", icon: HandCoins },
