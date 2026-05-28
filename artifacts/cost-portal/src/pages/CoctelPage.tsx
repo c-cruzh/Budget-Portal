@@ -29,6 +29,7 @@ const MENU: MenuItem[] = [
 ];
 
 const SERVICIO = 0.10;
+const MIN_PER_VARIETY = 50;
 
 // Esc C aprobado — fixed reference numbers (independent of menu edits)
 const APPROVED = {
@@ -97,7 +98,8 @@ export default function CoctelPage() {
     const pp = state.pax > 0 ? granTotal / state.pax : 0;
     const saladasCount = includedItems.filter(m => m.sabor === "Salado").length;
     const dulcesCount = includedItems.filter(m => m.sabor === "Dulce").length;
-    return { includedItems, pricePerGuest, subtotal, servicio, comidaServicio, granTotal, pp, saladasCount, dulcesCount };
+    const belowMinimum = includedItems.length > 0 && state.pax < MIN_PER_VARIETY;
+    return { includedItems, pricePerGuest, subtotal, servicio, comidaServicio, granTotal, pp, saladasCount, dulcesCount, belowMinimum };
   }, [state.selections, state.pax, state.transport]);
 
   const matchesApproved = Math.abs(live.subtotal - APPROVED.comida) < 0.5;
@@ -249,6 +251,14 @@ export default function CoctelPage() {
                     <td className="px-3 py-2">
                       <span className="font-medium">{m.boca}</span>
                       <span className="ml-2 text-[10px] text-muted-foreground">({m.sabor})</span>
+                      {checked && state.pax < MIN_PER_VARIETY && (
+                        <span
+                          title={`Delibanquetes requiere mínimo ${MIN_PER_VARIETY} bocas por variedad. Pax actual: ${state.pax}.`}
+                          className="ml-2 inline-flex items-center gap-1 text-[10px] font-semibold text-red-600 bg-red-500/10 border border-red-500/30 rounded px-1.5 py-0.5 align-middle cursor-help"
+                        >
+                          <AlertCircle className="w-2.5 h-2.5" /> &lt; {MIN_PER_VARIETY}
+                        </span>
+                      )}
                       {m.notas && (
                         <div className="text-[10px] text-amber-600 mt-0.5 flex items-center gap-1">
                           <AlertCircle className="w-2.5 h-2.5" /> {m.notas}
@@ -282,6 +292,21 @@ export default function CoctelPage() {
             </tfoot>
           </table>
         </div>
+
+        {live.belowMinimum && (
+          <div className="px-4 py-3 border-t border-border bg-red-500/5 text-red-700 text-xs flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <div>
+              <div className="font-semibold">
+                Pax ({state.pax}) por debajo del mínimo de {MIN_PER_VARIETY} bocas por variedad
+              </div>
+              <div className="text-[11px] mt-0.5 opacity-90">
+                Delibanquetes exige al menos {MIN_PER_VARIETY} servicios por cada variedad seleccionada.
+                {" "}{live.includedItems.length} variedad{live.includedItems.length === 1 ? "" : "es"} incumplen la regla; aumentá pax o reducí variedades antes de confirmar con el proveedor.
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Δ vs Esc C aprobado */}
         <div className={cn(
