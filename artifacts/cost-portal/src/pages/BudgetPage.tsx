@@ -239,6 +239,10 @@ export default function BudgetPage() {
   const [filterInKind, setFilterInKind] = useState("ALL");
   const [filterPrecio, setFilterPrecio] = useState("ALL");
   const [filterQtyDias, setFilterQtyDias] = useState<Set<number>>(new Set());
+  const [filterPending, setFilterPending] = useState(false);
+  const [filterAccionReq, setFilterAccionReq] = useState(false);
+  const [filterValidar, setFilterValidar] = useState(false);
+  const [filterAparte, setFilterAparte] = useState(false);
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -325,6 +329,10 @@ export default function BudgetPage() {
     if (filterPrecio === "ZERO") out = out.filter(i => (Number(i.precioUnitario) || 0) === 0 && !i.inKind);
     else if (filterPrecio === "NONZERO") out = out.filter(i => (Number(i.precioUnitario) || 0) > 0);
     if (filterQtyDias.size > 0) out = out.filter(i => filterQtyDias.has(Number(i.qtyDias)));
+    if (filterPending) out = out.filter(i => i.cotizacion === "PENDING");
+    if (filterAccionReq) out = out.filter(i => i.accionRequerida);
+    if (filterValidar) out = out.filter(i => i.validarCosto);
+    if (filterAparte) out = out.filter(i => i.contratarAparte);
     if (search.trim()) {
       const q = search.toLowerCase();
       out = out.filter(i =>
@@ -339,7 +347,7 @@ export default function BudgetPage() {
       );
     }
     return out;
-  }, [items, filterSubEvents, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterQtyDias, search]);
+  }, [items, filterSubEvents, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterQtyDias, filterPending, filterAccionReq, filterValidar, filterAparte, search]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, { subEventId: string; evento: string; area: string; centroCosto: string; items: BudgetItem[] }>();
@@ -938,9 +946,27 @@ export default function BudgetPage() {
               )}
             </PopoverContent>
           </Popover>
-          {(filterProveedor !== "ALL" || filterProductora !== "ALL" || filterFeeEnCotiz !== "ALL" || filterCotizacion !== "ALL" || filterAsignado !== "ALL" || filterStatus !== "ALL" || filterInKind !== "ALL" || filterPrecio !== "ALL" || filterQtyDias.size > 0) && (
+          {([
+            { active: filterPending, set: setFilterPending, label: "Pending Quotes", count: pendingCount, cls: "bg-orange-500/10 text-orange-600 border-orange-500/30" },
+            { active: filterAccionReq, set: setFilterAccionReq, label: "Accion Req.", count: accionRequeridaCount, cls: "bg-orange-500/10 text-orange-600 border-orange-500/30" },
+            { active: filterValidar, set: setFilterValidar, label: "A Validar", count: validarCount, cls: "bg-red-500/10 text-red-600 border-red-500/30" },
+            { active: filterAparte, set: setFilterAparte, label: "Aparte", count: contratarAparteCount, cls: "bg-amber-500/10 text-amber-600 border-amber-500/30" },
+          ] as const).map(p => (
             <button
-              onClick={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterQtyDias(new Set()); }}
+              key={p.label}
+              onClick={() => p.set(!p.active)}
+              className={cn(
+                "h-9 px-3 rounded-md border text-xs flex items-center gap-1.5 transition-colors",
+                p.active ? p.cls : "bg-card border-card-border text-foreground hover:border-border"
+              )}
+            >
+              <span>{p.label}</span>
+              <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-semibold", p.active ? "bg-white/40" : "bg-muted text-muted-foreground")}>{p.count}</span>
+            </button>
+          ))}
+          {(filterProveedor !== "ALL" || filterProductora !== "ALL" || filterFeeEnCotiz !== "ALL" || filterCotizacion !== "ALL" || filterAsignado !== "ALL" || filterStatus !== "ALL" || filterInKind !== "ALL" || filterPrecio !== "ALL" || filterQtyDias.size > 0 || filterPending || filterAccionReq || filterValidar || filterAparte) && (
+            <button
+              onClick={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterQtyDias(new Set()); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); }}
               className="text-xs text-primary hover:underline"
             >Clear filters</button>
           )}
