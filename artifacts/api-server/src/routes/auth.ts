@@ -15,6 +15,7 @@ const SEED_USERS = [
   { email: "beatriz.ferreira@opinno.com", name: "Beatriz Ferreira", role: "Organizer", organization: "OPINNO", password: "EmTech2026!OP" },
   { email: "flor@aurora360.xyz", name: "Flor Ventura", role: "Production Agency Lead", organization: "AURORA360", password: "EmTech2026!AU" },
   { email: "claude-cowork", name: "claude-cowork", role: "Agent", organization: "AURORA360", password: "EmTech2026!AG" },
+  { email: "lfpf68@gmail.com", name: "lfpf68", role: "Organizer", organization: "C2 LABS", password: "EmTech2026!SUL2WKp6uf" },
 ];
 
 async function seedUsers() {
