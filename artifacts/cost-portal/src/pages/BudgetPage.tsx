@@ -870,6 +870,7 @@ export default function BudgetPage({
           evento: editItem.evento || i.evento,
           subEventId: editItem.subEventId,
           area: editItem.area ?? i.area,
+          dia: editItem.dia ?? i.dia,
           espacioDia1: editItem.espacioDia1 ?? i.espacioDia1,
           espacioDia2: editItem.espacioDia2 ?? i.espacioDia2,
           centroCosto: editItem.centroCosto ?? i.centroCosto,
@@ -885,11 +886,17 @@ export default function BudgetPage({
           precioUnitario: Number(editItem.precioUnitario) ?? i.precioUnitario,
           aplicaFee: editItem.aplicaFee ?? i.aplicaFee,
           cotizacion: editItem.cotizacion ?? i.cotizacion,
+          cotizacionLink: editItem.cotizacionLink ?? i.cotizacionLink,
           documento: editItem.documento ?? i.documento,
           proveedor: editItem.proveedor ?? i.proveedor,
+          assignedTo: editItem.assignedTo ?? i.assignedTo,
           exentoIva: editItem.exentoIva ?? i.exentoIva,
           aplicaTurismo: editItem.aplicaTurismo ?? i.aplicaTurismo ?? false,
+          validarCosto: editItem.validarCosto ?? i.validarCosto ?? false,
+          contratarAparte: editItem.contratarAparte ?? i.contratarAparte ?? false,
           accionRequerida: editItem.accionRequerida ?? i.accionRequerida ?? false,
+          niceToHave: editItem.niceToHave ?? i.niceToHave ?? false,
+          soloPresupuestado: editItem.soloPresupuestado ?? i.soloPresupuestado ?? false,
           statusCotizacion: editItem.statusCotizacion ?? i.statusCotizacion ?? "",
         };
         return recalcItem(updated);
@@ -2382,6 +2389,22 @@ export default function BudgetPage({
               <ComboInput value={editItem.area || ""} onChange={v => setEditItem(p => ({ ...p, area: v }))} options={allZones} placeholder="Seleccionar zona..." />
             </div>
             <div>
+              <label className="text-xs font-medium mb-1 block">Día</label>
+              <Select value={editItem.dia && DIA_VALUES.includes(editItem.dia as DiaValue) ? editItem.dia : deriveDia(editItem)} onValueChange={v => setEditItem(p => ({ ...p, dia: v as DiaValue }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {DIA_VALUES.map(v => (
+                    <SelectItem key={v} value={v}>
+                      <span className="inline-flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: DIA_COLORS[v] }} />
+                        {DIA_LABELS[v]}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
               <label className="text-xs font-medium mb-1 block">Espacio asignado</label>
               {deriveDia(editItem) === "ambos" ? (
                 <div className="space-y-1.5">
@@ -2473,8 +2496,65 @@ export default function BudgetPage({
               <Input value={editItem.cotizacion || ""} onChange={e => setEditItem(p => ({ ...p, cotizacion: e.target.value }))} />
             </div>
             <div>
+              <label className="text-xs font-medium mb-1 block">Link de Cotizacion</label>
+              <Input value={editItem.cotizacionLink || ""} onChange={e => setEditItem(p => ({ ...p, cotizacionLink: e.target.value }))} placeholder="https://..." />
+            </div>
+            <div>
               <label className="text-xs font-medium mb-1 block">Imagen de Referencia</label>
               <Input value={editItem.documento || ""} onChange={e => setEditItem(p => ({ ...p, documento: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Status de Cotizacion</label>
+              <Select value={editItem.statusCotizacion || "__none__"} onValueChange={v => setEditItem(p => ({ ...p, statusCotizacion: v === "__none__" ? "" : v }))}>
+                <SelectTrigger><SelectValue placeholder="Status..." /></SelectTrigger>
+                <SelectContent>
+                  {STATUS_COTIZACION_OPTIONS.map(opt => (
+                    <SelectItem key={opt || "__none__"} value={opt || "__none__"}>
+                      {opt ? (STATUS_SHORT_LABELS[opt] || opt) : "Sin status"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Asignado a</label>
+              <Select value={editItem.assignedTo || "__none__"} onValueChange={v => setEditItem(p => ({ ...p, assignedTo: v === "__none__" ? "" : v }))}>
+                <SelectTrigger><SelectValue placeholder="Asignar..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Sin asignar</SelectItem>
+                  {portalUsers.map(u => (
+                    <SelectItem key={u.id} value={u.name}>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="w-4 h-4 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[8px] font-bold">{u.name.charAt(0)}</span>
+                        {u.name}
+                        <span className="text-muted-foreground text-[9px]">{u.organization}</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="col-span-3 flex flex-wrap items-center gap-4 border-t border-border pt-3 mt-1">
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={editItem.validarCosto || false} onChange={e => setEditItem(p => ({ ...p, validarCosto: e.target.checked }))} className="rounded border-border" />
+                Validar costo
+              </label>
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={editItem.contratarAparte || false} onChange={e => setEditItem(p => ({ ...p, contratarAparte: e.target.checked }))} className="rounded border-border" />
+                Contratar aparte
+              </label>
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={editItem.accionRequerida || false} onChange={e => setEditItem(p => ({ ...p, accionRequerida: e.target.checked }))} className="rounded border-border" />
+                Acción requerida
+              </label>
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={editItem.niceToHave || false} onChange={e => setEditItem(p => ({ ...p, niceToHave: e.target.checked }))} className="rounded border-border" />
+                Nice to have
+              </label>
+              <label className="flex items-center gap-2 text-xs">
+                <input type="checkbox" checked={editItem.soloPresupuestado || false} onChange={e => setEditItem(p => ({ ...p, soloPresupuestado: e.target.checked }))} className="rounded border-border" />
+                Solo presupuestado
+              </label>
             </div>
           </div>
           <div className="flex justify-end gap-2 mt-4">
