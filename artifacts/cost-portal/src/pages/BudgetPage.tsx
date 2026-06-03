@@ -291,7 +291,6 @@ export default function BudgetPage() {
       } catch {}
     })();
   }, []);
-  const [filterEvento, setFilterEvento] = useState("ALL");
   const [filterArea, setFilterArea] = useState("ALL");
   const [filterEspacio, setFilterEspacio] = useState("ALL");
   const [filterCentro, setFilterCentro] = useState("ALL");
@@ -343,17 +342,18 @@ export default function BudgetPage() {
     cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "",
   });
 
-  const eventos = useMemo(() => ["ALL", ...Array.from(new Set(items.map(i => i.evento).filter(v => v && v.trim())))], [items]);
+  const subEventFilteredItems = useMemo(() => {
+    if (filterSubEvents.size === 0) return items;
+    return items.filter(i => filterSubEvents.has(i.subEventId || "__unassigned__"));
+  }, [items, filterSubEvents]);
   const areas = useMemo(() => {
-    const src = filterEvento === "ALL" ? items : items.filter(i => i.evento === filterEvento);
-    return ["ALL", ...Array.from(new Set(src.map(i => i.area).filter(v => v && v.trim())))];
-  }, [items, filterEvento]);
+    return ["ALL", ...Array.from(new Set(subEventFilteredItems.map(i => i.area).filter(v => v && v.trim())))];
+  }, [subEventFilteredItems]);
   const centros = useMemo(() => {
-    let src = items;
-    if (filterEvento !== "ALL") src = src.filter(i => i.evento === filterEvento);
+    let src = subEventFilteredItems;
     if (filterArea !== "ALL") src = src.filter(i => i.area === filterArea);
     return ["ALL", ...Array.from(new Set(src.map(i => i.centroCosto).filter(v => v && v.trim())))];
-  }, [items, filterEvento, filterArea]);
+  }, [subEventFilteredItems, filterArea]);
 
   const allSpaces = useMemo(() => {
     const set = new Set<string>();
@@ -460,7 +460,6 @@ export default function BudgetPage() {
   const filtered = useMemo(() => {
     let out = items;
     if (filterSubEvents.size > 0) out = out.filter(i => filterSubEvents.has(i.subEventId || "__unassigned__"));
-    if (filterEvento !== "ALL") out = out.filter(i => i.evento === filterEvento);
     if (filterArea !== "ALL") out = out.filter(i => i.area === filterArea);
     if (filterEspacio === "(Sin asignar)") out = out.filter(i => !(i.espacioDia1 || "").trim() && !(i.espacioDia2 || "").trim());
     else if (filterEspacio !== "ALL") out = out.filter(i => i.espacioDia1 === filterEspacio || i.espacioDia2 === filterEspacio);
@@ -509,7 +508,7 @@ export default function BudgetPage() {
       );
     }
     return out;
-  }, [items, filterSubEvents, filterEvento, filterArea, filterEspacio, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterQtyDias, filterDia, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
+  }, [items, filterSubEvents, filterArea, filterEspacio, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterQtyDias, filterDia, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
 
   const sorted = useMemo(() => {
     if (!sortKey) return filtered;
@@ -1088,7 +1087,7 @@ export default function BudgetPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Tabs
             value={filterSubEvents.size === 1 ? Array.from(filterSubEvents)[0] : "all"}
-            onValueChange={(v) => setFilterSubEvents(v === "all" ? new Set() : new Set([v]))}
+            onValueChange={(v) => { setFilterSubEvents(v === "all" ? new Set() : new Set([v])); setFilterArea("ALL"); setFilterCentro("ALL"); }}
             className="flex-1 min-w-0"
           >
             <TabsList className="h-auto p-1 flex-wrap gap-1">
@@ -1199,10 +1198,6 @@ export default function BudgetPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search items, notes, proveedor..." className="pl-9 bg-card border-card-border" />
           </div>
-          <Select value={filterEvento} onValueChange={v => { setFilterEvento(v); setFilterArea("ALL"); setFilterCentro("ALL"); }}>
-            <SelectTrigger className="w-[200px] bg-card border-card-border"><SelectValue placeholder="Event" /></SelectTrigger>
-            <SelectContent>{eventos.map(e => <SelectItem key={e} value={e}>{e === "ALL" ? "All Events" : e}</SelectItem>)}</SelectContent>
-          </Select>
           <Select value={filterArea} onValueChange={v => { setFilterArea(v); setFilterCentro("ALL"); }}>
             <SelectTrigger className="w-[220px] bg-card border-card-border"><SelectValue placeholder="Area" /></SelectTrigger>
             <SelectContent>{areas.map(a => <SelectItem key={a} value={a}>{a === "ALL" ? "All Areas" : a}</SelectItem>)}</SelectContent>
