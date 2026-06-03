@@ -11,6 +11,7 @@ export const BUDGET_COLUMNS: ColumnDef[] = [
   { id: "uom", label: "UoM" },
   { id: "tipo", label: "Tipo" },
   { id: "dia", label: "Día" },
+  { id: "espacio", label: "Espacio" },
   { id: "dias", label: "Dias" },
   { id: "precioUnit", label: "P. Unit." },
   { id: "subtotal", label: "Subtotal" },
@@ -30,7 +31,7 @@ export const BUDGET_COLUMNS: ColumnDef[] = [
 ];
 
 export const COLUMN_PRESETS: Record<string, string[]> = {
-  esenciales: ["item", "qty", "uom", "dia", "precioUnit", "dias", "total", "status", "flags"],
+  esenciales: ["item", "qty", "uom", "dia", "espacio", "precioUnit", "dias", "total", "status", "flags"],
   financiera: [
     "item", "qty", "uom", "dia", "precioUnit", "dias", "subtotal",
     "fee", "iva", "turismo", "total", "status", "flags",

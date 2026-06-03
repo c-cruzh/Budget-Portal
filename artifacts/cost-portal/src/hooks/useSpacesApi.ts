@@ -1,0 +1,100 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+import type { SpaceDayKey, SpacesCatalog } from "@/data/budgetData";
+import { EMPTY_SPACES_CATALOG } from "@/data/budgetData";
+
+function normalizeList(list: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of list) {
+    const name = String(v ?? "").trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
+}
+
+export function useSpacesApi() {
+  const [spaces, setSpacesState] = useState<SpacesCatalog>(EMPTY_SPACES_CATALOG);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const initialLoadDone = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rev = useRef(0);
+  const inFlight = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/spaces", { credentials: "include" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!cancelled && data.spaces && typeof data.spaces === "object") {
+          setSpacesState({
+            "dia-1": normalizeList(data.spaces["dia-1"] || []),
+            "dia-2": normalizeList(data.spaces["dia-2"] || []),
+          });
+        }
+      } catch (err: any) {
+        if (!cancelled) setError(err?.message || "Failed to load spaces");
+      } finally {
+        if (!cancelled) { initialLoadDone.current = true; setLoading(false); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const persist = useCallback((next: SpacesCatalog) => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(async () => {
+      const myRev = ++rev.current;
+      if (inFlight.current) inFlight.current.abort();
+      const controller = new AbortController();
+      inFlight.current = controller;
+      try {
+        const res = await fetch("/api/spaces", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          signal: controller.signal,
+          body: JSON.stringify({ spaces: next }),
+        });
+        if (myRev !== rev.current) return;
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          setError(data?.error || `HTTP ${res.status}`);
+          return;
+        }
+        setError(null);
+      } catch (err: any) {
+        if (err?.name === "AbortError") return;
+        setError(err?.message || "Failed to save spaces");
+      }
+    }, 250);
+  }, []);
+
+  // Adds a space to the catalog for the given day if it does not already exist
+  // (case-insensitive). Returns the canonical stored name to assign to the item.
+  const addSpace = useCallback((day: SpaceDayKey, name: string): string => {
+    const trimmed = name.trim();
+    if (!trimmed) return "";
+    let canonical = trimmed;
+    setSpacesState(prev => {
+      const existing = prev[day].find(s => s.toLowerCase() === trimmed.toLowerCase());
+      if (existing) { canonical = existing; return prev; }
+      const next: SpacesCatalog = {
+        "dia-1": [...prev["dia-1"]],
+        "dia-2": [...prev["dia-2"]],
+      };
+      next[day] = [...prev[day], trimmed].sort((a, b) => a.localeCompare(b));
+      persist(next);
+      return next;
+    });
+    return canonical;
+  }, [persist]);
+
+  return { spaces, addSpace, loading, error };
+}

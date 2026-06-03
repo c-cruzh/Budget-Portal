@@ -14,10 +14,12 @@ import { FiltersPopover, type ActiveFilterChip } from "@/components/budget/Filte
 import { BulkActionsBar } from "@/components/budget/BulkActionsBar";
 import { BUDGET_COLUMNS, DEFAULT_VISIBLE } from "@/components/budget/columns";
 import type { LinkedBudgetItem } from "@/data/tasksBoardData";
-import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, DIA_VALUES, DIA_LABELS, DIA_COLORS, deriveDia, type BudgetItem, type QuoteOption, type SubEvent, type DiaValue } from "@/data/budgetData";
+import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, DIA_VALUES, DIA_LABELS, DIA_COLORS, deriveDia, type BudgetItem, type QuoteOption, type SubEvent, type DiaValue, type SpaceDayKey } from "@/data/budgetData";
 import { recalcItem } from "@/lib/budgetCalc";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useSubEventsApi } from "@/hooks/useSubEventsApi";
+import { useSpacesApi } from "@/hooks/useSpacesApi";
+import { SpaceCell } from "@/components/budget/SpaceCell";
 import { useAuth } from "@/hooks/useAuth";
 import { ComboInput } from "@/components/ComboInput";
 import { SubEventsManagerDialog } from "@/components/SubEventsManagerDialog";
@@ -220,6 +222,7 @@ const SEED_ITEMS = INITIAL_BUDGET_ITEMS.map(recalcItem);
 export default function BudgetPage() {
   const { items, setItems, loading, error, meta, saveCommentOnly, patchItem, saveFull } = useBudgetApi(SEED_ITEMS, recalcItem);
   const { subEvents, setSubEvents } = useSubEventsApi();
+  const { spaces, addSpace } = useSpacesApi();
   const { permissions, user } = useAuth();
   const canEdit = permissions.canEdit;
   const canComment = permissions.canComment;
@@ -269,6 +272,7 @@ export default function BudgetPage() {
   }, []);
   const [filterEvento, setFilterEvento] = useState("ALL");
   const [filterArea, setFilterArea] = useState("ALL");
+  const [filterEspacio, setFilterEspacio] = useState("ALL");
   const [filterCentro, setFilterCentro] = useState("ALL");
   const [filterProveedor, setFilterProveedor] = useState("ALL");
   const [filterProductora, setFilterProductora] = useState("ALL");
@@ -330,6 +334,17 @@ export default function BudgetPage() {
     return ["ALL", ...Array.from(new Set(src.map(i => i.centroCosto).filter(v => v && v.trim())))];
   }, [items, filterEvento, filterArea]);
 
+  const allSpaces = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of spaces["dia-1"]) set.add(s);
+    for (const s of spaces["dia-2"]) set.add(s);
+    for (const i of items) {
+      if ((i.espacioDia1 || "").trim()) set.add(i.espacioDia1!.trim());
+      if ((i.espacioDia2 || "").trim()) set.add(i.espacioDia2!.trim());
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [spaces, items]);
+
   const allAreas = useMemo(() => Array.from(new Set(items.map(i => i.area).filter(v => v && v.trim()))).sort(), [items]);
   const allCentros = useMemo(() => Array.from(new Set(items.map(i => i.centroCosto).filter(v => v && v.trim()))).sort(), [items]);
 
@@ -375,6 +390,8 @@ export default function BudgetPage() {
     if (filterSubEvents.size > 0) out = out.filter(i => filterSubEvents.has(i.subEventId || "__unassigned__"));
     if (filterEvento !== "ALL") out = out.filter(i => i.evento === filterEvento);
     if (filterArea !== "ALL") out = out.filter(i => i.area === filterArea);
+    if (filterEspacio === "(Sin asignar)") out = out.filter(i => !(i.espacioDia1 || "").trim() && !(i.espacioDia2 || "").trim());
+    else if (filterEspacio !== "ALL") out = out.filter(i => i.espacioDia1 === filterEspacio || i.espacioDia2 === filterEspacio);
     if (filterCentro !== "ALL") out = out.filter(i => i.centroCosto === filterCentro);
     if (filterProveedor === "(Sin proveedor)") out = out.filter(i => !(i.proveedor || "").trim());
     else if (filterProveedor !== "ALL") out = out.filter(i => (i.proveedor || "").trim() === filterProveedor);
@@ -420,7 +437,7 @@ export default function BudgetPage() {
       );
     }
     return out;
-  }, [items, filterSubEvents, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterQtyDias, filterDia, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
+  }, [items, filterSubEvents, filterEvento, filterArea, filterEspacio, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterQtyDias, filterDia, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
 
   const sorted = useMemo(() => {
     if (!sortKey) return filtered;
@@ -892,7 +909,7 @@ export default function BudgetPage() {
   const exportCSV = () => {
     const headers = [
       "SUB-EVENTO", "EVENTO", "AREA/ZONA", "CENTRO DE COSTO", "ITEM", "DESCRIPCION", "NOTAS/OBSERVACIONES",
-      "IN-KIND?", "AURORA 360?", "QTY", "UoM", "DIA APLICABLE", "CONTRATACION POR DIAS?", "QTY DIAS",
+      "IN-KIND?", "AURORA 360?", "QTY", "UoM", "DIA APLICABLE", "ESPACIO DIA 1", "ESPACIO DIA 2", "CONTRATACION POR DIAS?", "QTY DIAS",
       "PRECIO UNITARIO", "SUBTOTAL", "VIA PRODUCTORA (AURORA 360)?", "FEE INCL. EN COTIZACION?",
       "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "SOLO PRESUPUESTADO?", "IMAGEN DE REFERENCIA", "PROVEEDOR",
       "REVIEWED BY", "VALIDAR COSTO?", "CONTRATAR APARTE?", "ACCIÓN REQUERIDA?", "NICE TO HAVE?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO", "STATUS COTIZACION"
@@ -900,6 +917,7 @@ export default function BudgetPage() {
     const rows = filtered.map(i => [
       subEventName(i.subEventId), i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
       i.inKind ? "SI" : "NO", i.agencyFee ? "SI" : "NO", i.qty, i.uom, DIA_LABELS[deriveDia(i)],
+      i.espacioDia1 || "", i.espacioDia2 || "",
       i.porDias, i.qtyDias, i.precioUnitario, i.subtotal, i.agencyFee ? "SI" : "NO",
       i.aplicaFee, i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.soloPresupuestado ? "SI" : "NO", i.documento,
       i.proveedor || "", i.reviewedBy || "", i.validarCosto ? "SI" : "NO", i.contratarAparte ? "SI" : "NO",
@@ -1069,6 +1087,7 @@ export default function BudgetPage() {
             if (filterPrecio !== "ALL") chips.push({ key: "pr", label: `Precio: ${filterPrecio}`, onClear: () => setFilterPrecio("ALL") });
             if (filterQtyDias.size > 0) chips.push({ key: "qd", label: `Días: ${Array.from(filterQtyDias).sort().join(",")}`, onClear: () => setFilterQtyDias(new Set()) });
             if (filterDia !== "ALL") chips.push({ key: "dia", label: `Día: ${DIA_LABELS[filterDia]}`, onClear: () => setFilterDia("ALL") });
+            if (filterEspacio !== "ALL") chips.push({ key: "esp", label: `Espacio: ${filterEspacio}`, onClear: () => setFilterEspacio("ALL") });
             if (filterPending) chips.push({ key: "pn", label: "Pending Quotes", onClear: () => setFilterPending(false) });
             if (filterAccionReq) chips.push({ key: "ar", label: "Acción Req.", onClear: () => setFilterAccionReq(false) });
             if (filterValidar) chips.push({ key: "vl", label: "A Validar", onClear: () => setFilterValidar(false) });
@@ -1076,7 +1095,7 @@ export default function BudgetPage() {
             if (filterNiceToHave) chips.push({ key: "nh", label: "Nice to Have", onClear: () => setFilterNiceToHave(false) });
             return chips;
           })()}
-          onClearAll={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterQtyDias(new Set()); setFilterDia("ALL"); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
+          onClearAll={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterQtyDias(new Set()); setFilterDia("ALL"); setFilterEspacio("ALL"); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
         >
           <div className="flex flex-wrap gap-3 items-center">
           <Select value={filterProveedor} onValueChange={setFilterProveedor}>
@@ -1134,6 +1153,14 @@ export default function BudgetPage() {
               <SelectItem value="dia-1">Día 1</SelectItem>
               <SelectItem value="dia-2">Día 2</SelectItem>
               <SelectItem value="ambos">Solo Ambos</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterEspacio} onValueChange={setFilterEspacio}>
+            <SelectTrigger className="w-[180px] bg-card border-card-border text-xs"><SelectValue placeholder="Espacio" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Espacio: Todos</SelectItem>
+              <SelectItem value="(Sin asignar)">(Sin asignar)</SelectItem>
+              {allSpaces.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
           </Select>
           <Popover>
@@ -1257,6 +1284,9 @@ export default function BudgetPage() {
                 <th data-col="dia" className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
                   <ColHeader label="Día" info="Día al que aplica el ítem: Día 1, Día 2 o Ambos. Define cuántos días se cobra un costo por día." align="center" />
                 </th>
+                <th data-col="espacio" className="text-left px-1 py-2.5 font-semibold text-muted-foreground min-w-[110px] bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Espacio" info="Espacio/sala físico donde estará el ítem. La lista depende del día (Día 1 / Día 2). Para ítems de Ambos se asigna un espacio por día." align="left" />
+                </th>
                 <th data-col="dias" className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-12 bg-[hsl(var(--muted))] border-b border-border">
                   <SortableHeader label="Dias" sortKey="dias" current={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
                 </th>
@@ -1341,7 +1371,7 @@ export default function BudgetPage() {
                         {hasInKind && <Badge className="text-[10px] bg-amber-500/15 text-amber-600 border-amber-500/20 font-normal py-0">In-Kind</Badge>}
                       </div>
                     </td>
-                    <td className="px-2 py-2" colSpan={15}></td>
+                    <td className="px-2 py-2" colSpan={16}></td>
                     <td className="px-2 py-2 text-right font-semibold" colSpan={canEdit ? 9 : 8}>
 
                       {groupTotal > 0 ? <span className="text-primary text-xs">{formatUSD(groupTotal)}</span> : <span className="text-muted-foreground text-[10px]">In-Kind / $0</span>}
@@ -1475,6 +1505,21 @@ export default function BudgetPage() {
                       </td>
                       <td data-col="dia" className="px-1 py-1.5 text-center align-top">
                         <DiaCell dia={deriveDia(item)} canEdit={canEdit} onChange={v => updateItem(item.id, "dia", v)} />
+                      </td>
+                      <td data-col="espacio" className="px-1 py-1.5 align-top">
+                        <SpaceCell
+                          dia={deriveDia(item)}
+                          espacioDia1={item.espacioDia1}
+                          espacioDia2={item.espacioDia2}
+                          spacesDia1={spaces["dia-1"]}
+                          spacesDia2={spaces["dia-2"]}
+                          canEdit={canEdit}
+                          onAssign={(day, value) => updateItem(item.id, day === "dia-1" ? "espacioDia1" : "espacioDia2", value)}
+                          onAddSpace={(day, name) => {
+                            const canonical = addSpace(day, name);
+                            if (canonical) updateItem(item.id, day === "dia-1" ? "espacioDia1" : "espacioDia2", canonical);
+                          }}
+                        />
                       </td>
                       <td data-col="dias" className="px-1 py-1.5 text-center align-top">
                         {item.porDias === "SI" ? (
@@ -1899,7 +1944,7 @@ export default function BudgetPage() {
                             {!__pex && <span className="text-[10px] text-muted-foreground">click para expandir</span>}
                           </div>
                         </td>
-                        <td colSpan={canEdit ? 22 : 21} className="px-2 py-1.5 text-right bg-primary/5">
+                        <td colSpan={canEdit ? 23 : 22} className="px-2 py-1.5 text-right bg-primary/5">
                           <span className="font-semibold text-primary text-xs">{formatUSD(__row.total)}</span>
                         </td>
                       </tr>
@@ -1916,7 +1961,7 @@ export default function BudgetPage() {
                 <td className="sticky-col-2 px-2 py-3 font-semibold text-muted-foreground text-xs bg-[hsl(var(--muted))]">
                   TOTAL -- {filtered.length} items
                 </td>
-                <td colSpan={15} className="px-3 py-3">
+                <td colSpan={16} className="px-3 py-3">
                 </td>
                 <td className="px-2 py-3 text-right font-bold text-sm text-primary font-mono">
                   {formatUSD(totalBudget)}

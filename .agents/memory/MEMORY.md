@@ -1,1 +1,2 @@
 - [Día day model](dia-day-model.md) — per-item Día 1/2/Ambos is single source of truth; recalcItem normalizes & drives day count; split dialogs must set dia explicitly.
+- [app_state route auth convention](api-route-auth-convention.md) — GET catalog routes are public (do seeding here); only writes are org-permission gated. curl can't exercise authed endpoints.
