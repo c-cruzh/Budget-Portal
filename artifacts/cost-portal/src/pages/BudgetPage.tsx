@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, Info,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
-  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus, MapPin, Lock
+  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus, MapPin, Lock, SendHorizontal
 } from "lucide-react";
 import { CreateTaskFromItemDialog } from "@/components/CreateTaskFromItemDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -311,6 +311,7 @@ export default function BudgetPage({
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [sendingToFinal, setSendingToFinal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
 
   const colVisible = useMemo(() => new Set(visibleColumns), [visibleColumns]);
@@ -783,6 +784,46 @@ export default function BudgetPage({
       return next;
     });
   }, [setItems, saveFull]);
+
+  const sendToFinal = useCallback(async (itemsToSend: BudgetItem[]) => {
+    if (itemsToSend.length === 0) return;
+    if (sendingToFinal) return;
+    setSendingToFinal(true);
+    const genId = () => (typeof crypto !== "undefined" && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `item-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      const res = await fetch("/api/budget-items-final", { credentials: "include" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const existing: BudgetItem[] = Array.isArray(data.items) ? data.items : [];
+      const cloned = itemsToSend.map(it => ({ ...it, id: genId() }));
+      const next = [...existing, ...cloned];
+      const saveRes = await fetch("/api/budget-items-final", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ items: next }),
+      });
+      if (!saveRes.ok) {
+        const errData = await saveRes.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${saveRes.status}`);
+      }
+      toast({
+        title: itemsToSend.length === 1
+          ? "Item enviado a Budget Final"
+          : `${itemsToSend.length} items enviados a Budget Final`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error al enviar a Budget Final",
+        description: err.message || "Intenta de nuevo",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingToFinal(false);
+    }
+  }, [sendingToFinal]);
 
   const toggleReviewed = useCallback((id: string) => {
     setItems(prev => {
@@ -2078,6 +2119,16 @@ export default function BudgetPage({
                               </TooltipTrigger>
                               <TooltipContent>Crear tarea</TooltipContent>
                             </Tooltip>
+                            {deprecated && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button variant="ghost" size="icon" disabled={sendingToFinal} className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => sendToFinal([item])}>
+                                    <SendHorizontal className="w-3 h-3" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Enviar a Budget Final</TooltipContent>
+                              </Tooltip>
+                            )}
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-destructive" onClick={() => deleteItem(item.id)}>
@@ -2385,6 +2436,10 @@ export default function BudgetPage({
         onMoveArea={(a) => bulkUpdate(it => ({ ...it, area: a }))}
         onMoveCentro={(c) => bulkUpdate(it => ({ ...it, centroCosto: c }))}
         onSplitByDay={() => setBulkSplitOpen(true)}
+        onSendToFinal={deprecated ? () => {
+          sendToFinal(items.filter(i => selectedIds.has(i.id)));
+          setSelectedIds(new Set());
+        } : undefined}
         statusOptions={STATUS_COTIZACION_OPTIONS.filter(Boolean)}
         proveedorOptions={proveedores.filter(p => p !== "ALL")}
         areaOptions={areas.filter(a => a !== "ALL")}

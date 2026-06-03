@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trash2, X, Download, Tag, ShieldAlert, AlertTriangle, MoveRight, ChevronDown, Columns2 } from "lucide-react";
+import { Trash2, X, Download, Tag, ShieldAlert, AlertTriangle, MoveRight, ChevronDown, Columns2, SendHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -23,6 +23,7 @@ export interface BulkActionsProps {
   onMoveArea: (area: string) => void;
   onMoveCentro: (centro: string) => void;
   onSplitByDay: () => void;
+  onSendToFinal?: () => void;
   statusOptions: string[];
   proveedorOptions: string[];
   areaOptions: string[];
@@ -96,6 +97,17 @@ export function BulkActionsBar(props: BulkActionsProps) {
               >
                 <Columns2 className="w-3.5 h-3.5" /> Split por día
               </Button>
+
+              {props.onSendToFinal && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 gap-1.5 text-xs"
+                  onClick={props.onSendToFinal}
+                >
+                  <SendHorizontal className="w-3.5 h-3.5" /> A Budget Final
+                </Button>
+              )}
 
               <Button
                 size="sm"
