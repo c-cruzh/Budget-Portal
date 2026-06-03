@@ -35,11 +35,14 @@ type NavItem = {
   label: string;
   icon: typeof LayoutDashboard;
   deprecated?: boolean;
+  /** If set, only users in one of these organizations see this item. */
+  orgs?: string[];
 };
 
 const NAV_ITEMS: NavItem[] = [
   { path: "/", label: "Overview", icon: LayoutDashboard },
-  { path: "/budget", label: "Budget Items", icon: TableProperties },
+  { path: "/budget-final", label: "Budget Items (Final)", icon: TableProperties },
+  { path: "/budget", label: "Budget Items (Vieja)", icon: TableProperties, deprecated: true, orgs: ["C2 LABS"] },
   { path: "/agenda", label: "Agenda", icon: Calendar },
   { path: "/voluntarios", label: "Voluntarios", icon: HandHelping },
   { path: "/travel/ground", label: "Ground Transport", icon: Bus },
@@ -56,7 +59,9 @@ const NAV_ITEMS: NavItem[] = [
 
 function NavLink({ item }: { item: NavItem }) {
   const [location] = useLocation();
-  const isActive = item.path === "/" ? location === "/" : location.startsWith(item.path);
+  const isActive = item.path === "/"
+    ? location === "/"
+    : location === item.path || location.startsWith(item.path + "/");
   return (
     <Link
       href={item.path}
@@ -218,9 +223,11 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {NAV_ITEMS.map(item => (
-            <NavLink key={item.path} item={item} />
-          ))}
+          {NAV_ITEMS
+            .filter(item => !item.orgs || (user ? item.orgs.includes(user.organization) : false))
+            .map(item => (
+              <NavLink key={item.path} item={item} />
+            ))}
         </nav>
 
         {user && <RolesInfoCard currentOrg={user.organization} />}
@@ -279,7 +286,7 @@ function Layout({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
 
   const currentPage = NAV_ITEMS.find(n =>
-    n.path === "/" ? location === "/" : location.startsWith(n.path)
+    n.path === "/" ? location === "/" : location === n.path || location.startsWith(n.path + "/")
   ) || NAV_ITEMS[0];
 
   return (
@@ -328,11 +335,20 @@ function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+function LegacyBudgetRoute() {
+  const { user } = useAuth();
+  if (!user || user.organization !== "C2 LABS") {
+    return <Redirect to="/budget-final" />;
+  }
+  return <BudgetPage deprecated />;
+}
+
 function AppRouter() {
   return (
     <Switch>
       <Route path="/" component={() => <Layout><DashboardPage /></Layout>} />
-      <Route path="/budget" component={() => <Layout><BudgetPage /></Layout>} />
+      <Route path="/budget-final" component={() => <Layout><BudgetPage apiUrl="/api/budget-items-final" syncSeed={false} seedItems={[]} /></Layout>} />
+      <Route path="/budget" component={() => <Layout><LegacyBudgetRoute /></Layout>} />
       <Route path="/travel/ground" component={() => <Layout><GroundTransportPage /></Layout>} />
       <Route path="/travel/aerial" component={() => <Layout><AerialTransportPage /></Layout>} />
       <Route path="/hotel" component={() => <Layout><HotelPage /></Layout>} />

@@ -212,8 +212,24 @@ function DiaCell({ dia, canEdit, onChange }: { dia: DiaValue; canEdit: boolean; 
 
 const SEED_ITEMS = INITIAL_BUDGET_ITEMS.map(recalcItem);
 
-export default function BudgetPage() {
-  const { items, setItems, loading, error, meta, saveCommentOnly, patchItem, saveFull } = useBudgetApi(SEED_ITEMS, recalcItem);
+interface BudgetPageProps {
+  /** API endpoint to read/write budget items. Defaults to the legacy budget. */
+  apiUrl?: string;
+  /** Whether to sync from seed-data.json. The "Final" budget starts empty. */
+  syncSeed?: boolean;
+  /** Seed items used as fallback. Empty for the "Final" budget. */
+  seedItems?: BudgetItem[];
+  /** Show a "Deprecated" banner at the top of the page (legacy budget). */
+  deprecated?: boolean;
+}
+
+export default function BudgetPage({
+  apiUrl = "/api/budget-items",
+  syncSeed = true,
+  seedItems = SEED_ITEMS,
+  deprecated = false,
+}: BudgetPageProps = {}) {
+  const { items, setItems, loading, error, meta, saveCommentOnly, patchItem, saveFull } = useBudgetApi(seedItems, recalcItem, { apiUrl, syncSeed });
   const { subEvents, setSubEvents } = useSubEventsApi();
   const { spaces, addSpace, setCapacity, renameSpace, removeSpace } = useSpacesApi();
   const { permissions, user } = useAuth();
@@ -858,6 +874,16 @@ export default function BudgetPage() {
       saveFull(next);
       return next;
     });
+    // Auto-expand the group the new item lands in so it's immediately visible
+    // (groups are collapsed by default; important when starting from an empty table).
+    const seId = base.subEventId || "__unassigned__";
+    const cc = base.centroCosto || "(Sin centro)";
+    const groupKey = `${seId}__${base.area}__${cc}`;
+    setExpandedAreas(prev => {
+      const nextSet = new Set(prev);
+      nextSet.add(groupKey);
+      return nextSet;
+    });
     setShowAddModal(false);
     setNewItem({ evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, exentoIva: false, aplicaTurismo: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "" });
   }, [newItem, setItems, saveFull]);
@@ -1033,6 +1059,16 @@ export default function BudgetPage() {
 
   return (
     <div className="space-y-6">
+      {deprecated && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+          <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div className="text-xs text-amber-700 dark:text-amber-300">
+            <span className="font-semibold uppercase tracking-wide">Deprecated</span>
+            {" — "}Esta es la versión vieja del Budget. La fuente de verdad ahora es{" "}
+            <span className="font-semibold">Budget Items (Final)</span>. Los cambios aquí no afectan la versión Final.
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           {error ? (

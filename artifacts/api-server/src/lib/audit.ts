@@ -121,6 +121,7 @@ export function diffBudgetItems(
   user: AuditUser,
   oldItems: any[] | null | undefined,
   newItems: any[],
+  entityType: string = "budget-item",
 ): NewAuditLogEntry[] {
   const entries: NewAuditLogEntry[] = [];
   const oldMap = new Map<string, any>();
@@ -133,7 +134,7 @@ export function diffBudgetItems(
     if (!oldMap.has(id)) {
       entries.push({
         ...user,
-        entityType: "budget-item",
+        entityType,
         entityId: id,
         entityLabel: item.item || item.descripcion || id,
         action: "CREATE",
@@ -146,7 +147,7 @@ export function diffBudgetItems(
     if (!newMap.has(id)) {
       entries.push({
         ...user,
-        entityType: "budget-item",
+        entityType,
         entityId: id,
         entityLabel: item.item || item.descripcion || id,
         action: "DELETE",
@@ -162,7 +163,7 @@ export function diffBudgetItems(
       if (!valuesEqual(oldIt[field], newIt[field])) {
         entries.push({
           ...user,
-          entityType: "budget-item",
+          entityType,
           entityId: id,
           entityLabel: newIt.item || newIt.descripcion || id,
           action: "UPDATE",
@@ -181,7 +182,7 @@ export function diffBudgetItems(
     if (oldQStr !== newQStr) {
       entries.push({
         ...user,
-        entityType: "budget-item",
+        entityType,
         entityId: id,
         entityLabel: newIt.item || newIt.descripcion || id,
         action: "UPDATE",

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { BudgetItem } from "@/data/budgetData";
 
-const API_URL = "/api/budget-items";
+const DEFAULT_API_URL = "/api/budget-items";
 const SEED_VERSION = "2026-04-10T07:30:00Z";
 
 export interface BudgetMeta {
@@ -11,9 +11,20 @@ export interface BudgetMeta {
   lastEditedAt: string;
 }
 
+export interface BudgetApiOptions {
+  /** Endpoint to read/write from. Defaults to the legacy budget endpoint. */
+  apiUrl?: string;
+  /**
+   * Whether to sync from the bundled seed-data.json when the server is empty
+   * or outdated. The "Final" budget starts empty, so it disables this.
+   */
+  syncSeed?: boolean;
+}
+
 export function useBudgetApi(
   fallbackItems: BudgetItem[],
-  recalcFn?: (item: BudgetItem) => BudgetItem
+  recalcFn?: (item: BudgetItem) => BudgetItem,
+  options?: BudgetApiOptions
 ): {
   items: BudgetItem[];
   setItems: (value: BudgetItem[] | ((prev: BudgetItem[]) => BudgetItem[])) => void;
@@ -26,6 +37,9 @@ export function useBudgetApi(
   patchItem: (id: string, field: string, value: any, commentOnly?: boolean) => void;
   saveFull: (items: BudgetItem[]) => void;
 } {
+  const apiUrl = options?.apiUrl ?? DEFAULT_API_URL;
+  const syncSeed = options?.syncSeed ?? true;
+
   const [items, setItemsState] = useState<BudgetItem[]>(fallbackItems);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -40,12 +54,26 @@ export function useBudgetApi(
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(API_URL, { credentials: "include" });
+        const res = await fetch(apiUrl, { credentials: "include" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (!cancelled) {
           if (data.meta) setMeta(data.meta);
-          if (data.items && Array.isArray(data.items) && data.items.length > 0) {
+          const hasServerItems = data.items && Array.isArray(data.items) && data.items.length > 0;
+
+          // When seed sync is disabled (e.g. the "Final" budget), never pull
+          // from seed-data.json: just use whatever the server has, or start empty.
+          if (!syncSeed) {
+            const recalced = hasServerItems
+              ? (recalcFn ? data.items.map(recalcFn) : data.items)
+              : (recalcFn ? fallbackItems.map(recalcFn) : fallbackItems);
+            setItemsState(recalced);
+            initialLoadDone.current = true;
+            setLoading(false);
+            return;
+          }
+
+          if (hasServerItems) {
             const appliedVersion = localStorage.getItem("seed-version-applied");
             if (appliedVersion !== SEED_VERSION) {
               try {
@@ -113,7 +141,7 @@ export function useBudgetApi(
     try {
       savingCount.current++;
       setSaving(true);
-      const res = await fetch(API_URL, {
+      const res = await fetch(apiUrl, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -143,7 +171,7 @@ export function useBudgetApi(
 
   async function patchFieldOnServer(id: string, field: string, value: any, commentOnly = false) {
     try {
-      const res = await fetch(API_URL, {
+      const res = await fetch(apiUrl, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

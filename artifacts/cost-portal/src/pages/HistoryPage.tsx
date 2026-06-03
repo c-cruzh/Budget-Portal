@@ -18,6 +18,7 @@ interface AuditEntry {
 
 const ENTITY_LABELS: Record<string, string> = {
   "budget-item": "Item presupuesto",
+  "budget-item-final": "Item presupuesto (Final)",
   "sponsor": "Sponsor",
   "scenario": "Escenario",
 };
@@ -106,6 +107,7 @@ export default function HistoryPage() {
           >
             <option value="all">Todos los tipos</option>
             <option value="budget-item">Items de presupuesto</option>
+            <option value="budget-item-final">Items de presupuesto (Final)</option>
             <option value="sponsor">Sponsors</option>
             <option value="scenario">Escenario</option>
           </select>

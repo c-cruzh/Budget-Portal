@@ -3,3 +3,4 @@
 - [Ground Transport IVA](ground-transport-iva.md) — /travel/ground stores base vehicle prices (Hiace 65/Sedan 40/Traverse 95); cards show IVA-inclusive, KPI "subtotal antes de IVA" is pre-IVA base.
 - [Space aforo model](space-aforo-model.md) — capacity is per-space (shared across days); over-capacity = dayLoad(sum item qty) > capacity; banner+badge share one memo.
 - [Volunteer roles extraction](volunteer-roles-extraction.md) — unpaid PERSONA staffing slots live in Voluntarios roster, not budget; $0 predicate keeps totals stable; strip in 3 places.
+- [Dual budget tabs](dual-budget-storage.md) — Final (/budget-final, empty, all orgs) & legacy (/budget, seed, C2-only) share one component/hook/route factory via per-instance config; separate app_state keys.
