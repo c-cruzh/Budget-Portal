@@ -2153,13 +2153,18 @@ export default function BudgetPage({
               <Input value={newItem.item} onChange={e => setNewItem(p => ({ ...p, item: e.target.value }))} placeholder="e.g. CATERING COFFEE BREAK" />
             </div>
             <div>
-              <label className="text-xs font-medium mb-1 block">Evento</label>
-              <Select value={newItem.evento} onValueChange={v => setNewItem(p => ({ ...p, evento: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <label className="text-xs font-medium mb-1 block">Sub-evento</label>
+              <Select value={newItem.subEventId} onValueChange={v => setNewItem(p => ({ ...p, subEventId: v }))}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar sub-evento" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="MAIN EVENT">MAIN EVENT</SelectItem>
-                  <SelectItem value="MAIN EVENT VIP DINNER">MAIN EVENT VIP DINNER</SelectItem>
-                  <SelectItem value="BEFORE/AFTER MAIN EVENT">BEFORE/AFTER MAIN EVENT</SelectItem>
+                  {subEvents.map(se => (
+                    <SelectItem key={se.id} value={se.id}>
+                      <span className="inline-flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: se.color }} />
+                        {se.name}
+                      </span>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
