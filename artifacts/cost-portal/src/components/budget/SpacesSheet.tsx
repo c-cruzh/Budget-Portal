@@ -112,6 +112,14 @@ export function SpacesSheet({
   const infoFor = (name: string): SpaceLoadInfo | undefined =>
     loadInfo.find(l => l.name.toLowerCase() === name.toLowerCase());
 
+  // A name that maps to more than one catalog entry on a day (e.g. the same
+  // space listed under two zones) must not be renamed/deleted from here, since
+  // legacy name-based ops would collapse all of them. Manage these in Espacios.
+  const entriesFor = (day: SpaceDayKey): { name: string }[] =>
+    (spaces.entries?.[day] ?? []) as { name: string }[];
+  const isMultiZone = (day: SpaceDayKey, name: string): boolean =>
+    entriesFor(day).filter(e => e.name.trim().toLowerCase() === name.toLowerCase()).length > 1;
+
   const usageFor = (day: SpaceDayKey, name: string): number => {
     const field = day === "dia-1" ? "espacioDia1" : "espacioDia2";
     let n = 0;
@@ -207,6 +215,7 @@ export function SpacesSheet({
                       const over = info ? (day === "dia-1" ? info.overDia1 : info.overDia2) : false;
                       const capacity = info?.capacity;
                       const itemCount = usageFor(day, name);
+                      const multiZone = isMultiZone(day, name);
 
                       if (isConfirming) {
                         return (
@@ -285,7 +294,7 @@ export function SpacesSheet({
                           <CapacityField
                             name={name}
                             capacity={capacity}
-                            canEdit={canEdit}
+                            canEdit={canEdit && !multiZone}
                             onSetCapacity={onSetCapacity}
                           />
 
@@ -311,6 +320,13 @@ export function SpacesSheet({
                                   <X className="w-3.5 h-3.5" />
                                 </Button>
                               </>
+                            ) : multiZone ? (
+                              <span
+                                className="text-[9px] text-muted-foreground italic px-1 shrink-0 whitespace-nowrap"
+                                title="Este espacio existe en varias zonas. Renómbralo o elimínalo desde la pestaña Espacios para no afectar las demás zonas."
+                              >
+                                editar en Espacios
+                              </span>
                             ) : (
                               <>
                                 <Button

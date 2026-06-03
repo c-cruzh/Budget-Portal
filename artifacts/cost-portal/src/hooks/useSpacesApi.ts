@@ -1,38 +1,74 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { SpaceDayKey, SpacesCatalog } from "@/data/budgetData";
-import { EMPTY_SPACES_CATALOG } from "@/data/budgetData";
+import type { SpaceDayKey, SpaceEntry, SpacesCatalog } from "@/data/budgetData";
+import { EMPTY_SPACES_CATALOG, buildSpacesCatalog } from "@/data/budgetData";
 
-function normalizeList(list: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const v of list) {
-    const name = String(v ?? "").trim();
+export interface SpacesMeta {
+  lastEditedBy: string;
+  lastEditedByEmail: string;
+  lastEditedByOrg: string;
+  lastEditedAt: string;
+}
+
+function newEntryId(): string {
+  if (typeof crypto !== "undefined" && (crypto as any).randomUUID) return `sp-${(crypto as any).randomUUID()}`;
+  return `sp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeEntries(input: unknown): SpaceEntry[] {
+  if (!Array.isArray(input)) return [];
+  const out: SpaceEntry[] = [];
+  const used = new Set<string>();
+  for (const raw of input) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    const name = String(r.name ?? "").trim();
     if (!name) continue;
-    const key = name.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(name);
+    let id = String(r.id ?? "").trim();
+    if (!id || used.has(id)) id = newEntryId();
+    used.add(id);
+    const entry: SpaceEntry = { id, zone: String(r.zone ?? "").trim(), name };
+    const a = Math.floor(Number(r.aforo));
+    if (Number.isFinite(a) && a > 0) entry.aforo = a;
+    const image = String(r.image ?? "").trim();
+    if (image) entry.image = image;
+    out.push(entry);
   }
   return out;
 }
 
-function normalizeCapacities(input: unknown): Record<string, number> {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
-  const out: Record<string, number> = {};
-  for (const [rawName, rawVal] of Object.entries(input as Record<string, unknown>)) {
-    const name = String(rawName ?? "").trim();
-    if (!name) continue;
-    const num = Math.floor(Number(rawVal));
-    if (!Number.isFinite(num) || num <= 0) continue;
-    out[name] = num;
+/** Builds the structured entries from a server payload, migrating legacy shapes. */
+function entriesFromPayload(data: any): { "dia-1": SpaceEntry[]; "dia-2": SpaceEntry[] } {
+  const e = data?.entries;
+  if (e && typeof e === "object" && !Array.isArray(e)) {
+    return { "dia-1": normalizeEntries(e["dia-1"]), "dia-2": normalizeEntries(e["dia-2"]) };
   }
-  return out;
+  // Legacy: name arrays + capacities map → zone-less entries.
+  const caps: Record<string, unknown> =
+    data?.capacities && typeof data.capacities === "object" ? data.capacities : {};
+  const mig = (day: SpaceDayKey): SpaceEntry[] => {
+    const names: unknown[] = Array.isArray(data?.[day]) ? data[day] : [];
+    return names
+      .map(n => String(n ?? "").trim())
+      .filter(Boolean)
+      .map(name => {
+        const entry: SpaceEntry = { id: newEntryId(), zone: "", name };
+        const capKey = Object.keys(caps).find(k => k.toLowerCase() === name.toLowerCase());
+        if (capKey != null) {
+          const a = Math.floor(Number(caps[capKey]));
+          if (Number.isFinite(a) && a > 0) entry.aforo = a;
+        }
+        return entry;
+      });
+  };
+  return { "dia-1": mig("dia-1"), "dia-2": mig("dia-2") };
 }
 
 export function useSpacesApi() {
   const [spaces, setSpacesState] = useState<SpacesCatalog>(EMPTY_SPACES_CATALOG);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [meta, setMeta] = useState<SpacesMeta | null>(null);
   const initialLoadDone = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rev = useRef(0);
@@ -45,12 +81,12 @@ export function useSpacesApi() {
         const res = await fetch("/api/spaces", { credentials: "include" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        if (!cancelled && data.spaces && typeof data.spaces === "object") {
-          setSpacesState({
-            "dia-1": normalizeList(data.spaces["dia-1"] || []),
-            "dia-2": normalizeList(data.spaces["dia-2"] || []),
-            capacities: normalizeCapacities(data.spaces.capacities),
-          });
+        if (!cancelled) {
+          if (data.meta) setMeta(data.meta);
+          if (data.spaces && typeof data.spaces === "object") {
+            const ent = entriesFromPayload(data.spaces);
+            setSpacesState(buildSpacesCatalog(ent["dia-1"], ent["dia-2"]));
+          }
         }
       } catch (err: any) {
         if (!cancelled) setError(err?.message || "Failed to load spaces");
@@ -68,6 +104,7 @@ export function useSpacesApi() {
       if (inFlight.current) inFlight.current.abort();
       const controller = new AbortController();
       inFlight.current = controller;
+      setSaving(true);
       try {
         const res = await fetch("/api/spaces", {
           method: "PUT",
@@ -82,123 +119,141 @@ export function useSpacesApi() {
           setError(data?.error || `HTTP ${res.status}`);
           return;
         }
+        const result = await res.json().catch(() => ({}));
+        if (result.meta) setMeta(result.meta);
         setError(null);
       } catch (err: any) {
         if (err?.name === "AbortError") return;
         setError(err?.message || "Failed to save spaces");
+      } finally {
+        if (myRev === rev.current) setSaving(false);
       }
     }, 250);
   }, []);
 
-  // Adds a space to the catalog for the given day if it does not already exist
+  /** Applies a transform to the per-day entries, rebuilds derived fields, persists. */
+  const mutateEntries = useCallback(
+    (fn: (entries: { "dia-1": SpaceEntry[]; "dia-2": SpaceEntry[] }) => { "dia-1": SpaceEntry[]; "dia-2": SpaceEntry[] }) => {
+      initialLoadDone.current = true;
+      setSpacesState(prev => {
+        const cur = prev.entries || { "dia-1": [], "dia-2": [] };
+        const nextEntries = fn({ "dia-1": [...cur["dia-1"]], "dia-2": [...cur["dia-2"]] });
+        const next = buildSpacesCatalog(nextEntries["dia-1"], nextEntries["dia-2"]);
+        persist(next);
+        return next;
+      });
+    },
+    [persist],
+  );
+
+  // ---- Structured operations used by the Espacios tab ----
+
+  const addEntry = useCallback((day: SpaceDayKey, partial: { zone?: string; name: string; aforo?: number }): string => {
+    const name = partial.name.trim();
+    if (!name) return "";
+    const id = newEntryId();
+    const entry: SpaceEntry = { id, zone: (partial.zone || "").trim(), name };
+    if (partial.aforo != null && Number.isFinite(partial.aforo) && partial.aforo > 0) entry.aforo = Math.floor(partial.aforo);
+    mutateEntries(e => ({ ...e, [day]: [...e[day], entry] }));
+    return id;
+  }, [mutateEntries]);
+
+  const updateEntry = useCallback((day: SpaceDayKey, id: string, patch: Partial<Omit<SpaceEntry, "id">>) => {
+    mutateEntries(e => ({
+      ...e,
+      [day]: e[day].map(en => {
+        if (en.id !== id) return en;
+        const next: SpaceEntry = { ...en };
+        // Keep raw (untrimmed) values during live typing; the server and the
+        // derived name list trim on save/derive, so this stays stable.
+        if (patch.zone !== undefined) next.zone = patch.zone;
+        if (patch.name !== undefined) next.name = patch.name;
+        if (patch.aforo !== undefined) {
+          const a = Math.floor(Number(patch.aforo));
+          if (Number.isFinite(a) && a > 0) next.aforo = a; else delete next.aforo;
+        }
+        return next;
+      }),
+    }));
+  }, [mutateEntries]);
+
+  const removeEntry = useCallback((day: SpaceDayKey, id: string) => {
+    mutateEntries(e => ({ ...e, [day]: e[day].filter(en => en.id !== id) }));
+  }, [mutateEntries]);
+
+  const renameZone = useCallback((day: SpaceDayKey, oldZone: string, newZone: string) => {
+    const target = newZone.trim();
+    const from = oldZone.trim();
+    mutateEntries(e => ({
+      ...e,
+      [day]: e[day].map(en => ((en.zone || "").trim() === from ? { ...en, zone: target } : en)),
+    }));
+  }, [mutateEntries]);
+
+  // Removes every space in a zone on a day. "Sin zona" matches zone-less entries.
+  const removeZone = useCallback((day: SpaceDayKey, zone: string) => {
+    const isSinZona = zone === "Sin zona";
+    const from = zone.trim();
+    mutateEntries(e => ({
+      ...e,
+      [day]: e[day].filter(en => {
+        const z = (en.zone || "").trim();
+        return isSinZona ? z !== "" : z !== from;
+      }),
+    }));
+  }, [mutateEntries]);
+
+  // ---- Legacy name-based operations kept for the Budget space picker / SpacesSheet ----
+
+  // Adds a space (zone-less) to a day if no entry with that name exists
   // (case-insensitive). Returns the canonical stored name to assign to the item.
   const addSpace = useCallback((day: SpaceDayKey, name: string): string => {
     const trimmed = name.trim();
     if (!trimmed) return "";
     let canonical = trimmed;
-    setSpacesState(prev => {
-      const existing = prev[day].find(s => s.toLowerCase() === trimmed.toLowerCase());
-      if (existing) { canonical = existing; return prev; }
-      const next: SpacesCatalog = {
-        "dia-1": [...prev["dia-1"]],
-        "dia-2": [...prev["dia-2"]],
-        capacities: { ...(prev.capacities || {}) },
-      };
-      next[day] = [...prev[day], trimmed].sort((a, b) => a.localeCompare(b));
-      persist(next);
-      return next;
+    mutateEntries(e => {
+      const existing = e[day].find(en => en.name.toLowerCase() === trimmed.toLowerCase());
+      if (existing) { canonical = existing.name; return e; }
+      return { ...e, [day]: [...e[day], { id: newEntryId(), zone: "", name: trimmed }] };
     });
     return canonical;
-  }, [persist]);
+  }, [mutateEntries]);
 
-  // Sets (or clears, when value is null/<=0) the aforo/capacity for a space.
-  // Capacity is shared across both days since it is a property of the space.
+  // Sets (or clears, when value is null/<=0) the aforo for every entry sharing
+  // this name on either day (capacity is a property of the physical space).
   const setCapacity = useCallback((name: string, value: number | null) => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    setSpacesState(prev => {
-      const caps = { ...(prev.capacities || {}) };
-      const num = value == null ? NaN : Math.floor(Number(value));
-      if (!Number.isFinite(num) || num <= 0) {
-        delete caps[trimmed];
-      } else {
-        caps[trimmed] = num;
-      }
-      const next: SpacesCatalog = {
-        "dia-1": [...prev["dia-1"]],
-        "dia-2": [...prev["dia-2"]],
-        capacities: caps,
-      };
-      persist(next);
+    const num = value == null ? NaN : Math.floor(Number(value));
+    const valid = Number.isFinite(num) && num > 0;
+    const apply = (en: SpaceEntry): SpaceEntry => {
+      if (en.name.toLowerCase() !== trimmed.toLowerCase()) return en;
+      const next: SpaceEntry = { ...en };
+      if (valid) next.aforo = num; else delete next.aforo;
       return next;
-    });
-  }, [persist]);
+    };
+    mutateEntries(e => ({ "dia-1": e["dia-1"].map(apply), "dia-2": e["dia-2"].map(apply) }));
+  }, [mutateEntries]);
 
-  // Renames a space within a day's catalog. Returns the canonical stored name
-  // (which may differ if a space with the new name already existed and the two
-  // are merged). Returns "" when the new name is empty or the old name is absent.
+  // Renames every entry matching oldName on a day. Returns the new name.
   const renameSpace = useCallback((day: SpaceDayKey, oldName: string, newName: string): string => {
     const trimmed = newName.trim();
     if (!trimmed) return "";
-    let canonical = trimmed;
-    setSpacesState(prev => {
-      const list = prev[day];
-      const idx = list.findIndex(s => s.toLowerCase() === oldName.toLowerCase());
-      if (idx === -1) { canonical = ""; return prev; }
-      const replaced = list.map((s, i) => (i === idx ? trimmed : s));
-      const deduped = normalizeList(replaced).sort((a, b) => a.localeCompare(b));
-      const found = deduped.find(s => s.toLowerCase() === trimmed.toLowerCase());
-      if (found) canonical = found;
-      const caps = { ...(prev.capacities || {}) };
-      const next: SpacesCatalog = {
-        "dia-1": [...prev["dia-1"]],
-        "dia-2": [...prev["dia-2"]],
-        capacities: caps,
-      };
-      next[day] = deduped;
-      // Migrate the capacity entry only when the old name no longer exists on
-      // either day (capacity is shared across both days).
-      const stillExists =
-        next["dia-1"].some(s => s.toLowerCase() === oldName.toLowerCase()) ||
-        next["dia-2"].some(s => s.toLowerCase() === oldName.toLowerCase());
-      if (!stillExists) {
-        const capKey = Object.keys(caps).find(k => k.toLowerCase() === oldName.toLowerCase());
-        if (capKey != null) {
-          const val = caps[capKey];
-          delete caps[capKey];
-          const targetKey = Object.keys(caps).find(k => k.toLowerCase() === canonical.toLowerCase());
-          if (targetKey == null) caps[canonical] = val;
-        }
-      }
-      persist(next);
-      return next;
-    });
-    return canonical;
-  }, [persist]);
+    mutateEntries(e => ({
+      ...e,
+      [day]: e[day].map(en => (en.name.toLowerCase() === oldName.toLowerCase() ? { ...en, name: trimmed } : en)),
+    }));
+    return trimmed;
+  }, [mutateEntries]);
 
-  // Removes a space from a day's catalog (case-insensitive). Budget line cleanup
-  // is handled by the caller.
+  // Removes every entry matching name on a day.
   const removeSpace = useCallback((day: SpaceDayKey, name: string) => {
-    setSpacesState(prev => {
-      const caps = { ...(prev.capacities || {}) };
-      const next: SpacesCatalog = {
-        "dia-1": [...prev["dia-1"]],
-        "dia-2": [...prev["dia-2"]],
-        capacities: caps,
-      };
-      next[day] = prev[day].filter(s => s.toLowerCase() !== name.toLowerCase());
-      // Drop the capacity entry only when the space is gone from both days.
-      const stillExists =
-        next["dia-1"].some(s => s.toLowerCase() === name.toLowerCase()) ||
-        next["dia-2"].some(s => s.toLowerCase() === name.toLowerCase());
-      if (!stillExists) {
-        const capKey = Object.keys(caps).find(k => k.toLowerCase() === name.toLowerCase());
-        if (capKey != null) delete caps[capKey];
-      }
-      persist(next);
-      return next;
-    });
-  }, [persist]);
+    mutateEntries(e => ({ ...e, [day]: e[day].filter(en => en.name.toLowerCase() !== name.toLowerCase()) }));
+  }, [mutateEntries]);
 
-  return { spaces, addSpace, setCapacity, renameSpace, removeSpace, loading, error };
+  return {
+    spaces, loading, saving, error, meta,
+    addEntry, updateEntry, removeEntry, renameZone, removeZone,
+    addSpace, setCapacity, renameSpace, removeSpace,
+  };
 }

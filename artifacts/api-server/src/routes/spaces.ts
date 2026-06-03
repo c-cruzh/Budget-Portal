@@ -1,11 +1,12 @@
 import { Router, type IRouter } from "express";
 import { db, appState, withRetry } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { buildSpacesSeedEntries, type SpaceEntry } from "../data/spacesSeed";
 
 const router: IRouter = Router();
 
 export const SPACES_KEY = "spaces";
-const BUDGET_KEY = "budget-items";
+const SPACES_META_KEY = "spaces-meta";
 
 export type DayKey = "dia-1" | "dia-2";
 
@@ -13,15 +14,18 @@ export interface SpacesCatalog {
   "dia-1": string[];
   "dia-2": string[];
   capacities?: Record<string, number>;
+  entries?: {
+    "dia-1": SpaceEntry[];
+    "dia-2": SpaceEntry[];
+  };
 }
 
-const FALLBACK_SPACES: string[] = [
-  "Lobby",
-  "Auditorio / Main Stage",
-  "Backstage",
-  "Terraza",
-  "Área de Registro",
-];
+interface SpacesMeta {
+  lastEditedBy: string;
+  lastEditedByEmail: string;
+  lastEditedByOrg: string;
+  lastEditedAt: string;
+}
 
 const ORG_PERMISSIONS: Record<string, { canEdit: boolean }> = {
   "C2 LABS": { canEdit: true },
@@ -29,61 +33,124 @@ const ORG_PERMISSIONS: Record<string, { canEdit: boolean }> = {
   "AURORA360": { canEdit: false },
 };
 
-function normalizeList(input: unknown): string[] {
-  if (!Array.isArray(input)) return [];
+function deriveSpaceNames(entries: SpaceEntry[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const v of input) {
-    const name = String(v ?? "").trim();
+  for (const e of entries) {
+    const name = String(e?.name ?? "").trim();
     if (!name) continue;
     const key = name.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(name);
   }
-  return out;
+  return out.sort((a, b) => a.localeCompare(b));
 }
 
-function normalizeCapacities(input: unknown, validNames: string[]): Record<string, number> {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
-  const allowed = new Set(validNames.map(n => n.toLowerCase()));
+function deriveCapacities(entries: SpaceEntry[]): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const [rawName, rawVal] of Object.entries(input as Record<string, unknown>)) {
-    const name = String(rawName ?? "").trim();
-    if (!name || !allowed.has(name.toLowerCase())) continue;
-    const num = Math.floor(Number(rawVal));
-    if (!Number.isFinite(num) || num <= 0) continue;
-    out[name] = num;
+  for (const e of entries) {
+    const name = String(e?.name ?? "").trim();
+    if (!name) continue;
+    const a = Math.floor(Number(e?.aforo));
+    if (Number.isFinite(a) && a > 0) out[name] = a;
   }
   return out;
 }
 
-function normalizeCatalog(value: any): SpacesCatalog {
-  const dia1 = normalizeList(value?.["dia-1"]);
-  const dia2 = normalizeList(value?.["dia-2"]);
+function normalizeEntries(input: unknown, day: DayKey): SpaceEntry[] {
+  if (!Array.isArray(input)) return [];
+  const out: SpaceEntry[] = [];
+  const usedIds = new Set<string>();
+  input.forEach((raw, idx) => {
+    if (!raw || typeof raw !== "object") return;
+    const r = raw as Record<string, unknown>;
+    const name = String(r.name ?? "").trim();
+    if (!name) return;
+    const zone = String(r.zone ?? "").trim();
+    let id = String(r.id ?? "").trim();
+    if (!id || usedIds.has(id)) id = `sp-${day}-${idx + 1}-${Math.random().toString(36).slice(2, 8)}`;
+    usedIds.add(id);
+    const entry: SpaceEntry = { id, zone, name };
+    const a = Math.floor(Number(r.aforo));
+    if (Number.isFinite(a) && a > 0) entry.aforo = a;
+    const image = String(r.image ?? "").trim();
+    if (image) entry.image = image;
+    out.push(entry);
+  });
+  return out;
+}
+
+/**
+ * Migrates a pre-structured (legacy) catalog — plain name arrays plus a
+ * capacities map keyed by name — into structured zone-less entries. Used only
+ * for catalogs saved before the Espacios tab existed.
+ */
+function migrateLegacyToEntries(value: any, day: DayKey): SpaceEntry[] {
+  const names: string[] = Array.isArray(value?.[day]) ? value[day] : [];
+  const caps: Record<string, unknown> =
+    value?.capacities && typeof value.capacities === "object" && !Array.isArray(value.capacities)
+      ? value.capacities
+      : {};
+  const seen = new Set<string>();
+  const out: SpaceEntry[] = [];
+  names.forEach((raw, idx) => {
+    const name = String(raw ?? "").trim();
+    if (!name) return;
+    const key = name.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    const entry: SpaceEntry = { id: `sp-${day}-mig-${idx + 1}`, zone: "", name };
+    const capKey = Object.keys(caps).find(k => k.toLowerCase() === key);
+    if (capKey != null) {
+      const a = Math.floor(Number(caps[capKey]));
+      if (Number.isFinite(a) && a > 0) entry.aforo = a;
+    }
+    out.push(entry);
+  });
+  return out;
+}
+
+function catalogFromEntries(entriesD1: SpaceEntry[], entriesD2: SpaceEntry[]): SpacesCatalog {
   return {
-    "dia-1": dia1,
-    "dia-2": dia2,
-    capacities: normalizeCapacities(value?.capacities, [...dia1, ...dia2]),
+    "dia-1": deriveSpaceNames(entriesD1),
+    "dia-2": deriveSpaceNames(entriesD2),
+    capacities: { ...deriveCapacities(entriesD1), ...deriveCapacities(entriesD2) },
+    entries: { "dia-1": entriesD1, "dia-2": entriesD2 },
   };
 }
 
-async function deriveSeedFromAreas(): Promise<string[]> {
-  const row = await db.select().from(appState).where(eq(appState.key, BUDGET_KEY)).limit(1);
-  if (row.length === 0 || !Array.isArray(row[0].value)) return [...FALLBACK_SPACES];
-  const items = row[0].value as any[];
-  const list = normalizeList(items.map(it => (it && typeof it === "object" ? it.area : "")));
-  if (list.length === 0) return [...FALLBACK_SPACES];
-  return list.sort((a, b) => a.localeCompare(b));
+/** Normalizes any stored or incoming value into a full structured catalog. */
+function normalizeCatalog(value: any): SpacesCatalog {
+  const hasEntries =
+    value?.entries && typeof value.entries === "object" && !Array.isArray(value.entries);
+  if (hasEntries) {
+    return catalogFromEntries(
+      normalizeEntries(value.entries["dia-1"], "dia-1"),
+      normalizeEntries(value.entries["dia-2"], "dia-2"),
+    );
+  }
+  // Legacy shape (name arrays + capacities) → migrate to entries.
+  return catalogFromEntries(
+    migrateLegacyToEntries(value, "dia-1"),
+    migrateLegacyToEntries(value, "dia-2"),
+  );
+}
+
+function hasAnyEntries(catalog: SpacesCatalog): boolean {
+  const e = catalog.entries;
+  return !!e && ((e["dia-1"]?.length || 0) > 0 || (e["dia-2"]?.length || 0) > 0);
 }
 
 export async function ensureSpacesDefaults(): Promise<SpacesCatalog> {
   const row = await db.select().from(appState).where(eq(appState.key, SPACES_KEY)).limit(1);
   if (row.length > 0 && row[0].value && typeof row[0].value === "object" && !Array.isArray(row[0].value)) {
-    return normalizeCatalog(row[0].value);
+    const normalized = normalizeCatalog(row[0].value);
+    if (hasAnyEntries(normalized)) return normalized;
   }
-  const seed = await deriveSeedFromAreas();
-  const catalog: SpacesCatalog = { "dia-1": [...seed], "dia-2": [...seed], capacities: {} };
+  // Empty (or never seeded): seed the faithful Día 1 / Día 2 layout.
+  const seed = buildSpacesSeedEntries();
+  const catalog = catalogFromEntries(seed["dia-1"], seed["dia-2"]);
   await db.insert(appState)
     .values({ key: SPACES_KEY, value: catalog as any, updatedAt: new Date() })
     .onConflictDoUpdate({
@@ -95,8 +162,12 @@ export async function ensureSpacesDefaults(): Promise<SpacesCatalog> {
 
 router.get("/spaces", async (_req, res) => {
   try {
-    const spaces = await withRetry(() => ensureSpacesDefaults());
-    res.json({ spaces });
+    const [spaces, metaRow] = await withRetry(() => Promise.all([
+      ensureSpacesDefaults(),
+      db.select().from(appState).where(eq(appState.key, SPACES_META_KEY)).limit(1),
+    ]));
+    const meta = metaRow.length > 0 ? metaRow[0].value : null;
+    res.json({ spaces, meta });
   } catch (err) {
     console.error("Failed to load spaces:", err);
     res.status(500).json({ error: "Failed to load spaces" });
@@ -107,6 +178,8 @@ router.put("/spaces", async (req, res) => {
   try {
     const session = req.session as any;
     const userOrg = session?.userOrg || "";
+    const userName = session?.userName || "Unknown";
+    const userEmail = session?.userEmail || "";
     const perms = ORG_PERMISSIONS[userOrg] || { canEdit: false };
     if (!perms.canEdit) {
       res.status(403).json({ error: "You do not have permission to edit spaces" });
@@ -114,17 +187,31 @@ router.put("/spaces", async (req, res) => {
     }
     const { spaces } = req.body;
     if (!spaces || typeof spaces !== "object" || Array.isArray(spaces)) {
-      res.status(400).json({ error: "spaces must be an object with dia-1 and dia-2 arrays" });
+      res.status(400).json({ error: "spaces must be an object" });
       return;
     }
     const normalized = normalizeCatalog(spaces);
-    await db.insert(appState)
-      .values({ key: SPACES_KEY, value: normalized as any, updatedAt: new Date() })
-      .onConflictDoUpdate({
-        target: appState.key,
-        set: { value: normalized as any, updatedAt: new Date() },
-      });
-    res.json({ ok: true, spaces: normalized });
+    const meta: SpacesMeta = {
+      lastEditedBy: userName,
+      lastEditedByEmail: userEmail,
+      lastEditedByOrg: userOrg,
+      lastEditedAt: new Date().toISOString(),
+    };
+    await Promise.all([
+      db.insert(appState)
+        .values({ key: SPACES_KEY, value: normalized as any, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: appState.key,
+          set: { value: normalized as any, updatedAt: new Date() },
+        }),
+      db.insert(appState)
+        .values({ key: SPACES_META_KEY, value: meta as any, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: appState.key,
+          set: { value: meta as any, updatedAt: new Date() },
+        }),
+    ]);
+    res.json({ ok: true, spaces: normalized, meta });
   } catch (err) {
     console.error("Failed to save spaces:", err);
     res.status(500).json({ error: "Failed to save spaces" });

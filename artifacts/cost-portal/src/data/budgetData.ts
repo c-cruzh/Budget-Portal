@@ -149,17 +149,102 @@ export interface BudgetItem {
 
 export type SpaceDayKey = "dia-1" | "dia-2";
 
-export interface SpacesCatalog {
-  "dia-1": string[];
-  "dia-2": string[];
-  /**
-   * Optional aforo/capacity per space, keyed by space name. Capacity is a
-   * property of the physical space, so it is shared across both days.
-   */
-  capacities?: Record<string, number>;
+/**
+ * A single venue space as defined in the Espacios tab. This is the structured
+ * source of truth for the space catalog: it carries the Área/Zona grouping and
+ * an optional aforo (capacity). Spaces are kept per day because the venue
+ * layout differs between Día 1 and Día 2. `id` lets the same name appear under
+ * different zones (e.g. "Isla Temporal @ Lobby" under two pick-up zones).
+ */
+export interface SpaceEntry {
+  id: string;
+  /** Área/Zona heading this space is grouped under. */
+  zone: string;
+  /** Espacio name. */
+  name: string;
+  /** Optional aforo / maximum capacity. */
+  aforo?: number;
+  /** Reserved for a future "Imagen" column. No UI yet. */
+  image?: string;
 }
 
-export const EMPTY_SPACES_CATALOG: SpacesCatalog = { "dia-1": [], "dia-2": [], capacities: {} };
+export interface SpacesCatalog {
+  /** Derived unique space names for the Budget Día 1 picker (legacy shape). */
+  "dia-1": string[];
+  /** Derived unique space names for the Budget Día 2 picker (legacy shape). */
+  "dia-2": string[];
+  /**
+   * Optional aforo/capacity per space, keyed by space name. Derived from the
+   * structured `entries`. Capacity is a property of the physical space, so it
+   * is shared across both days.
+   */
+  capacities?: Record<string, number>;
+  /**
+   * Structured source of truth (Área/Zona + aforo, per day). The legacy
+   * `dia-1`/`dia-2` name arrays and `capacities` map above are derived from
+   * this so the existing Budget space picker keeps working unchanged.
+   */
+  entries?: {
+    "dia-1": SpaceEntry[];
+    "dia-2": SpaceEntry[];
+  };
+}
+
+export const EMPTY_SPACES_CATALOG: SpacesCatalog = {
+  "dia-1": [],
+  "dia-2": [],
+  capacities: {},
+  entries: { "dia-1": [], "dia-2": [] },
+};
+
+/** Derives the unique, sorted list of space names from structured entries. */
+export function deriveSpaceNames(entries: SpaceEntry[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const e of entries) {
+    const name = (e.name || "").trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out.sort((a, b) => a.localeCompare(b));
+}
+
+/** Derives the name→aforo map from structured entries (positive ints only). */
+export function deriveCapacities(entries: SpaceEntry[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const e of entries) {
+    const name = (e.name || "").trim();
+    if (!name) continue;
+    const a = Number(e.aforo);
+    if (Number.isFinite(a) && a > 0) out[name] = Math.floor(a);
+  }
+  return out;
+}
+
+/** Builds a full catalog (legacy derived fields + entries) from per-day entries. */
+export function buildSpacesCatalog(entriesD1: SpaceEntry[], entriesD2: SpaceEntry[]): SpacesCatalog {
+  return {
+    "dia-1": deriveSpaceNames(entriesD1),
+    "dia-2": deriveSpaceNames(entriesD2),
+    capacities: { ...deriveCapacities(entriesD1), ...deriveCapacities(entriesD2) },
+    entries: { "dia-1": entriesD1, "dia-2": entriesD2 },
+  };
+}
+
+/** Groups entries by zone, preserving first-appearance order (faithful to Excel). */
+export function groupSpacesByZone(entries: SpaceEntry[]): [string, SpaceEntry[]][] {
+  const order: string[] = [];
+  const map = new Map<string, SpaceEntry[]>();
+  for (const e of entries) {
+    const zone = (e.zone || "").trim() || "Sin zona";
+    if (!map.has(zone)) { map.set(zone, []); order.push(zone); }
+    map.get(zone)!.push(e);
+  }
+  return order.map(z => [z, map.get(z)!]);
+}
 
 export const INITIAL_BUDGET_ITEMS: BudgetItem[] = [
   { id: "1", evento: "MAIN EVENT", area: "INGRESO ESEN Y PARQUEO", centroCosto: "STAFF", item: "GESTORES VMT", descripcion: "GESTORES DE TRAFICO DE APOYO PARA EVITAR CONGESTION EN INGRESO ESEN", notas: "SE DEBE CONTEMPLAR COSTO DEL SERVICIO CIVIL Y ALIMENTOS PARA VTM. PUEDE QUE SEA IN-KIND Y SOLO CORRERIAMOS CON ALIMENTOS.", inKind: true, agencyFee: false, qty: 6, uom: "PERSONA", porDias: "SI", qtyDias: 2, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "NA", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false },
