@@ -2,17 +2,19 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   MapPin, Cloud, CloudOff, Loader2, Trash2, Plus, Users, Layers, CalendarDays, Info,
+  Building2, Pencil, Check, X,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { useSpacesApi } from "@/hooks/useSpacesApi";
-import { groupSpacesByZone, type SpaceDayKey, type SpaceEntry } from "@/data/budgetData";
+import { groupSpacesByZone, type SpaceDayKey, type SpaceEntry, type Venue } from "@/data/budgetData";
 
 const DAYS: { key: SpaceDayKey; label: string }[] = [
   { key: "dia-1", label: "Día 1" },
   { key: "dia-2", label: "Día 2" },
 ];
+
+const ESEN_TITLE = "ESEN — Escuela Superior de Economía y Negocios";
 
 export default function EspaciosPage() {
   const { permissions } = useAuth();
@@ -20,25 +22,35 @@ export default function EspaciosPage() {
   const {
     spaces, loading, saving, error, meta,
     addEntry, updateEntry, removeEntry, renameZone, removeZone,
+    addVenue, updateVenue, removeVenue,
+    addVenueEntry, updateVenueEntry, removeVenueEntry, renameVenueZone, removeVenueZone,
   } = useSpacesApi();
 
   const entries = spaces.entries || { "dia-1": [], "dia-2": [] };
+  const venues = spaces.venues || [];
 
   const summary = useMemo(() => {
-    const d1 = entries["dia-1"];
-    const d2 = entries["dia-2"];
+    const esenAll = [...entries["dia-1"], ...entries["dia-2"]];
+    const venueAll = venues.flatMap(v => v.entries);
     const zones = new Set<string>();
+    let spacesCount = 0;
     let withAforo = 0;
-    for (const e of [...d1, ...d2]) {
+    for (const e of esenAll) {
       zones.add((e.zone || "").trim().toLowerCase() || "sin zona");
+      spacesCount++;
       if (e.aforo != null) withAforo++;
     }
-    return { d1: d1.length, d2: d2.length, zones: zones.size, withAforo };
-  }, [entries]);
+    for (const e of venueAll) {
+      zones.add((e.zone || "").trim().toLowerCase() || "sin zona");
+      if ((e.name || "").trim()) spacesCount++;
+      if (e.aforo != null) withAforo++;
+    }
+    return { lugares: venues.length + 1, spaces: spacesCount, zones: zones.size, withAforo };
+  }, [entries, venues]);
 
   const cards = [
-    { label: "Espacios Día 1", value: String(summary.d1), icon: CalendarDays, color: "bg-blue-500/10 text-blue-500" },
-    { label: "Espacios Día 2", value: String(summary.d2), icon: CalendarDays, color: "bg-emerald-500/10 text-emerald-500" },
+    { label: "Lugares / Sedes", value: String(summary.lugares), icon: Building2, color: "bg-primary/10 text-primary" },
+    { label: "Espacios", value: String(summary.spaces), icon: MapPin, color: "bg-blue-500/10 text-blue-500" },
     { label: "Zonas / Áreas", value: String(summary.zones), icon: Layers, color: "bg-violet-500/10 text-violet-500" },
     { label: "Con aforo", value: String(summary.withAforo), icon: Users, color: "bg-amber-500/10 text-amber-600" },
   ];
@@ -61,9 +73,9 @@ export default function EspaciosPage() {
             <h1 className="text-xl font-bold text-foreground">Espacios</h1>
           </div>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-            Layout del venue por Área/Zona, Espacio y Aforo, separado en Día 1 y Día 2.
-            Esta es la fuente única de los espacios: lo que edites aquí alimenta el selector de
-            espacios y las alertas de aforo del Budget.
+            Layout por Lugar/Sede › Área/Zona › Espacio (con aforo). La ESEN conserva su separación
+            Día 1 / Día 2; los demás lugares (Hotel, Aeropuerto, restaurantes, BINAES) son independientes
+            del día. La ESEN sigue siendo la fuente del selector de espacios y las alertas de aforo del Budget.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -113,26 +125,60 @@ export default function EspaciosPage() {
         </div>
       )}
 
-      {/* Day sections */}
-      <div className="grid gap-5 xl:grid-cols-2">
-        {DAYS.map(({ key, label }) => (
-          <DaySection
-            key={key}
-            day={key}
-            label={label}
-            entries={entries[key]}
-            canEdit={canEdit}
-            onAdd={addEntry}
-            onUpdate={updateEntry}
-            onRemove={removeEntry}
-            onRenameZone={renameZone}
-            onRemoveZone={removeZone}
-          />
-        ))}
-      </div>
+      {/* ESEN — Lugar principal (con Día 1 / Día 2) */}
+      <section className="rounded-xl border border-card-border bg-card/40 overflow-hidden">
+        <div className="flex items-center gap-2.5 px-4 py-3 bg-primary/5 border-b border-border">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+            <Building2 className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-foreground text-sm truncate">{ESEN_TITLE}</p>
+            <p className="text-[11px] text-muted-foreground">Sede principal · Día 1 / Día 2</p>
+          </div>
+          <Badge variant="secondary" className="ml-auto text-[10px] flex-shrink-0">Sede principal</Badge>
+        </div>
+        <div className="p-4 grid gap-5 xl:grid-cols-2">
+          {DAYS.map(({ key, label }) => (
+            <DaySection
+              key={key}
+              day={key}
+              label={label}
+              entries={entries[key]}
+              canEdit={canEdit}
+              onAdd={addEntry}
+              onUpdate={updateEntry}
+              onRemove={removeEntry}
+              onRenameZone={renameZone}
+              onRemoveZone={removeZone}
+            />
+          ))}
+        </div>
+      </section>
+
+      {/* Otros Lugares / Sedes (independientes del día) */}
+      {venues.map(v => (
+        <VenueSection
+          key={v.id}
+          venue={v}
+          canEdit={canEdit}
+          onUpdateVenue={updateVenue}
+          onRemoveVenue={removeVenue}
+          onAddEntry={addVenueEntry}
+          onUpdateEntry={updateVenueEntry}
+          onRemoveEntry={removeVenueEntry}
+          onRenameZone={renameVenueZone}
+          onRemoveZone={removeVenueZone}
+        />
+      ))}
+
+      {canEdit && <AddVenue onAdd={addVenue} />}
     </div>
   );
 }
+
+/* -------------------------------------------------------------------------- */
+/* ESEN per-day section                                                        */
+/* -------------------------------------------------------------------------- */
 
 function DaySection({
   day, label, entries, canEdit, onAdd, onUpdate, onRemove, onRenameZone, onRemoveZone,
@@ -152,19 +198,7 @@ function DaySection({
     () => Array.from(new Set(entries.map(e => (e.zone || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
     [entries],
   );
-  const [newZone, setNewZone] = useState("");
-  const [newName, setNewName] = useState("");
-  const [newAforo, setNewAforo] = useState("");
-
   const datalistId = `zones-${day}`;
-
-  const commitAdd = (zone: string, name: string, aforo: string, reset: () => void) => {
-    const n = name.trim();
-    if (!n) return;
-    const a = Math.floor(Number(aforo));
-    onAdd(day, { zone, name: n, aforo: Number.isFinite(a) && a > 0 ? a : undefined });
-    reset();
-  };
 
   return (
     <div className="rounded-xl border border-card-border bg-card overflow-hidden">
@@ -185,79 +219,174 @@ function DaySection({
           {grouped.map(([zone, zoneEntries]) => (
             <ZoneGroup
               key={zone}
-              day={day}
               zone={zone}
               entries={zoneEntries}
               canEdit={canEdit}
-              onAdd={onAdd}
-              onUpdate={onUpdate}
-              onRemove={onRemove}
-              onRenameZone={onRenameZone}
-              onRemoveZone={onRemoveZone}
+              onAddSpace={(name, aforo) => onAdd(day, { zone: zone === "Sin zona" ? "" : zone, name, aforo })}
+              onUpdateEntry={(id, patch) => onUpdate(day, id, patch)}
+              onRemoveEntry={id => onRemove(day, id)}
+              onRenameZone={(oldZone, newZone) => onRenameZone(day, oldZone, newZone)}
+              onRemoveZone={zoneName => onRemoveZone(day, zoneName)}
             />
           ))}
         </div>
       )}
 
       {canEdit && (
-        <div className="border-t border-border bg-muted/20 px-4 py-3">
-          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-2">
-            Agregar espacio
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              value={newZone}
-              list={datalistId}
-              onChange={e => setNewZone(e.target.value)}
-              placeholder="Área / Zona"
-              className="h-8 flex-1 min-w-[140px] bg-card border border-border rounded px-2 text-xs outline-none focus:border-primary"
-            />
-            <input
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  commitAdd(newZone, newName, newAforo, () => { setNewName(""); setNewAforo(""); });
-                }
-              }}
-              placeholder="Espacio"
-              className="h-8 flex-1 min-w-[140px] bg-card border border-border rounded px-2 text-xs outline-none focus:border-primary"
-            />
-            <input
-              type="number"
-              min={0}
-              value={newAforo}
-              onChange={e => setNewAforo(e.target.value)}
-              placeholder="Aforo"
-              className="h-8 w-20 bg-card border border-border rounded px-2 text-xs outline-none focus:border-primary"
-            />
-            <button
-              onClick={() => commitAdd(newZone, newName, newAforo, () => { setNewName(""); setNewAforo(""); })}
-              disabled={!newName.trim()}
-              className="h-8 flex items-center gap-1 px-3 rounded bg-primary text-primary-foreground text-xs font-medium disabled:opacity-40"
-            >
-              <Plus className="w-3.5 h-3.5" /> Agregar
-            </button>
-          </div>
-        </div>
+        <AddRow
+          datalistId={datalistId}
+          onAdd={(zone, name, aforo) => onAdd(day, { zone, name, aforo })}
+        />
       )}
     </div>
   );
 }
 
-function ZoneGroup({
-  day, zone, entries, canEdit, onAdd, onUpdate, onRemove, onRenameZone, onRemoveZone,
+/* -------------------------------------------------------------------------- */
+/* New venue (Lugar/Sede) section — day-independent                            */
+/* -------------------------------------------------------------------------- */
+
+function VenueSection({
+  venue, canEdit, onUpdateVenue, onRemoveVenue, onAddEntry, onUpdateEntry, onRemoveEntry, onRenameZone, onRemoveZone,
 }: {
-  day: SpaceDayKey;
+  venue: Venue;
+  canEdit: boolean;
+  onUpdateVenue: (venueId: string, patch: { name?: string; subtitle?: string }) => void;
+  onRemoveVenue: (venueId: string) => void;
+  onAddEntry: (venueId: string, partial: { zone?: string; name?: string; aforo?: number }) => string;
+  onUpdateEntry: (venueId: string, entryId: string, patch: Partial<Omit<SpaceEntry, "id">>) => void;
+  onRemoveEntry: (venueId: string, entryId: string) => void;
+  onRenameZone: (venueId: string, oldZone: string, newZone: string) => void;
+  onRemoveZone: (venueId: string, zone: string) => void;
+}) {
+  const grouped = useMemo(() => groupSpacesByZone(venue.entries), [venue.entries]);
+  const zones = useMemo(
+    () => Array.from(new Set(venue.entries.map(e => (e.zone || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [venue.entries],
+  );
+  const datalistId = `zones-${venue.id}`;
+
+  const [editingHeader, setEditingHeader] = useState(false);
+  const [nameDraft, setNameDraft] = useState(venue.name);
+  const [subtitleDraft, setSubtitleDraft] = useState(venue.subtitle ?? "");
+
+  const spaceCount = venue.entries.filter(e => (e.name || "").trim()).length;
+
+  const startEditHeader = () => {
+    setNameDraft(venue.name);
+    setSubtitleDraft(venue.subtitle ?? "");
+    setEditingHeader(true);
+  };
+  const commitHeader = () => {
+    const name = nameDraft.trim();
+    onUpdateVenue(venue.id, { name: name || venue.name, subtitle: subtitleDraft });
+    setEditingHeader(false);
+  };
+  const commitRemoveVenue = () => {
+    const ok = window.confirm(
+      `¿Eliminar el lugar "${venue.name}" y todas sus áreas y espacios? Esta acción no se puede deshacer.`,
+    );
+    if (ok) onRemoveVenue(venue.id);
+  };
+
+  return (
+    <section className="rounded-xl border border-card-border bg-card overflow-hidden">
+      <div className="flex items-start gap-2.5 px-4 py-3 bg-muted/30 border-b border-border">
+        <div className="w-8 h-8 rounded-lg bg-violet-500/10 text-violet-500 flex items-center justify-center flex-shrink-0">
+          <Building2 className="w-4 h-4" />
+        </div>
+        {editingHeader ? (
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <input
+              autoFocus
+              value={nameDraft}
+              onChange={e => setNameDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") commitHeader(); if (e.key === "Escape") setEditingHeader(false); }}
+              placeholder="Nombre del lugar / sede"
+              className="w-full h-8 bg-card border border-border rounded px-2 text-sm font-semibold outline-none focus:border-primary"
+            />
+            <input
+              value={subtitleDraft}
+              onChange={e => setSubtitleDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") commitHeader(); if (e.key === "Escape") setEditingHeader(false); }}
+              placeholder="Descripción (opcional), p. ej. Cena VIP (Día 1)"
+              className="w-full h-7 bg-card border border-border rounded px-2 text-xs outline-none focus:border-primary"
+            />
+          </div>
+        ) : (
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-foreground text-sm truncate" title={venue.name}>{venue.name}</p>
+            {venue.subtitle && <p className="text-[11px] text-muted-foreground truncate" title={venue.subtitle}>{venue.subtitle}</p>}
+          </div>
+        )}
+        <Badge variant="secondary" className="text-[10px] flex-shrink-0 mt-0.5">{spaceCount} espacios</Badge>
+        {canEdit && (
+          editingHeader ? (
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button onClick={commitHeader} className="text-primary hover:opacity-80" title="Guardar"><Check className="w-4 h-4" /></button>
+              <button onClick={() => setEditingHeader(false)} className="text-muted-foreground hover:opacity-80" title="Cancelar"><X className="w-4 h-4" /></button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button onClick={startEditHeader} className="text-muted-foreground hover:text-primary transition-colors" title="Editar lugar"><Pencil className="w-3.5 h-3.5" /></button>
+              <button onClick={commitRemoveVenue} className="text-muted-foreground hover:text-red-500 transition-colors" title="Eliminar lugar"><Trash2 className="w-3.5 h-3.5" /></button>
+            </div>
+          )
+        )}
+      </div>
+
+      <datalist id={datalistId}>
+        {zones.map(z => <option key={z} value={z} />)}
+      </datalist>
+
+      {grouped.length === 0 ? (
+        <div className="px-4 py-8 text-center text-sm text-muted-foreground">Sin áreas ni espacios definidos.</div>
+      ) : (
+        <div className="divide-y divide-border">
+          {grouped.map(([zone, zoneEntries]) => (
+            <ZoneGroup
+              key={zone}
+              zone={zone}
+              entries={zoneEntries}
+              canEdit={canEdit}
+              allowEmptyName
+              onAddSpace={(name, aforo) => onAddEntry(venue.id, { zone: zone === "Sin zona" ? "" : zone, name, aforo })}
+              onUpdateEntry={(id, patch) => onUpdateEntry(venue.id, id, patch)}
+              onRemoveEntry={id => onRemoveEntry(venue.id, id)}
+              onRenameZone={(oldZone, newZone) => onRenameZone(venue.id, oldZone, newZone)}
+              onRemoveZone={zoneName => onRemoveZone(venue.id, zoneName)}
+            />
+          ))}
+        </div>
+      )}
+
+      {canEdit && (
+        <AddRow
+          datalistId={datalistId}
+          allowEmptyName
+          onAdd={(zone, name, aforo) => onAddEntry(venue.id, { zone, name, aforo })}
+        />
+      )}
+    </section>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Generic zone group (day/venue-agnostic via closures)                        */
+/* -------------------------------------------------------------------------- */
+
+function ZoneGroup({
+  zone, entries, canEdit, allowEmptyName, onAddSpace, onUpdateEntry, onRemoveEntry, onRenameZone, onRemoveZone,
+}: {
   zone: string;
   entries: SpaceEntry[];
   canEdit: boolean;
-  onAdd: (day: SpaceDayKey, partial: { zone?: string; name: string; aforo?: number }) => string;
-  onUpdate: (day: SpaceDayKey, id: string, patch: Partial<Omit<SpaceEntry, "id">>) => void;
-  onRemove: (day: SpaceDayKey, id: string) => void;
-  onRenameZone: (day: SpaceDayKey, oldZone: string, newZone: string) => void;
-  onRemoveZone: (day: SpaceDayKey, zone: string) => void;
+  allowEmptyName?: boolean;
+  onAddSpace: (name: string, aforo?: number) => void;
+  onUpdateEntry: (id: string, patch: Partial<Omit<SpaceEntry, "id">>) => void;
+  onRemoveEntry: (id: string) => void;
+  onRenameZone: (oldZone: string, newZone: string) => void;
+  onRemoveZone: (zone: string) => void;
 }) {
   const [zoneDraft, setZoneDraft] = useState(zone);
   const [adding, setAdding] = useState(false);
@@ -266,7 +395,7 @@ function ZoneGroup({
 
   const commitZone = () => {
     const next = zoneDraft.trim();
-    if (next && next !== zone) onRenameZone(day, zone, next);
+    if (next && next !== zone) onRenameZone(zone, next);
     else setZoneDraft(zone);
   };
 
@@ -276,14 +405,14 @@ function ZoneGroup({
     const ok = window.confirm(
       `¿Eliminar la zona ${label} y sus ${count} espacio${count === 1 ? "" : "s"}? Esta acción no se puede deshacer.`,
     );
-    if (ok) onRemoveZone(day, zone);
+    if (ok) onRemoveZone(zone);
   };
 
   const commitAdd = () => {
     const n = addName.trim();
     if (!n) return;
     const a = Math.floor(Number(addAforo));
-    onAdd(day, { zone, name: n, aforo: Number.isFinite(a) && a > 0 ? a : undefined });
+    onAddSpace(n, Number.isFinite(a) && a > 0 ? a : undefined);
     setAddName("");
     setAddAforo("");
     setAdding(false);
@@ -296,7 +425,6 @@ function ZoneGroup({
         {canEdit && zone !== "Sin zona" ? (
           <input
             value={zoneDraft}
-            data-zone-key={`${day}:${zone}`}
             onChange={e => setZoneDraft(e.target.value)}
             onBlur={commitZone}
             onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setZoneDraft(zone); }}
@@ -318,45 +446,53 @@ function ZoneGroup({
       </div>
 
       <div className="space-y-1 pl-5">
-        {entries.map(e => (
-          <div key={e.id} className="flex items-center gap-2">
-            <MapPin className="w-3 h-3 text-muted-foreground/60 flex-shrink-0" />
-            {canEdit ? (
-              <input
-                value={e.name}
-                onChange={ev => onUpdate(day, e.id, { name: ev.target.value })}
-                placeholder="Espacio"
-                className="flex-1 min-w-0 bg-transparent border-b border-transparent hover:border-border focus:border-primary outline-none text-xs text-foreground py-0.5"
-              />
-            ) : (
-              <span className="flex-1 min-w-0 text-xs text-foreground truncate" title={e.name}>{e.name}</span>
-            )}
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <span className="text-[9px] text-muted-foreground uppercase">Aforo</span>
+        {entries.map(e => {
+          const hasName = !!(e.name || "").trim();
+          return (
+            <div key={e.id} className="flex items-center gap-2">
+              <MapPin className="w-3 h-3 text-muted-foreground/60 flex-shrink-0" />
               {canEdit ? (
                 <input
-                  type="number"
-                  min={0}
-                  value={e.aforo ?? ""}
-                  onChange={ev => onUpdate(day, e.id, { aforo: ev.target.value === "" ? undefined : Number(ev.target.value) })}
-                  placeholder="—"
-                  className="w-16 h-7 bg-muted border border-border rounded px-1.5 text-xs text-right tabular-nums outline-none focus:border-primary"
+                  value={e.name}
+                  onChange={ev => onUpdateEntry(e.id, { name: ev.target.value })}
+                  placeholder={allowEmptyName ? "Espacio (opcional)" : "Espacio"}
+                  className="flex-1 min-w-0 bg-transparent border-b border-transparent hover:border-border focus:border-primary outline-none text-xs text-foreground py-0.5"
                 />
               ) : (
-                <span className="w-16 text-right text-xs tabular-nums text-muted-foreground">{e.aforo ?? "—"}</span>
+                <span
+                  className={hasName ? "flex-1 min-w-0 text-xs text-foreground truncate" : "flex-1 min-w-0 text-xs text-muted-foreground/60 italic truncate"}
+                  title={hasName ? e.name : "Sin espacio asignado"}
+                >
+                  {hasName ? e.name : "Sin espacio asignado"}
+                </span>
+              )}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <span className="text-[9px] text-muted-foreground uppercase">Aforo</span>
+                {canEdit ? (
+                  <input
+                    type="number"
+                    min={0}
+                    value={e.aforo ?? ""}
+                    onChange={ev => onUpdateEntry(e.id, { aforo: ev.target.value === "" ? undefined : Number(ev.target.value) })}
+                    placeholder="—"
+                    className="w-16 h-7 bg-muted border border-border rounded px-1.5 text-xs text-right tabular-nums outline-none focus:border-primary"
+                  />
+                ) : (
+                  <span className="w-16 text-right text-xs tabular-nums text-muted-foreground">{e.aforo ?? "—"}</span>
+                )}
+              </div>
+              {canEdit && (
+                <button
+                  onClick={() => onRemoveEntry(e.id)}
+                  className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0"
+                  title="Eliminar espacio"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
               )}
             </div>
-            {canEdit && (
-              <button
-                onClick={() => onRemove(day, e.id)}
-                className="text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0"
-                title="Eliminar espacio"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {canEdit && (
@@ -388,6 +524,142 @@ function ZoneGroup({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Shared "add area / space" footer                                            */
+/* -------------------------------------------------------------------------- */
+
+function AddRow({
+  datalistId, allowEmptyName, onAdd,
+}: {
+  datalistId: string;
+  allowEmptyName?: boolean;
+  onAdd: (zone: string, name: string, aforo?: number) => void;
+}) {
+  const [zone, setZone] = useState("");
+  const [name, setName] = useState("");
+  const [aforo, setAforo] = useState("");
+
+  const canAdd = allowEmptyName ? !!(zone.trim() || name.trim()) : !!name.trim();
+
+  const commit = () => {
+    const z = zone.trim();
+    const n = name.trim();
+    if (allowEmptyName ? !(z || n) : !n) return;
+    const a = Math.floor(Number(aforo));
+    onAdd(z, n, Number.isFinite(a) && a > 0 ? a : undefined);
+    setName("");
+    setAforo("");
+  };
+
+  return (
+    <div className="border-t border-border bg-muted/20 px-4 py-3">
+      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-2">
+        {allowEmptyName ? "Agregar área / espacio" : "Agregar espacio"}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={zone}
+          list={datalistId}
+          onChange={e => setZone(e.target.value)}
+          placeholder="Área / Zona"
+          className="h-8 flex-1 min-w-[140px] bg-card border border-border rounded px-2 text-xs outline-none focus:border-primary"
+        />
+        <input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
+          placeholder={allowEmptyName ? "Espacio (opcional)" : "Espacio"}
+          className="h-8 flex-1 min-w-[140px] bg-card border border-border rounded px-2 text-xs outline-none focus:border-primary"
+        />
+        <input
+          type="number"
+          min={0}
+          value={aforo}
+          onChange={e => setAforo(e.target.value)}
+          placeholder="Aforo"
+          className="h-8 w-20 bg-card border border-border rounded px-2 text-xs outline-none focus:border-primary"
+        />
+        <button
+          onClick={commit}
+          disabled={!canAdd}
+          className="h-8 flex items-center gap-1 px-3 rounded bg-primary text-primary-foreground text-xs font-medium disabled:opacity-40"
+        >
+          <Plus className="w-3.5 h-3.5" /> Agregar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Add a new Lugar / Sede                                                       */
+/* -------------------------------------------------------------------------- */
+
+function AddVenue({ onAdd }: { onAdd: (name: string, subtitle?: string) => string }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [subtitle, setSubtitle] = useState("");
+
+  const commit = () => {
+    const n = name.trim();
+    if (!n) return;
+    onAdd(n, subtitle.trim() || undefined);
+    setName("");
+    setSubtitle("");
+    setOpen(false);
+  };
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-card/40 py-4 text-sm font-medium text-primary hover:bg-primary/5 transition-colors"
+      >
+        <Plus className="w-4 h-4" /> Agregar lugar / sede
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-card-border bg-card p-4 space-y-2.5">
+      <div className="flex items-center gap-2">
+        <Building2 className="w-4 h-4 text-primary" />
+        <span className="text-sm font-semibold text-foreground">Nuevo lugar / sede</span>
+      </div>
+      <input
+        autoFocus
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") setOpen(false); }}
+        placeholder="Nombre del lugar (p. ej. Hotel, Aeropuerto)"
+        className="w-full h-9 bg-background border border-border rounded px-2.5 text-sm outline-none focus:border-primary"
+      />
+      <input
+        value={subtitle}
+        onChange={e => setSubtitle(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") setOpen(false); }}
+        placeholder="Descripción (opcional), p. ej. Cena VIP (Día 1)"
+        className="w-full h-8 bg-background border border-border rounded px-2.5 text-xs outline-none focus:border-primary"
+      />
+      <div className="flex items-center gap-2">
+        <button
+          onClick={commit}
+          disabled={!name.trim()}
+          className="h-8 flex items-center gap-1 px-3 rounded bg-primary text-primary-foreground text-xs font-medium disabled:opacity-40"
+        >
+          <Plus className="w-3.5 h-3.5" /> Crear lugar
+        </button>
+        <button
+          onClick={() => { setOpen(false); setName(""); setSubtitle(""); }}
+          className="h-8 px-3 rounded border border-border text-xs text-muted-foreground hover:bg-muted"
+        >
+          Cancelar
+        </button>
+      </div>
     </div>
   );
 }

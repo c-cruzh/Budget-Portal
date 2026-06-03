@@ -6,6 +6,18 @@ export interface SpaceEntry {
   image?: string;
 }
 
+/**
+ * A Lugar/Sede (physical venue) that groups its own Áreas/Zonas + Espacios.
+ * These venues are independent of the ESEN Día 1 / Día 2 axis; their day, if
+ * any, is conveyed via `subtitle` / zone naming, not a structural day key.
+ */
+export interface Venue {
+  id: string;
+  name: string;
+  subtitle?: string;
+  entries: SpaceEntry[];
+}
+
 interface SeedRow {
   zone: string;
   name: string;
@@ -91,4 +103,76 @@ export function buildSpacesSeedEntries(): { "dia-1": SpaceEntry[]; "dia-2": Spac
     "dia-1": withIds(DIA_1_SEED, "d1"),
     "dia-2": withIds(DIA_2_SEED, "d2"),
   };
+}
+
+interface VenueSeedRow {
+  /** Área/Zona heading. */
+  zone: string;
+  /** Espacio name. Empty when the área has no assigned space yet. */
+  name?: string;
+  aforo?: number;
+}
+
+interface VenueSeed {
+  name: string;
+  subtitle?: string;
+  rows: VenueSeedRow[];
+}
+
+/**
+ * Additional physical venues seeded alongside the ESEN layout. They are
+ * independent of the Día 1 / Día 2 axis; any day reference lives in the
+ * subtitle / zone name. For each row, the text BEFORE the "@" is the Área/Zona
+ * and the text AFTER is the Espacio.
+ */
+const VENUES_SEED: VenueSeed[] = [
+  {
+    name: "Hotel",
+    rows: [
+      { zone: "Nativo Lounge Bar" },
+      { zone: "Breakfast", name: "Las Tunas" },
+      { zone: "VIP attendee meetup", name: "Nativo Lounge Bar" },
+      { zone: "Meeting point", name: "Lobby" },
+      { zone: "Transport drop off", name: "Main entrance" },
+    ],
+  },
+  {
+    name: "Aeropuerto",
+    rows: [
+      { zone: "Sala VIP", name: "SAL (CEPA)" },
+      { zone: "Pickup zone de Sala VIP", name: "SAL (CEPA)" },
+    ],
+  },
+  {
+    name: "Il Bongustaio",
+    subtitle: 'Cena VIP "Ania" (Día 1)',
+    rows: [{ zone: "Cena VIP (Día 1)", name: "Salón principal" }],
+  },
+  {
+    name: "Monarca",
+    subtitle: "Cena VIP (Día 2)",
+    rows: [{ zone: "Cena VIP (Día 2)", name: "Terraza" }],
+  },
+  {
+    name: "BINAES — Biblioteca Nacional de El Salvador",
+    subtitle: "Lanzamiento",
+    rows: [
+      { zone: "Nivel 7", name: "Auditorio" },
+      { zone: "Nivel 7", name: "Vestíbulo frente al auditorio" },
+    ],
+  },
+];
+
+export function buildVenuesSeed(): Venue[] {
+  return VENUES_SEED.map((v, vi) => ({
+    id: `venue-${vi + 1}`,
+    name: v.name,
+    ...(v.subtitle ? { subtitle: v.subtitle } : {}),
+    entries: v.rows.map((r, ri) => ({
+      id: `venue-${vi + 1}-${ri + 1}`,
+      zone: r.zone,
+      name: r.name ?? "",
+      ...(r.aforo != null ? { aforo: r.aforo } : {}),
+    })),
+  }));
 }

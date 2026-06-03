@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, appState, withRetry } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { buildSpacesSeedEntries, type SpaceEntry } from "../data/spacesSeed";
+import { buildSpacesSeedEntries, buildVenuesSeed, type SpaceEntry, type Venue } from "../data/spacesSeed";
 
 const router: IRouter = Router();
 
@@ -18,6 +18,12 @@ export interface SpacesCatalog {
     "dia-1": SpaceEntry[];
     "dia-2": SpaceEntry[];
   };
+  /**
+   * Additional Lugares/Sedes (Hotel, Aeropuerto, restaurantes, BINAES…) that
+   * group their own Áreas/Zonas + Espacios. Independent of the ESEN Día 1 /
+   * Día 2 axis and NOT wired to the Budget space picker / aforo alerts.
+   */
+  venues?: Venue[];
 }
 
 interface SpacesMeta {
@@ -82,6 +88,54 @@ function normalizeEntries(input: unknown, day: DayKey): SpaceEntry[] {
 }
 
 /**
+ * Normalizes a venue's entries. Unlike ESEN entries, a venue entry may carry an
+ * Área/Zona without a Espacio name yet (e.g. "Nativo Lounge Bar"), so an entry
+ * is kept when it has either a zone or a name.
+ */
+function normalizeVenueEntries(input: unknown, venueId: string): SpaceEntry[] {
+  if (!Array.isArray(input)) return [];
+  const out: SpaceEntry[] = [];
+  const usedIds = new Set<string>();
+  input.forEach((raw, idx) => {
+    if (!raw || typeof raw !== "object") return;
+    const r = raw as Record<string, unknown>;
+    const name = String(r.name ?? "").trim();
+    const zone = String(r.zone ?? "").trim();
+    if (!name && !zone) return;
+    let id = String(r.id ?? "").trim();
+    if (!id || usedIds.has(id)) id = `${venueId}-${idx + 1}-${Math.random().toString(36).slice(2, 8)}`;
+    usedIds.add(id);
+    const entry: SpaceEntry = { id, zone, name };
+    const a = Math.floor(Number(r.aforo));
+    if (Number.isFinite(a) && a > 0) entry.aforo = a;
+    const image = String(r.image ?? "").trim();
+    if (image) entry.image = image;
+    out.push(entry);
+  });
+  return out;
+}
+
+function normalizeVenues(input: unknown): Venue[] {
+  if (!Array.isArray(input)) return [];
+  const out: Venue[] = [];
+  const usedIds = new Set<string>();
+  input.forEach((raw, idx) => {
+    if (!raw || typeof raw !== "object") return;
+    const r = raw as Record<string, unknown>;
+    const name = String(r.name ?? "").trim();
+    if (!name) return;
+    let id = String(r.id ?? "").trim();
+    if (!id || usedIds.has(id)) id = `venue-${idx + 1}-${Math.random().toString(36).slice(2, 8)}`;
+    usedIds.add(id);
+    const venue: Venue = { id, name, entries: normalizeVenueEntries(r.entries, id) };
+    const subtitle = String(r.subtitle ?? "").trim();
+    if (subtitle) venue.subtitle = subtitle;
+    out.push(venue);
+  });
+  return out;
+}
+
+/**
  * Migrates a pre-structured (legacy) catalog — plain name arrays plus a
  * capacities map keyed by name — into structured zone-less entries. Used only
  * for catalogs saved before the Espacios tab existed.
@@ -111,29 +165,37 @@ function migrateLegacyToEntries(value: any, day: DayKey): SpaceEntry[] {
   return out;
 }
 
-function catalogFromEntries(entriesD1: SpaceEntry[], entriesD2: SpaceEntry[]): SpacesCatalog {
+function catalogFromEntries(
+  entriesD1: SpaceEntry[],
+  entriesD2: SpaceEntry[],
+  venues: Venue[] = [],
+): SpacesCatalog {
   return {
     "dia-1": deriveSpaceNames(entriesD1),
     "dia-2": deriveSpaceNames(entriesD2),
     capacities: { ...deriveCapacities(entriesD1), ...deriveCapacities(entriesD2) },
     entries: { "dia-1": entriesD1, "dia-2": entriesD2 },
+    venues,
   };
 }
 
 /** Normalizes any stored or incoming value into a full structured catalog. */
 function normalizeCatalog(value: any): SpacesCatalog {
+  const venues = Array.isArray(value?.venues) ? normalizeVenues(value.venues) : [];
   const hasEntries =
     value?.entries && typeof value.entries === "object" && !Array.isArray(value.entries);
   if (hasEntries) {
     return catalogFromEntries(
       normalizeEntries(value.entries["dia-1"], "dia-1"),
       normalizeEntries(value.entries["dia-2"], "dia-2"),
+      venues,
     );
   }
   // Legacy shape (name arrays + capacities) → migrate to entries.
   return catalogFromEntries(
     migrateLegacyToEntries(value, "dia-1"),
     migrateLegacyToEntries(value, "dia-2"),
+    venues,
   );
 }
 
@@ -157,14 +219,30 @@ export async function ensureSpacesDefaults(): Promise<SpacesCatalog> {
       const normalized = normalizeCatalog(stored);
       // Preserve a curated catalog only when it actually has entries; a
       // structured-but-empty catalog falls through to reseed.
-      if (hasAnyEntries(normalized)) return normalized;
+      if (hasAnyEntries(normalized)) {
+        // The Lugares/Sedes layer is curated once a `venues` key exists (even an
+        // empty array, e.g. the user deleted them all). A catalog with ESEN
+        // entries but no `venues` key predates this feature: wrap the existing
+        // ESEN spaces and seed the new venues one time, then persist so future
+        // reads are treated as curated.
+        if (Array.isArray(stored.venues)) return normalized;
+        const migrated: SpacesCatalog = { ...normalized, venues: buildVenuesSeed() };
+        await db.insert(appState)
+          .values({ key: SPACES_KEY, value: migrated as any, updatedAt: new Date() })
+          .onConflictDoUpdate({
+            target: appState.key,
+            set: { value: migrated as any, updatedAt: new Date() },
+          });
+        return migrated;
+      }
     }
   }
   // Empty, never seeded, or legacy/pre-Espacios shape: seed the faithful
-  // Día 1 / Día 2 layout. This is self-healing — once seeded (or once a user
-  // edits in the Espacios tab) the stored value has `entries` and is preserved.
+  // Día 1 / Día 2 ESEN layout plus the additional venues. This is self-healing
+  // — once seeded (or once a user edits in the Espacios tab) the stored value
+  // has `entries` + `venues` and is preserved.
   const seed = buildSpacesSeedEntries();
-  const catalog = catalogFromEntries(seed["dia-1"], seed["dia-2"]);
+  const catalog = catalogFromEntries(seed["dia-1"], seed["dia-2"], buildVenuesSeed());
   await db.insert(appState)
     .values({ key: SPACES_KEY, value: catalog as any, updatedAt: new Date() })
     .onConflictDoUpdate({

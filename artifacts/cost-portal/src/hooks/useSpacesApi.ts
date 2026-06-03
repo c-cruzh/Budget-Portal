@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { SpaceDayKey, SpaceEntry, SpacesCatalog } from "@/data/budgetData";
+import type { SpaceDayKey, SpaceEntry, SpacesCatalog, Venue } from "@/data/budgetData";
 import { EMPTY_SPACES_CATALOG, buildSpacesCatalog } from "@/data/budgetData";
 
 export interface SpacesMeta {
@@ -12,6 +12,11 @@ export interface SpacesMeta {
 function newEntryId(): string {
   if (typeof crypto !== "undefined" && (crypto as any).randomUUID) return `sp-${(crypto as any).randomUUID()}`;
   return `sp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function newVenueId(): string {
+  if (typeof crypto !== "undefined" && (crypto as any).randomUUID) return `venue-${(crypto as any).randomUUID()}`;
+  return `venue-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function normalizeEntries(input: unknown): SpaceEntry[] {
@@ -63,6 +68,50 @@ function entriesFromPayload(data: any): { "dia-1": SpaceEntry[]; "dia-2": SpaceE
   return { "dia-1": mig("dia-1"), "dia-2": mig("dia-2") };
 }
 
+/** Normalizes a venue's entries, keeping Área-only rows (empty space name). */
+function normalizeVenueEntries(input: unknown): SpaceEntry[] {
+  if (!Array.isArray(input)) return [];
+  const out: SpaceEntry[] = [];
+  const used = new Set<string>();
+  for (const raw of input) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    const name = String(r.name ?? "").trim();
+    const zone = String(r.zone ?? "").trim();
+    if (!name && !zone) continue;
+    let id = String(r.id ?? "").trim();
+    if (!id || used.has(id)) id = newEntryId();
+    used.add(id);
+    const entry: SpaceEntry = { id, zone, name };
+    const a = Math.floor(Number(r.aforo));
+    if (Number.isFinite(a) && a > 0) entry.aforo = a;
+    const image = String(r.image ?? "").trim();
+    if (image) entry.image = image;
+    out.push(entry);
+  }
+  return out;
+}
+
+function venuesFromPayload(data: any): Venue[] {
+  if (!Array.isArray(data?.venues)) return [];
+  const out: Venue[] = [];
+  const used = new Set<string>();
+  for (const raw of data.venues) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    const name = String(r.name ?? "").trim();
+    if (!name) continue;
+    let id = String(r.id ?? "").trim();
+    if (!id || used.has(id)) id = newVenueId();
+    used.add(id);
+    const venue: Venue = { id, name, entries: normalizeVenueEntries(r.entries) };
+    const subtitle = String(r.subtitle ?? "").trim();
+    if (subtitle) venue.subtitle = subtitle;
+    out.push(venue);
+  }
+  return out;
+}
+
 export function useSpacesApi() {
   const [spaces, setSpacesState] = useState<SpacesCatalog>(EMPTY_SPACES_CATALOG);
   const [loading, setLoading] = useState(true);
@@ -85,7 +134,8 @@ export function useSpacesApi() {
           if (data.meta) setMeta(data.meta);
           if (data.spaces && typeof data.spaces === "object") {
             const ent = entriesFromPayload(data.spaces);
-            setSpacesState(buildSpacesCatalog(ent["dia-1"], ent["dia-2"]));
+            const venues = venuesFromPayload(data.spaces);
+            setSpacesState(buildSpacesCatalog(ent["dia-1"], ent["dia-2"], venues));
           }
         }
       } catch (err: any) {
@@ -138,13 +188,123 @@ export function useSpacesApi() {
       setSpacesState(prev => {
         const cur = prev.entries || { "dia-1": [], "dia-2": [] };
         const nextEntries = fn({ "dia-1": [...cur["dia-1"]], "dia-2": [...cur["dia-2"]] });
-        const next = buildSpacesCatalog(nextEntries["dia-1"], nextEntries["dia-2"]);
+        const next = buildSpacesCatalog(nextEntries["dia-1"], nextEntries["dia-2"], prev.venues || []);
         persist(next);
         return next;
       });
     },
     [persist],
   );
+
+  /** Applies a transform to the venues list, preserving ESEN entries, persists. */
+  const mutateVenues = useCallback(
+    (fn: (venues: Venue[]) => Venue[]) => {
+      initialLoadDone.current = true;
+      setSpacesState(prev => {
+        const cur = prev.entries || { "dia-1": [], "dia-2": [] };
+        const nextVenues = fn(prev.venues || []);
+        const next = buildSpacesCatalog(cur["dia-1"], cur["dia-2"], nextVenues);
+        persist(next);
+        return next;
+      });
+    },
+    [persist],
+  );
+
+  // ---- Venue (Lugar/Sede) operations used by the Espacios tab ----
+
+  const addVenue = useCallback((name: string, subtitle?: string): string => {
+    const n = name.trim();
+    if (!n) return "";
+    const id = newVenueId();
+    const venue: Venue = { id, name: n, entries: [] };
+    const sub = (subtitle || "").trim();
+    if (sub) venue.subtitle = sub;
+    mutateVenues(vs => [...vs, venue]);
+    return id;
+  }, [mutateVenues]);
+
+  const updateVenue = useCallback((venueId: string, patch: { name?: string; subtitle?: string }) => {
+    mutateVenues(vs => vs.map(v => {
+      if (v.id !== venueId) return v;
+      const next: Venue = { ...v };
+      if (patch.name !== undefined) next.name = patch.name;
+      if (patch.subtitle !== undefined) {
+        const sub = patch.subtitle.trim();
+        if (sub) next.subtitle = patch.subtitle; else delete next.subtitle;
+      }
+      return next;
+    }));
+  }, [mutateVenues]);
+
+  const removeVenue = useCallback((venueId: string) => {
+    mutateVenues(vs => vs.filter(v => v.id !== venueId));
+  }, [mutateVenues]);
+
+  const addVenueEntry = useCallback(
+    (venueId: string, partial: { zone?: string; name?: string; aforo?: number }): string => {
+      const zone = (partial.zone || "").trim();
+      const name = (partial.name || "").trim();
+      if (!zone && !name) return "";
+      const id = newEntryId();
+      const entry: SpaceEntry = { id, zone, name };
+      if (partial.aforo != null && Number.isFinite(partial.aforo) && partial.aforo > 0) entry.aforo = Math.floor(partial.aforo);
+      mutateVenues(vs => vs.map(v => (v.id === venueId ? { ...v, entries: [...v.entries, entry] } : v)));
+      return id;
+    },
+    [mutateVenues],
+  );
+
+  const updateVenueEntry = useCallback(
+    (venueId: string, entryId: string, patch: Partial<Omit<SpaceEntry, "id">>) => {
+      mutateVenues(vs => vs.map(v => {
+        if (v.id !== venueId) return v;
+        return {
+          ...v,
+          entries: v.entries.map(en => {
+            if (en.id !== entryId) return en;
+            const next: SpaceEntry = { ...en };
+            if (patch.zone !== undefined) next.zone = patch.zone;
+            if (patch.name !== undefined) next.name = patch.name;
+            if (patch.aforo !== undefined) {
+              const a = Math.floor(Number(patch.aforo));
+              if (Number.isFinite(a) && a > 0) next.aforo = a; else delete next.aforo;
+            }
+            return next;
+          }),
+        };
+      }));
+    },
+    [mutateVenues],
+  );
+
+  const removeVenueEntry = useCallback((venueId: string, entryId: string) => {
+    mutateVenues(vs => vs.map(v => (v.id === venueId ? { ...v, entries: v.entries.filter(en => en.id !== entryId) } : v)));
+  }, [mutateVenues]);
+
+  const renameVenueZone = useCallback((venueId: string, oldZone: string, newZone: string) => {
+    const target = newZone.trim();
+    const from = oldZone.trim();
+    mutateVenues(vs => vs.map(v => {
+      if (v.id !== venueId) return v;
+      return { ...v, entries: v.entries.map(en => ((en.zone || "").trim() === from ? { ...en, zone: target } : en)) };
+    }));
+  }, [mutateVenues]);
+
+  const removeVenueZone = useCallback((venueId: string, zone: string) => {
+    const isSinZona = zone === "Sin zona";
+    const from = zone.trim();
+    mutateVenues(vs => vs.map(v => {
+      if (v.id !== venueId) return v;
+      return {
+        ...v,
+        entries: v.entries.filter(en => {
+          const z = (en.zone || "").trim();
+          return isSinZona ? z !== "" : z !== from;
+        }),
+      };
+    }));
+  }, [mutateVenues]);
 
   // ---- Structured operations used by the Espacios tab ----
 
@@ -254,6 +414,8 @@ export function useSpacesApi() {
   return {
     spaces, loading, saving, error, meta,
     addEntry, updateEntry, removeEntry, renameZone, removeZone,
+    addVenue, updateVenue, removeVenue,
+    addVenueEntry, updateVenueEntry, removeVenueEntry, renameVenueZone, removeVenueZone,
     addSpace, setCapacity, renameSpace, removeSpace,
   };
 }

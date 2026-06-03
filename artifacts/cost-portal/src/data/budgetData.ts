@@ -177,6 +177,21 @@ export interface SpaceEntry {
   image?: string;
 }
 
+/**
+ * A Lugar/Sede (physical venue): Hotel, Aeropuerto, restaurantes de cenas VIP,
+ * BINAES, etc. Groups its own Áreas/Zonas + Espacios and is independent of the
+ * ESEN Día 1 / Día 2 axis. A venue entry may carry an Área/Zona without an
+ * assigned Espacio (empty `name`). Venues are NOT wired to the Budget space
+ * picker or aforo alerts — they live only in the Espacios catalog.
+ */
+export interface Venue {
+  id: string;
+  name: string;
+  /** Optional descriptor, e.g. 'Cena VIP "Ania" (Día 1)' or "Lanzamiento". */
+  subtitle?: string;
+  entries: SpaceEntry[];
+}
+
 export interface SpacesCatalog {
   /** Derived unique space names for the Budget Día 1 picker (legacy shape). */
   "dia-1": string[];
@@ -189,14 +204,20 @@ export interface SpacesCatalog {
    */
   capacities?: Record<string, number>;
   /**
-   * Structured source of truth (Área/Zona + aforo, per day). The legacy
-   * `dia-1`/`dia-2` name arrays and `capacities` map above are derived from
-   * this so the existing Budget space picker keeps working unchanged.
+   * Structured source of truth for the ESEN venue (Área/Zona + aforo, per day).
+   * The legacy `dia-1`/`dia-2` name arrays and `capacities` map above are
+   * derived from this so the existing Budget space picker keeps working
+   * unchanged.
    */
   entries?: {
     "dia-1": SpaceEntry[];
     "dia-2": SpaceEntry[];
   };
+  /**
+   * Additional Lugares/Sedes beyond ESEN. Day-independent; purely additive and
+   * never feeds the derived `dia-1`/`dia-2`/`capacities` fields above.
+   */
+  venues?: Venue[];
 }
 
 export const EMPTY_SPACES_CATALOG: SpacesCatalog = {
@@ -204,6 +225,7 @@ export const EMPTY_SPACES_CATALOG: SpacesCatalog = {
   "dia-2": [],
   capacities: {},
   entries: { "dia-1": [], "dia-2": [] },
+  venues: [],
 };
 
 /** Derives the unique, sorted list of space names from structured entries. */
@@ -233,13 +255,18 @@ export function deriveCapacities(entries: SpaceEntry[]): Record<string, number> 
   return out;
 }
 
-/** Builds a full catalog (legacy derived fields + entries) from per-day entries. */
-export function buildSpacesCatalog(entriesD1: SpaceEntry[], entriesD2: SpaceEntry[]): SpacesCatalog {
+/** Builds a full catalog (legacy derived fields + entries + venues) from parts. */
+export function buildSpacesCatalog(
+  entriesD1: SpaceEntry[],
+  entriesD2: SpaceEntry[],
+  venues: Venue[] = [],
+): SpacesCatalog {
   return {
     "dia-1": deriveSpaceNames(entriesD1),
     "dia-2": deriveSpaceNames(entriesD2),
     capacities: { ...deriveCapacities(entriesD1), ...deriveCapacities(entriesD2) },
     entries: { "dia-1": entriesD1, "dia-2": entriesD2 },
+    venues,
   };
 }
 

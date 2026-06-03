@@ -6,3 +6,4 @@
 - [Dual budget tabs](dual-budget-storage.md) — Final (/budget-final, empty, all orgs) & legacy (/budget, seed, C2-only) share one component/hook/route factory via per-instance config; separate app_state keys.
 - [Spaces catalog structured](spaces-catalog-structured.md) — Espacios tab stores structured entries (zone+aforo) as source of truth; legacy picker arrays derived; reseed when empty OR legacy (no `entries` key); curated non-empty entries preserved. New seed reaches prod only via republish.
 - [Budget seed/backfill persistence](budget-seed-persistence.md) — DB is sole source of truth for legacy budget; never backfill subEventId or overwrite from seed; deriveDia "ambos" fallback must not double porDias cost.
+- [Venue (Lugar/Sede) hierarchy](venue-lugar-hierarchy.md) — Espacios has ESEN day-keyed `entries` (sole Budget source) + additive day-independent `venues[]`; never wire venues into Budget.
