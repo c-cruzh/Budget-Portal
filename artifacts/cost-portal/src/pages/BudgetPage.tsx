@@ -12,6 +12,7 @@ import { FlagsChips, type FlagKey } from "@/components/budget/FlagsChips";
 import { ColumnsMenu } from "@/components/budget/ColumnsMenu";
 import { FiltersPopover, type ActiveFilterChip } from "@/components/budget/FiltersPopover";
 import { BulkActionsBar } from "@/components/budget/BulkActionsBar";
+import { BudgetHelpGuide } from "@/components/budget/BudgetHelpGuide";
 import { BUDGET_COLUMNS, DEFAULT_VISIBLE } from "@/components/budget/columns";
 import type { LinkedBudgetItem } from "@/data/tasksBoardData";
 import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, DIA_VALUES, DIA_LABELS, DIA_COLORS, deriveDia, type BudgetItem, type QuoteOption, type SubEvent, type DiaValue, type SpaceDayKey } from "@/data/budgetData";
@@ -1219,6 +1220,7 @@ export default function BudgetPage() {
               onSetCapacity={setCapacity}
             />
             <ColumnsMenu visible={visibleColumns} onChange={setVisibleColumns} density={density} onDensityChange={setDensity} />
+            <BudgetHelpGuide />
             <Button variant="outline" size="sm" onClick={exportCSV} className="gap-2"><Download className="w-4 h-4" />Export CSV</Button>
             {canEdit && (
               <Button size="sm" onClick={() => setShowAddModal(true)} className="gap-2"><Plus className="w-4 h-4" />Add Item</Button>
