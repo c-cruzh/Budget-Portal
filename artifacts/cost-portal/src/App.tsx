@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard, TableProperties, Plane, Bus, Menu, X, ChevronRight,
   Wine, Coffee, Sandwich, LogOut, Info, Eye, MessageSquare, Pencil,
-  HandCoins, History, Calendar, BedDouble, ListChecks, Truck
+  HandCoins, History, Calendar, BedDouble, ListChecks, Truck, HandHelping
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -24,6 +24,7 @@ import SponsorsPage from "@/pages/SponsorsPage";
 import HistoryPage from "@/pages/HistoryPage";
 import AgendaPage from "@/pages/AgendaPage";
 import TasksBoardPage from "@/pages/TasksBoardPage";
+import VoluntariosPage from "@/pages/VoluntariosPage";
 import LoginPage from "@/pages/LoginPage";
 import NotFound from "@/pages/not-found";
 
@@ -40,6 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: "/", label: "Overview", icon: LayoutDashboard },
   { path: "/budget", label: "Budget Items", icon: TableProperties },
   { path: "/agenda", label: "Agenda", icon: Calendar },
+  { path: "/voluntarios", label: "Voluntarios", icon: HandHelping },
   { path: "/travel/ground", label: "Ground Transport", icon: Bus },
   { path: "/travel/aerial", label: "Flights / Vuelos SAL", icon: Plane },
   { path: "/hotel", label: "Hotel / Acomodaciones SAL", icon: BedDouble },
@@ -343,6 +345,7 @@ function AppRouter() {
       <Route path="/agenda" component={() => <Layout><AgendaPage /></Layout>} />
       <Route path="/history" component={() => <Layout><HistoryPage /></Layout>} />
       <Route path="/tasks" component={() => <Layout><TasksBoardPage /></Layout>} />
+      <Route path="/voluntarios" component={() => <Layout><VoluntariosPage /></Layout>} />
       <Route component={NotFound} />
     </Switch>
   );

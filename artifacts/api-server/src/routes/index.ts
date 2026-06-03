@@ -12,6 +12,7 @@ import networkingCocktailRouter from "./networking-cocktail";
 import tasksBoardRouter from "./tasks-board";
 import spacesRouter from "./spaces";
 import montajeRouter from "./montaje";
+import volunteersRouter from "./volunteers";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(networkingCocktailRouter);
 router.use(tasksBoardRouter);
 router.use(spacesRouter);
 router.use(montajeRouter);
+router.use(volunteersRouter);
 
 export default router;
