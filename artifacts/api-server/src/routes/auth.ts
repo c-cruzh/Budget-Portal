@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import type { CookieOptions } from "express";
 import bcrypt from "bcryptjs";
 import { db, withRetry } from "@workspace/db";
 import { users } from "@workspace/db/schema";
@@ -6,16 +7,78 @@ import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
+const isProduction = process.env["NODE_ENV"] === "production";
+const sessionCookieOptions: CookieOptions = {
+  path: "/",
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: isProduction ? "none" : "lax",
+};
+
 const SEED_USERS = [
-  { email: "camila@c2labs.ai", name: "Camila Cruz", role: "Organizer", organization: "C2 LABS", password: "EmTech2026!C2" },
-  { email: "kevin@c2labs.ai", name: "Kevin Centeno", role: "Organizer", organization: "C2 LABS", password: "EmTech2026!C2" },
-  { email: "manuel@c2labs.ai", name: "Manuel", role: "Organizer", organization: "C2 LABS", password: "EmTech2026!C2" },
-  { email: "iker@c2labs.ai", name: "Iker", role: "Organizer", organization: "C2 LABS", password: "EmTech2026!C2" },
-  { email: "mercedes.bouzas@opinno.com", name: "Mercedes Bouza", role: "Organizer", organization: "OPINNO", password: "EmTech2026!OP" },
-  { email: "beatriz.ferreira@opinno.com", name: "Beatriz Ferreira", role: "Organizer", organization: "OPINNO", password: "EmTech2026!OP" },
-  { email: "flor@aurora360.xyz", name: "Flor Ventura", role: "Production Agency Lead", organization: "AURORA360", password: "EmTech2026!AU" },
-  { email: "claude-cowork", name: "claude-cowork", role: "Agent", organization: "AURORA360", password: "EmTech2026!AG" },
-  { email: "lfpf68@gmail.com", name: "lfpf68", role: "Organizer", organization: "C2 LABS", password: "EmTech2026!SUL2WKp6uf" },
+  {
+    email: "camila@c2labs.ai",
+    name: "Camila Cruz",
+    role: "Organizer",
+    organization: "C2 LABS",
+    password: "EmTech2026!C2",
+  },
+  {
+    email: "kevin@c2labs.ai",
+    name: "Kevin Centeno",
+    role: "Organizer",
+    organization: "C2 LABS",
+    password: "EmTech2026!C2",
+  },
+  {
+    email: "manuel@c2labs.ai",
+    name: "Manuel",
+    role: "Organizer",
+    organization: "C2 LABS",
+    password: "EmTech2026!C2",
+  },
+  {
+    email: "iker@c2labs.ai",
+    name: "Iker",
+    role: "Organizer",
+    organization: "C2 LABS",
+    password: "EmTech2026!C2",
+  },
+  {
+    email: "mercedes.bouzas@opinno.com",
+    name: "Mercedes Bouza",
+    role: "Organizer",
+    organization: "OPINNO",
+    password: "EmTech2026!OP",
+  },
+  {
+    email: "beatriz.ferreira@opinno.com",
+    name: "Beatriz Ferreira",
+    role: "Organizer",
+    organization: "OPINNO",
+    password: "EmTech2026!OP",
+  },
+  {
+    email: "flor@aurora360.xyz",
+    name: "Flor Ventura",
+    role: "Production Agency Lead",
+    organization: "AURORA360",
+    password: "EmTech2026!AU",
+  },
+  {
+    email: "claude-cowork",
+    name: "claude-cowork",
+    role: "Agent",
+    organization: "AURORA360",
+    password: "EmTech2026!AG",
+  },
+  {
+    email: "lfpf68@gmail.com",
+    name: "lfpf68",
+    role: "Organizer",
+    organization: "C2 LABS",
+    password: "EmTech2026!SUL2WKp6uf",
+  },
 ];
 
 async function seedUsers() {
@@ -60,7 +123,11 @@ router.post("/auth/login", async (req, res) => {
       return;
     }
 
-    const rows = await db.select().from(users).where(eq(users.email, email.toLowerCase().trim())).limit(1);
+    const rows = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email.toLowerCase().trim()))
+      .limit(1);
     if (rows.length === 0) {
       res.status(401).json({ error: "Invalid email or password" });
       return;
@@ -105,7 +172,7 @@ router.post("/auth/logout", (req, res) => {
       res.status(500).json({ error: "Failed to logout" });
       return;
     }
-    res.clearCookie("emtech.sid");
+    res.clearCookie("emtech.sid", sessionCookieOptions);
     res.json({ ok: true });
   });
 });

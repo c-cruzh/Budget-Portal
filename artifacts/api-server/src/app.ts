@@ -8,6 +8,13 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 
 const PgSession = connectPgSimple(session);
+const isProduction = process.env["NODE_ENV"] === "production";
+const sessionCookieOptions = {
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: isProduction ? ("none" as const) : ("lax" as const),
+};
 
 const app: Express = express();
 
@@ -48,12 +55,7 @@ app.use(
     name: "emtech.sid",
     resave: false,
     saveUninitialized: false,
-    cookie: {
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      httpOnly: true,
-      secure: true,
-      sameSite: "none",
-    },
+    cookie: sessionCookieOptions,
   }),
 );
 
