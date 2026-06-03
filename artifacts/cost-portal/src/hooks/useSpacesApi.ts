@@ -16,6 +16,19 @@ function normalizeList(list: string[]): string[] {
   return out;
 }
 
+function normalizeCapacities(input: unknown): Record<string, number> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const out: Record<string, number> = {};
+  for (const [rawName, rawVal] of Object.entries(input as Record<string, unknown>)) {
+    const name = String(rawName ?? "").trim();
+    if (!name) continue;
+    const num = Math.floor(Number(rawVal));
+    if (!Number.isFinite(num) || num <= 0) continue;
+    out[name] = num;
+  }
+  return out;
+}
+
 export function useSpacesApi() {
   const [spaces, setSpacesState] = useState<SpacesCatalog>(EMPTY_SPACES_CATALOG);
   const [loading, setLoading] = useState(true);
@@ -36,6 +49,7 @@ export function useSpacesApi() {
           setSpacesState({
             "dia-1": normalizeList(data.spaces["dia-1"] || []),
             "dia-2": normalizeList(data.spaces["dia-2"] || []),
+            capacities: normalizeCapacities(data.spaces.capacities),
           });
         }
       } catch (err: any) {
@@ -88,6 +102,7 @@ export function useSpacesApi() {
       const next: SpacesCatalog = {
         "dia-1": [...prev["dia-1"]],
         "dia-2": [...prev["dia-2"]],
+        capacities: { ...(prev.capacities || {}) },
       };
       next[day] = [...prev[day], trimmed].sort((a, b) => a.localeCompare(b));
       persist(next);
@@ -96,5 +111,28 @@ export function useSpacesApi() {
     return canonical;
   }, [persist]);
 
-  return { spaces, addSpace, loading, error };
+  // Sets (or clears, when value is null/<=0) the aforo/capacity for a space.
+  // Capacity is shared across both days since it is a property of the space.
+  const setCapacity = useCallback((name: string, value: number | null) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setSpacesState(prev => {
+      const caps = { ...(prev.capacities || {}) };
+      const num = value == null ? NaN : Math.floor(Number(value));
+      if (!Number.isFinite(num) || num <= 0) {
+        delete caps[trimmed];
+      } else {
+        caps[trimmed] = num;
+      }
+      const next: SpacesCatalog = {
+        "dia-1": [...prev["dia-1"]],
+        "dia-2": [...prev["dia-2"]],
+        capacities: caps,
+      };
+      persist(next);
+      return next;
+    });
+  }, [persist]);
+
+  return { spaces, addSpace, setCapacity, loading, error };
 }

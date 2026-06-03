@@ -1,3 +1,4 @@
 - [Día day model](dia-day-model.md) — per-item Día 1/2/Ambos is single source of truth; recalcItem normalizes & drives day count; split dialogs must set dia explicitly.
 - [app_state route auth convention](api-route-auth-convention.md) — GET catalog routes are public (do seeding here); only writes are org-permission gated. curl can't exercise authed endpoints.
 - [Ground Transport IVA](ground-transport-iva.md) — /travel/ground stores base vehicle prices (Hiace 65/Sedan 40/Traverse 95); cards show IVA-inclusive, KPI "subtotal antes de IVA" is pre-IVA base.
+- [Space aforo model](space-aforo-model.md) — capacity is per-space (shared across days); over-capacity = dayLoad(sum item qty) > capacity; banner+badge share one memo.

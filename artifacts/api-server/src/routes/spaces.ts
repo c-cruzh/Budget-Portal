@@ -12,6 +12,7 @@ export type DayKey = "dia-1" | "dia-2";
 export interface SpacesCatalog {
   "dia-1": string[];
   "dia-2": string[];
+  capacities?: Record<string, number>;
 }
 
 const FALLBACK_SPACES: string[] = [
@@ -43,10 +44,27 @@ function normalizeList(input: unknown): string[] {
   return out;
 }
 
+function normalizeCapacities(input: unknown, validNames: string[]): Record<string, number> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const allowed = new Set(validNames.map(n => n.toLowerCase()));
+  const out: Record<string, number> = {};
+  for (const [rawName, rawVal] of Object.entries(input as Record<string, unknown>)) {
+    const name = String(rawName ?? "").trim();
+    if (!name || !allowed.has(name.toLowerCase())) continue;
+    const num = Math.floor(Number(rawVal));
+    if (!Number.isFinite(num) || num <= 0) continue;
+    out[name] = num;
+  }
+  return out;
+}
+
 function normalizeCatalog(value: any): SpacesCatalog {
+  const dia1 = normalizeList(value?.["dia-1"]);
+  const dia2 = normalizeList(value?.["dia-2"]);
   return {
-    "dia-1": normalizeList(value?.["dia-1"]),
-    "dia-2": normalizeList(value?.["dia-2"]),
+    "dia-1": dia1,
+    "dia-2": dia2,
+    capacities: normalizeCapacities(value?.capacities, [...dia1, ...dia2]),
   };
 }
 
@@ -65,7 +83,7 @@ export async function ensureSpacesDefaults(): Promise<SpacesCatalog> {
     return normalizeCatalog(row[0].value);
   }
   const seed = await deriveSeedFromAreas();
-  const catalog: SpacesCatalog = { "dia-1": [...seed], "dia-2": [...seed] };
+  const catalog: SpacesCatalog = { "dia-1": [...seed], "dia-2": [...seed], capacities: {} };
   await db.insert(appState)
     .values({ key: SPACES_KEY, value: catalog as any, updatedAt: new Date() })
     .onConflictDoUpdate({

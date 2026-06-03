@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MapPin, Plus, Check } from "lucide-react";
+import { MapPin, Plus, Check, AlertTriangle } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -11,12 +11,13 @@ interface DayPickerProps {
   value?: string;
   options: string[];
   canEdit: boolean;
+  over?: boolean;
   onAssign: (day: SpaceDayKey, value: string) => void;
   onAddSpace: (day: SpaceDayKey, name: string) => void;
   showDayPrefix?: boolean;
 }
 
-function DaySpacePicker({ day, dayLabel, value, options, canEdit, onAssign, onAddSpace, showDayPrefix }: DayPickerProps) {
+function DaySpacePicker({ day, dayLabel, value, options, canEdit, over, onAssign, onAddSpace, showDayPrefix }: DayPickerProps) {
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -29,13 +30,17 @@ function DaySpacePicker({ day, dayLabel, value, options, canEdit, onAssign, onAd
     <span
       className={cn(
         "inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border font-medium max-w-[130px]",
-        value
+        over && value
+          ? "bg-destructive/10 text-destructive border-destructive/30"
+          : value
           ? "bg-primary/10 text-primary border-primary/20"
           : "bg-muted/40 text-muted-foreground/50 border-border/50"
       )}
-      title={value || "Sin asignar"}
+      title={over && value ? `${value} — supera el aforo` : (value || "Sin asignar")}
     >
-      <MapPin className="w-2.5 h-2.5 shrink-0" />
+      {over && value
+        ? <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+        : <MapPin className="w-2.5 h-2.5 shrink-0" />}
       <span className="truncate">{label}</span>
     </span>
   );
@@ -124,16 +129,18 @@ interface SpaceCellProps {
   spacesDia1: string[];
   spacesDia2: string[];
   canEdit: boolean;
+  overDia1?: boolean;
+  overDia2?: boolean;
   onAssign: (day: SpaceDayKey, value: string) => void;
   onAddSpace: (day: SpaceDayKey, name: string) => void;
 }
 
-export function SpaceCell({ dia, espacioDia1, espacioDia2, spacesDia1, spacesDia2, canEdit, onAssign, onAddSpace }: SpaceCellProps) {
+export function SpaceCell({ dia, espacioDia1, espacioDia2, spacesDia1, spacesDia2, canEdit, overDia1, overDia2, onAssign, onAddSpace }: SpaceCellProps) {
   if (dia === "dia-1") {
     return (
       <DaySpacePicker
         day="dia-1" dayLabel="D1" value={espacioDia1} options={spacesDia1}
-        canEdit={canEdit} onAssign={onAssign} onAddSpace={onAddSpace}
+        canEdit={canEdit} over={overDia1} onAssign={onAssign} onAddSpace={onAddSpace}
       />
     );
   }
@@ -141,7 +148,7 @@ export function SpaceCell({ dia, espacioDia1, espacioDia2, spacesDia1, spacesDia
     return (
       <DaySpacePicker
         day="dia-2" dayLabel="D2" value={espacioDia2} options={spacesDia2}
-        canEdit={canEdit} onAssign={onAssign} onAddSpace={onAddSpace}
+        canEdit={canEdit} over={overDia2} onAssign={onAssign} onAddSpace={onAddSpace}
       />
     );
   }
@@ -149,11 +156,11 @@ export function SpaceCell({ dia, espacioDia1, espacioDia2, spacesDia1, spacesDia
     <div className="flex flex-col gap-1 items-start">
       <DaySpacePicker
         day="dia-1" dayLabel="D1" value={espacioDia1} options={spacesDia1}
-        canEdit={canEdit} onAssign={onAssign} onAddSpace={onAddSpace} showDayPrefix
+        canEdit={canEdit} over={overDia1} onAssign={onAssign} onAddSpace={onAddSpace} showDayPrefix
       />
       <DaySpacePicker
         day="dia-2" dayLabel="D2" value={espacioDia2} options={spacesDia2}
-        canEdit={canEdit} onAssign={onAssign} onAddSpace={onAddSpace} showDayPrefix
+        canEdit={canEdit} over={overDia2} onAssign={onAssign} onAddSpace={onAddSpace} showDayPrefix
       />
     </div>
   );

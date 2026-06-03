@@ -20,6 +20,7 @@ import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useSubEventsApi } from "@/hooks/useSubEventsApi";
 import { useSpacesApi } from "@/hooks/useSpacesApi";
 import { SpaceCell } from "@/components/budget/SpaceCell";
+import { SpaceCapacityManager, type SpaceLoadInfo } from "@/components/budget/SpaceCapacityManager";
 import { useAuth } from "@/hooks/useAuth";
 import { ComboInput } from "@/components/ComboInput";
 import { SubEventsManagerDialog } from "@/components/SubEventsManagerDialog";
@@ -222,7 +223,7 @@ const SEED_ITEMS = INITIAL_BUDGET_ITEMS.map(recalcItem);
 export default function BudgetPage() {
   const { items, setItems, loading, error, meta, saveCommentOnly, patchItem, saveFull } = useBudgetApi(SEED_ITEMS, recalcItem);
   const { subEvents, setSubEvents } = useSubEventsApi();
-  const { spaces, addSpace } = useSpacesApi();
+  const { spaces, addSpace, setCapacity } = useSpacesApi();
   const { permissions, user } = useAuth();
   const canEdit = permissions.canEdit;
   const canComment = permissions.canComment;
@@ -344,6 +345,57 @@ export default function BudgetPage() {
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [spaces, items]);
+
+  // Aforo/capacity: assigned load per space per day (sum of item quantities).
+  const spaceLoadInfo = useMemo<SpaceLoadInfo[]>(() => {
+    const caps = spaces.capacities || {};
+    const loads = new Map<string, { d1: number; d2: number }>();
+    const ensure = (name: string) => {
+      let v = loads.get(name);
+      if (!v) { v = { d1: 0, d2: 0 }; loads.set(name, v); }
+      return v;
+    };
+    for (const name of allSpaces) ensure(name);
+    for (const i of items) {
+      const qty = Number(i.qty) || 0;
+      const e1 = (i.espacioDia1 || "").trim();
+      const e2 = (i.espacioDia2 || "").trim();
+      if (e1) ensure(e1).d1 += qty;
+      if (e2) ensure(e2).d2 += qty;
+    }
+    return Array.from(loads.entries())
+      .map(([name, l]) => {
+        const capacity = caps[name];
+        return {
+          name,
+          capacity,
+          loadDia1: l.d1,
+          loadDia2: l.d2,
+          overDia1: capacity != null && l.d1 > capacity,
+          overDia2: capacity != null && l.d2 > capacity,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [allSpaces, items, spaces.capacities]);
+
+  const overCapacity = useMemo(() => {
+    const out: { name: string; day: "Día 1" | "Día 2"; load: number; capacity: number }[] = [];
+    for (const s of spaceLoadInfo) {
+      if (s.overDia1 && s.capacity != null) out.push({ name: s.name, day: "Día 1", load: s.loadDia1, capacity: s.capacity });
+      if (s.overDia2 && s.capacity != null) out.push({ name: s.name, day: "Día 2", load: s.loadDia2, capacity: s.capacity });
+    }
+    return out;
+  }, [spaceLoadInfo]);
+
+  const overSpacesByDay = useMemo(() => {
+    const d1 = new Set<string>();
+    const d2 = new Set<string>();
+    for (const s of spaceLoadInfo) {
+      if (s.overDia1) d1.add(s.name);
+      if (s.overDia2) d2.add(s.name);
+    }
+    return { "dia-1": d1, "dia-2": d2 };
+  }, [spaceLoadInfo]);
 
   const allAreas = useMemo(() => Array.from(new Set(items.map(i => i.area).filter(v => v && v.trim()))).sort(), [items]);
   const allCentros = useMemo(() => Array.from(new Set(items.map(i => i.centroCosto).filter(v => v && v.trim()))).sort(), [items]);
@@ -1048,6 +1100,30 @@ export default function BudgetPage() {
         niceToHaveSum={niceToHaveSum}
       />
 
+      {overCapacity.length > 0 && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-destructive text-sm font-semibold">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            {overCapacity.length === 1
+              ? "1 espacio supera su aforo"
+              : `${overCapacity.length} espacios superan su aforo`}
+          </div>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {overCapacity.map((o, idx) => (
+              <span
+                key={`${o.name}-${o.day}-${idx}`}
+                className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-destructive/30 bg-card text-destructive"
+                title={`${o.name} — ${o.day}: ${o.load} asignado, aforo ${o.capacity}`}
+              >
+                <span className="font-medium">{o.name}</span>
+                <span className="opacity-70">· {o.day}</span>
+                <span className="font-mono font-semibold tabular-nums">{o.load}/{o.capacity}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="space-y-3">
         <div className="flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-[200px]">
@@ -1067,6 +1143,13 @@ export default function BudgetPage() {
             <SelectContent>{centros.map(c => <SelectItem key={c} value={c}>{c === "ALL" ? "All Centers" : c}</SelectItem>)}</SelectContent>
           </Select>
           <div className="flex gap-2 ml-auto">
+            <SpaceCapacityManager
+              spaces={spaces}
+              loadInfo={spaceLoadInfo}
+              overCount={overCapacity.length}
+              canEdit={canEdit}
+              onSetCapacity={setCapacity}
+            />
             <ColumnsMenu visible={visibleColumns} onChange={setVisibleColumns} density={density} onDensityChange={setDensity} />
             <Button variant="outline" size="sm" onClick={exportCSV} className="gap-2"><Download className="w-4 h-4" />Export CSV</Button>
             {canEdit && (
@@ -1514,6 +1597,8 @@ export default function BudgetPage() {
                           spacesDia1={spaces["dia-1"]}
                           spacesDia2={spaces["dia-2"]}
                           canEdit={canEdit}
+                          overDia1={!!(item.espacioDia1 && overSpacesByDay["dia-1"].has(item.espacioDia1.trim()))}
+                          overDia2={!!(item.espacioDia2 && overSpacesByDay["dia-2"].has(item.espacioDia2.trim()))}
                           onAssign={(day, value) => updateItem(item.id, day === "dia-1" ? "espacioDia1" : "espacioDia2", value)}
                           onAddSpace={(day, name) => {
                             const canonical = addSpace(day, name);

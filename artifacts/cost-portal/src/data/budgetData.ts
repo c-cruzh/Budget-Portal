@@ -132,9 +132,14 @@ export type SpaceDayKey = "dia-1" | "dia-2";
 export interface SpacesCatalog {
   "dia-1": string[];
   "dia-2": string[];
+  /**
+   * Optional aforo/capacity per space, keyed by space name. Capacity is a
+   * property of the physical space, so it is shared across both days.
+   */
+  capacities?: Record<string, number>;
 }
 
-export const EMPTY_SPACES_CATALOG: SpacesCatalog = { "dia-1": [], "dia-2": [] };
+export const EMPTY_SPACES_CATALOG: SpacesCatalog = { "dia-1": [], "dia-2": [], capacities: {} };
 
 export const INITIAL_BUDGET_ITEMS: BudgetItem[] = [
   { id: "1", evento: "MAIN EVENT", area: "INGRESO ESEN Y PARQUEO", centroCosto: "STAFF", item: "GESTORES VMT", descripcion: "GESTORES DE TRAFICO DE APOYO PARA EVITAR CONGESTION EN INGRESO ESEN", notas: "SE DEBE CONTEMPLAR COSTO DEL SERVICIO CIVIL Y ALIMENTOS PARA VTM. PUEDE QUE SEA IN-KIND Y SOLO CORRERIAMOS CON ALIMENTOS.", inKind: true, agencyFee: false, qty: 6, uom: "PERSONA", porDias: "SI", qtyDias: 2, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "NA", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false },
