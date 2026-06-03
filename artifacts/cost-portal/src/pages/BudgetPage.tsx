@@ -2303,16 +2303,18 @@ export default function BudgetPage({
                 Via Aurora 360?
               </label>
             </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Fee incluido en cotizacion?</label>
-              <Select value={newItem.aplicaFee} onValueChange={v => setNewItem(p => ({ ...p, aplicaFee: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="SI">SI (ya incluido)</SelectItem>
-                  <SelectItem value="NO">NO (se agrega 20%)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {newItem.agencyFee && (
+              <div>
+                <label className="text-xs font-medium mb-1 block">Fee incluido en cotizacion?</label>
+                <Select value={newItem.aplicaFee} onValueChange={v => setNewItem(p => ({ ...p, aplicaFee: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SI">SI (ya incluido)</SelectItem>
+                    <SelectItem value="NO">NO (se agrega 20%)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <label className="text-xs font-medium mb-1 block">Proveedor</label>
               <Input value={newItem.proveedor} onChange={e => setNewItem(p => ({ ...p, proveedor: e.target.value }))} placeholder="e.g. AURORA 360" />
@@ -2436,16 +2438,18 @@ export default function BudgetPage({
                 Via Aurora 360?
               </label>
             </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Fee incluido en cotizacion?</label>
-              <Select value={editItem.aplicaFee || "NO"} onValueChange={v => setEditItem(p => ({ ...p, aplicaFee: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="SI">SI (ya incluido)</SelectItem>
-                  <SelectItem value="NO">NO (se agrega 20%)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {editItem.agencyFee && (
+              <div>
+                <label className="text-xs font-medium mb-1 block">Fee incluido en cotizacion?</label>
+                <Select value={editItem.aplicaFee || "NO"} onValueChange={v => setEditItem(p => ({ ...p, aplicaFee: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SI">SI (ya incluido)</SelectItem>
+                    <SelectItem value="NO">NO (se agrega 20%)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <label className="text-xs font-medium mb-1 block">Proveedor</label>
               <Input value={editItem.proveedor || ""} onChange={e => setEditItem(p => ({ ...p, proveedor: e.target.value }))} />
