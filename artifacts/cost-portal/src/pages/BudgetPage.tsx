@@ -415,6 +415,23 @@ export default function BudgetPage({
 
   const allAreas = useMemo(() => Array.from(new Set(items.map(i => i.area).filter(v => v && v.trim()))).sort(), [items]);
   const allCentros = useMemo(() => Array.from(new Set(items.map(i => i.centroCosto).filter(v => v && v.trim()))).sort(), [items]);
+  // Zonas from the Espacios catalog (both days, de-duplicated) — used to populate
+  // the Area / Zona picker in the item dialogs so it mirrors the venue layout.
+  const allZones = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const add = (z?: string) => {
+      const v = (z || "").trim();
+      if (!v) return;
+      const k = v.toLowerCase();
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push(v);
+    };
+    for (const e of spaces.entries?.["dia-1"] || []) add(e.zone);
+    for (const e of spaces.entries?.["dia-2"] || []) add(e.zone);
+    return out.sort((a, b) => a.localeCompare(b));
+  }, [spaces]);
 
   const proveedores = useMemo(() => {
     const hasBlank = items.some(i => !(i.proveedor || "").trim());
@@ -851,7 +868,10 @@ export default function BudgetPage({
         const updated: BudgetItem = {
           ...i,
           evento: editItem.evento || i.evento,
+          subEventId: editItem.subEventId,
           area: editItem.area ?? i.area,
+          espacioDia1: editItem.espacioDia1 ?? i.espacioDia1,
+          espacioDia2: editItem.espacioDia2 ?? i.espacioDia2,
           centroCosto: editItem.centroCosto ?? i.centroCosto,
           item: editItem.item || i.item,
           descripcion: editItem.descripcion ?? i.descripcion,
@@ -885,7 +905,10 @@ export default function BudgetPage({
     const base: BudgetItem = {
       id,
       evento: newItem.evento || "MAIN EVENT",
+      subEventId: newItem.subEventId || DEFAULT_SUB_EVENT_ID,
       area: newItem.area || "",
+      espacioDia1: newItem.espacioDia1 || "",
+      espacioDia2: newItem.espacioDia2 || "",
       centroCosto: newItem.centroCosto || "",
       item: newItem.item || "",
       descripcion: newItem.descripcion || "",
@@ -2221,7 +2244,20 @@ export default function BudgetPage({
             </div>
             <div>
               <label className="text-xs font-medium mb-1 block">Area / Zona</label>
-              <ComboInput value={newItem.area || ""} onChange={v => setNewItem(p => ({ ...p, area: v }))} options={allAreas} placeholder="Seleccionar o crear..." />
+              <ComboInput value={newItem.area || ""} onChange={v => setNewItem(p => ({ ...p, area: v }))} options={allZones} placeholder="Seleccionar zona..." />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Espacio asignado</label>
+              {deriveDia(newItem) === "ambos" ? (
+                <div className="space-y-1.5">
+                  <ComboInput value={newItem.espacioDia1 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia1: v }))} options={spaces["dia-1"]} placeholder="Espacio Día 1..." />
+                  <ComboInput value={newItem.espacioDia2 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia2: v }))} options={spaces["dia-2"]} placeholder="Espacio Día 2..." />
+                </div>
+              ) : deriveDia(newItem) === "dia-1" ? (
+                <ComboInput value={newItem.espacioDia1 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia1: v }))} options={spaces["dia-1"]} placeholder="Seleccionar espacio..." />
+              ) : (
+                <ComboInput value={newItem.espacioDia2 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia2: v }))} options={spaces["dia-2"]} placeholder="Seleccionar espacio..." />
+              )}
             </div>
             <div>
               <label className="text-xs font-medium mb-1 block">Centro de Costo</label>
@@ -2323,19 +2359,38 @@ export default function BudgetPage({
               <Input value={editItem.item || ""} onChange={e => setEditItem(p => ({ ...p, item: e.target.value }))} />
             </div>
             <div>
-              <label className="text-xs font-medium mb-1 block">Evento</label>
-              <Select value={editItem.evento || "MAIN EVENT"} onValueChange={v => setEditItem(p => ({ ...p, evento: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+              <label className="text-xs font-medium mb-1 block">Sub-evento</label>
+              <Select value={editItem.subEventId || "__unassigned__"} onValueChange={v => setEditItem(p => ({ ...p, subEventId: v === "__unassigned__" ? undefined : v }))}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar sub-evento" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="MAIN EVENT">MAIN EVENT</SelectItem>
-                  <SelectItem value="MAIN EVENT VIP DINNER">MAIN EVENT VIP DINNER</SelectItem>
-                  <SelectItem value="BEFORE/AFTER MAIN EVENT">BEFORE/AFTER MAIN EVENT</SelectItem>
+                  <SelectItem value="__unassigned__">Sin asignar</SelectItem>
+                  {subEvents.map(se => (
+                    <SelectItem key={se.id} value={se.id}>
+                      <span className="inline-flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: se.color }} />
+                        {se.name}
+                      </span>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div>
               <label className="text-xs font-medium mb-1 block">Area / Zona</label>
-              <ComboInput value={editItem.area || ""} onChange={v => setEditItem(p => ({ ...p, area: v }))} options={allAreas} placeholder="Seleccionar o crear..." />
+              <ComboInput value={editItem.area || ""} onChange={v => setEditItem(p => ({ ...p, area: v }))} options={allZones} placeholder="Seleccionar zona..." />
+            </div>
+            <div>
+              <label className="text-xs font-medium mb-1 block">Espacio asignado</label>
+              {deriveDia(editItem) === "ambos" ? (
+                <div className="space-y-1.5">
+                  <ComboInput value={editItem.espacioDia1 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia1: v }))} options={spaces["dia-1"]} placeholder="Espacio Día 1..." />
+                  <ComboInput value={editItem.espacioDia2 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia2: v }))} options={spaces["dia-2"]} placeholder="Espacio Día 2..." />
+                </div>
+              ) : deriveDia(editItem) === "dia-1" ? (
+                <ComboInput value={editItem.espacioDia1 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia1: v }))} options={spaces["dia-1"]} placeholder="Seleccionar espacio..." />
+              ) : (
+                <ComboInput value={editItem.espacioDia2 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia2: v }))} options={spaces["dia-2"]} placeholder="Seleccionar espacio..." />
+              )}
             </div>
             <div>
               <label className="text-xs font-medium mb-1 block">Centro de Costo</label>
