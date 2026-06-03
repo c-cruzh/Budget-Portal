@@ -15,7 +15,7 @@ import { BulkActionsBar } from "@/components/budget/BulkActionsBar";
 import { BudgetHelpGuide } from "@/components/budget/BudgetHelpGuide";
 import { BUDGET_COLUMNS, DEFAULT_VISIBLE } from "@/components/budget/columns";
 import type { LinkedBudgetItem } from "@/data/tasksBoardData";
-import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, DIA_VALUES, DIA_LABELS, DIA_COLORS, deriveDia, type BudgetItem, type QuoteOption, type SubEvent, type DiaValue, type SpaceDayKey } from "@/data/budgetData";
+import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, DIA_VALUES, DIA_LABELS, DIA_COLORS, STATUS_COLORS, STATUS_SHORT_LABELS, deriveDia, type BudgetItem, type QuoteOption, type SubEvent, type DiaValue, type SpaceDayKey } from "@/data/budgetData";
 import { recalcItem } from "@/lib/budgetCalc";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useSubEventsApi } from "@/hooks/useSubEventsApi";
@@ -70,26 +70,6 @@ const STATUS_COTIZACION_OPTIONS = [
   "Pendiente Cotizar",
   "Pendiente Cotizar Alternativa",
 ];
-
-const STATUS_SHORT_LABELS: Record<string, string> = {
-  "Cotización Recibida - Sin Observaciones": "Recibida OK",
-  "Cotización Recibida - Observaciones": "Recibida c/ Obs.",
-  "Cotización - No Aplica (In-Kind)": "N/A In-Kind",
-  "Cotización - No Aplica (Voluntario)": "N/A Voluntario",
-  "Cotización Pending": "Pending",
-  "Pendiente Cotizar": "Pend. Cotizar",
-  "Pendiente Cotizar Alternativa": "Pend. Alternativa",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  "Cotización Recibida - Sin Observaciones": "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
-  "Cotización Recibida - Observaciones": "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
-  "Cotización - No Aplica (In-Kind)": "bg-violet-500/10 text-violet-600 border-violet-500/20",
-  "Cotización - No Aplica (Voluntario)": "bg-violet-500/10 text-violet-600 border-violet-500/20",
-  "Cotización Pending": "bg-orange-500/10 text-orange-600 border-orange-500/20",
-  "Pendiente Cotizar": "bg-red-500/10 text-red-500 border-red-500/20",
-  "Pendiente Cotizar Alternativa": "bg-amber-500/10 text-amber-600 border-amber-500/20",
-};
 
 const STATUS_NO_COTIZACION = new Set([
   "Cotización - No Aplica (In-Kind)",

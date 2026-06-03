@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
   HelpCircle, LayoutGrid, CalendarRange, Search, Table2, Tags,
   MousePointerClick, ListChecks, Download, Columns3, Percent, Sparkles,
+  ShieldCheck, EyeOff, MessageSquare, CheckCircle2, Cloud,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +13,10 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import {
+  DIA_VALUES, DIA_LABELS, DIA_COLORS,
+  STATUS_COLORS, STATUS_SHORT_LABELS,
+} from "@/data/budgetData";
 
 interface GuideEntry {
   term: string;
@@ -24,7 +29,65 @@ interface GuideSection {
   icon: typeof HelpCircle;
   intro?: string;
   entries: GuideEntry[];
+  extra?: ReactNode;
 }
+
+function DiaBadgeExample({ dia }: { dia: (typeof DIA_VALUES)[number] }) {
+  return (
+    <span
+      className="text-[10px] px-1.5 py-0.5 rounded border font-medium whitespace-nowrap"
+      style={{
+        color: DIA_COLORS[dia],
+        backgroundColor: `${DIA_COLORS[dia]}1a`,
+        borderColor: `${DIA_COLORS[dia]}33`,
+      }}
+    >
+      {DIA_LABELS[dia]}
+    </span>
+  );
+}
+
+function StatusBadgeExample({ value }: { value: string }) {
+  return (
+    <span className={cn("text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap", STATUS_COLORS[value] || "border-border")}>
+      {STATUS_SHORT_LABELS[value] || value}
+    </span>
+  );
+}
+
+const STATUS_EXAMPLES = [
+  "Cotización Recibida - Sin Observaciones",
+  "Cotización Recibida - Observaciones",
+  "Cotización Pending",
+  "Pendiente Cotizar",
+  "Cotización - No Aplica (In-Kind)",
+  "Pendiente Cotizar Alternativa",
+];
+
+const BadgeExamples = (
+  <div className="rounded-lg border border-dashed border-card-border bg-card/30 px-3 py-3 space-y-3">
+    <div>
+      <p className="text-[11px] font-semibold text-foreground/70 uppercase tracking-wide mb-1.5">
+        Estado de cotización
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {STATUS_EXAMPLES.map((v) => (
+          <StatusBadgeExample key={v} value={v} />
+        ))}
+      </div>
+    </div>
+    <div>
+      <p className="text-[11px] font-semibold text-foreground/70 uppercase tracking-wide mb-1.5">
+        Día aplicable
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {DIA_VALUES.map((d) => (
+          <DiaBadgeExample key={d} dia={d} />
+        ))}
+      </div>
+    </div>
+  </div>
+);
 
 const SECTIONS: GuideSection[] = [
   {
@@ -43,6 +106,31 @@ const SECTIONS: GuideSection[] = [
       { term: "A Validar", desc: "Items con posible costo inflado que conviene validar con otros proveedores." },
       { term: "Aparte", desc: "Items que conviene contratar directo (sin productora) para evitar el fee del 20%." },
       { term: "Nice to Have", desc: "Suma de items deseables pero no esenciales — candidatos a recortar si hay que ajustar el presupuesto." },
+    ],
+  },
+  {
+    id: "roles",
+    title: "Roles y permisos",
+    icon: ShieldCheck,
+    intro: "Lo que puedes hacer en esta pestaña depende de tu organización. Tu nivel aparece como una etiqueta de color junto al indicador de sincronización, en la parte superior.",
+    entries: [
+      { term: "Edición completa (Editor)", desc: "Usuarios de C2 LABS. Pueden editar todas las celdas, activar banderas, marcar items como revisados, agregar y borrar items, y aplicar acciones en lote." },
+      { term: "Solo comentar (Commenter)", desc: "Usuarios de OPINNO. Pueden agregar o editar la Descripción y las Notas de un item a modo de comentario, pero no modificar montos, banderas ni la estructura del presupuesto." },
+      { term: "Solo lectura (Viewer)", desc: "Usuarios de AURORA360. Pueden ver, buscar y filtrar el presupuesto, pero no editar nada." },
+      { term: "Controles que solo aparecen con permiso de edición", desc: "Las celdas con borde punteado, los botones de bandera, el botón 'Add Item' y la opción de borrar solo se muestran si tienes permiso de edición. Sin ese permiso, la tabla es solo de consulta." },
+      { term: "Edición de taxonomía (solo C2 LABS)", desc: "Crear, renombrar, reordenar o dar color a sub-eventos, áreas y centros de costo está restringido a C2 LABS, aun por encima del permiso de edición de items." },
+    ],
+  },
+  {
+    id: "redact",
+    title: "Modo redactado (AURORA360)",
+    icon: EyeOff,
+    intro: "Para proteger la información de costos negociada con otros proveedores, los usuarios de AURORA360 ven ocultos los montos de los items que no son de AURORA360.",
+    entries: [
+      { term: "Qué se oculta", desc: "El precio unitario, subtotal, fee, IVA, turismo y total de los items que no pertenecen a AURORA360 aparecen con un candado en lugar del monto." },
+      { term: "Items propios de AURORA360", desc: "Los items que van vía productora (Aurora 360) o cuyo proveedor es AURORA360 se muestran completos, con todos sus montos visibles." },
+      { term: "También en el CSV", desc: "Al exportar, esas mismas columnas de montos salen vacías para los items ajenos, de modo que el archivo descargado respeta la misma confidencialidad que la pantalla." },
+      { term: "Por qué", desc: "Permite a AURORA360 revisar el alcance y la logística del evento sin exponer el detalle de los costos negociados con terceros." },
     ],
   },
   {
@@ -84,14 +172,37 @@ const SECTIONS: GuideSection[] = [
     ],
   },
   {
+    id: "comments",
+    title: "Comentarios sin permiso de edición",
+    icon: MessageSquare,
+    intro: "Algunos usuarios sin permiso de edición completa pueden colaborar dejando comentarios en los items.",
+    entries: [
+      { term: "Editar Descripción y Notas", desc: "Los usuarios con permiso de comentar (OPINNO) pueden agregar o editar la Descripción y las Notas de un item, aun cuando no puedan modificar el resto de sus campos." },
+      { term: "Dónde se editan", desc: "Debajo del nombre del item aparecen los campos '+ desc' y '+ nota'. Haz clic para escribir; el texto se guarda solo y queda visible en el tooltip del item." },
+      { term: "El resto queda bloqueado", desc: "Montos, banderas, cotizaciones y demás campos siguen siendo de solo lectura para quien únicamente puede comentar." },
+    ],
+  },
+  {
     id: "badges",
     title: "Estados y días",
     icon: Tags,
-    intro: "Las etiquetas de color comunican de un vistazo el estado de cotización y a qué día pertenece cada item.",
+    intro: "Las etiquetas de color comunican de un vistazo el estado de cotización y a qué día pertenece cada item. Estos son los badges reales tal como aparecen en la tabla:",
     entries: [
-      { term: "Estado de cotización", desc: "Badges de color según el status: recibida (verde), con observaciones (amarillo), pendiente de cotizar (rojo/naranja) o no aplica / in-kind (violeta)." },
-      { term: "Badge de Día", desc: "Indica si el item corresponde a Día 1, Día 2 o Ambos. El color distingue cada caso." },
+      { term: "Estado de cotización", desc: "Verde = recibida sin observaciones; amarillo = recibida con observaciones; naranja = cotización pending; rojo = pendiente de cotizar; violeta = no aplica / in-kind; ámbar = pendiente de alternativa." },
+      { term: "Badge de Día", desc: "Azul = Día 1, verde = Día 2, violeta = Ambos. Indica a qué día corresponde el item." },
       { term: "Reasignar día", desc: "Con permiso de edición, haz clic en el badge de Día y elige Día 1, Día 2 o Ambos en el menú emergente." },
+    ],
+    extra: BadgeExamples,
+  },
+  {
+    id: "review",
+    title: "Marcar como revisado (Reviewed)",
+    icon: CheckCircle2,
+    intro: "Cada fila tiene un control para llevar registro de qué items ya fueron revisados por el equipo.",
+    entries: [
+      { term: "Botón de revisión", desc: "El círculo con un check al inicio de cada fila marca el item como revisado. Verde = revisado; gris = sin revisar. Requiere permiso de edición." },
+      { term: "Quién revisó", desc: "Al marcarlo, queda registrado tu nombre. Al pasar el cursor sobre el botón verás 'Reviewed por <nombre>'. Vuelve a hacer clic para quitar la marca." },
+      { term: "Para qué sirve", desc: "Ayuda al equipo a hacer seguimiento de qué items ya fueron validados y cuáles faltan por revisar." },
     ],
   },
   {
@@ -104,6 +215,16 @@ const SECTIONS: GuideSection[] = [
       { term: "Cotización aprobada", desc: "Cuando un item tiene varias cotizaciones, puedes marcar cuál es la aprobada; esa define el precio que entra al total." },
       { term: "Enlaces y tareas", desc: "Abre el documento o cotización en una pestaña nueva, edita el enlace, o crea una tarea de seguimiento ligada al item." },
       { term: "Banderas (Validar / Aparte / Acción Req.)", desc: "Activa o desactiva las banderas: 'Validar costo', 'Contratar aparte' (evitar fee) y 'Acción requerida'. Alimentan los KPIs y los filtros." },
+    ],
+  },
+  {
+    id: "add",
+    title: "Agregar item",
+    icon: Sparkles,
+    intro: "Puedes ampliar el presupuesto creando items nuevos desde cero.",
+    entries: [
+      { term: "Botón 'Add Item'", desc: "Disponible con permiso de edición. Abre un formulario para crear un item nuevo: nombre, evento, área, centro de costo, cantidad, precio y demás campos." },
+      { term: "Se integra al instante", desc: "El item nuevo aparece en la tabla dentro de su grupo y se incluye en los KPIs y exportaciones según los filtros activos." },
     ],
   },
   {
@@ -140,6 +261,17 @@ const SECTIONS: GuideSection[] = [
     ],
   },
   {
+    id: "sync",
+    title: "Sincronización en la nube",
+    icon: Cloud,
+    intro: "Tus cambios se guardan automáticamente en el servidor; no hay un botón de 'Guardar'.",
+    entries: [
+      { term: "Cloud sync active", desc: "El indicador verde en la parte superior confirma que la conexión con el servidor está activa y los cambios se están guardando solos (con un breve retardo)." },
+      { term: "Estado de error", desc: "Si la conexión falla, el indicador se pone en rojo con un aviso. En ese caso tus últimos cambios podrían no haberse guardado; revisa tu conexión." },
+      { term: "Última edición", desc: "Junto al indicador se muestra quién hizo la última edición, de qué organización y cuándo." },
+    ],
+  },
+  {
     id: "fee",
     title: "Lógica de fee e IVA",
     icon: Percent,
@@ -155,6 +287,12 @@ const SECTIONS: GuideSection[] = [
 
 export function BudgetHelpGuide() {
   const [open, setOpen] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+
+  const scrollTo = (id: string) => {
+    sectionRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   return (
     <>
@@ -170,7 +308,7 @@ export function BudgetHelpGuide() {
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-3xl p-0 gap-0 max-h-[85vh] flex flex-col overflow-hidden">
+        <DialogContent className="max-w-4xl p-0 gap-0 max-h-[85vh] flex flex-col overflow-hidden">
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
             <DialogTitle className="flex items-center gap-2 text-xl">
               <Sparkles className="w-5 h-5 text-primary" />
@@ -181,36 +319,62 @@ export function BudgetHelpGuide() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-8">
-            {SECTIONS.map((section) => {
-              const Icon = section.icon;
-              return (
-                <section key={section.id} className="scroll-mt-4">
-                  <div className="flex items-center gap-2.5 mb-2">
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
-                      <Icon className="w-4 h-4" />
-                    </div>
-                    <h3 className="text-base font-semibold text-foreground">{section.title}</h3>
-                  </div>
-                  {section.intro && (
-                    <p className="text-sm text-muted-foreground mb-3 leading-relaxed">{section.intro}</p>
-                  )}
-                  <dl className="space-y-2.5">
-                    {section.entries.map((e, idx) => (
-                      <div
-                        key={idx}
-                        className={cn(
-                          "rounded-lg border border-card-border bg-card/50 px-3 py-2.5",
-                        )}
-                      >
-                        <dt className="text-sm font-medium text-foreground">{e.term}</dt>
-                        <dd className="text-[13px] text-muted-foreground mt-0.5 leading-relaxed">{e.desc}</dd>
+          <div className="flex flex-1 min-h-0">
+            <nav className="hidden md:flex flex-col w-56 shrink-0 border-r border-border overflow-y-auto py-4 px-2 gap-0.5 bg-muted/20">
+              <p className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                Índice
+              </p>
+              {SECTIONS.map((section) => {
+                const Icon = section.icon;
+                return (
+                  <button
+                    key={section.id}
+                    onClick={() => scrollTo(section.id)}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[13px] text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                  >
+                    <Icon className="w-3.5 h-3.5 shrink-0 text-primary/70" />
+                    <span className="truncate">{section.title}</span>
+                  </button>
+                );
+              })}
+            </nav>
+
+            <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-5 space-y-8">
+              {SECTIONS.map((section) => {
+                const Icon = section.icon;
+                return (
+                  <section
+                    key={section.id}
+                    ref={(el) => { sectionRefs.current[section.id] = el; }}
+                    className="scroll-mt-4"
+                  >
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+                        <Icon className="w-4 h-4" />
                       </div>
-                    ))}
-                  </dl>
-                </section>
-              );
-            })}
+                      <h3 className="text-base font-semibold text-foreground">{section.title}</h3>
+                    </div>
+                    {section.intro && (
+                      <p className="text-sm text-muted-foreground mb-3 leading-relaxed">{section.intro}</p>
+                    )}
+                    <dl className="space-y-2.5">
+                      {section.entries.map((e, idx) => (
+                        <div
+                          key={idx}
+                          className={cn(
+                            "rounded-lg border border-card-border bg-card/50 px-3 py-2.5",
+                          )}
+                        >
+                          <dt className="text-sm font-medium text-foreground">{e.term}</dt>
+                          <dd className="text-[13px] text-muted-foreground mt-0.5 leading-relaxed">{e.desc}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    {section.extra && <div className="mt-3">{section.extra}</div>}
+                  </section>
+                );
+              })}
+            </div>
           </div>
 
           <div className="px-6 py-3 border-t border-border bg-muted/30 flex justify-end">
