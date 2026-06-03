@@ -14,7 +14,8 @@ import { FiltersPopover, type ActiveFilterChip } from "@/components/budget/Filte
 import { BulkActionsBar } from "@/components/budget/BulkActionsBar";
 import { BUDGET_COLUMNS, DEFAULT_VISIBLE } from "@/components/budget/columns";
 import type { LinkedBudgetItem } from "@/data/tasksBoardData";
-import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, type BudgetItem, type QuoteOption, type SubEvent } from "@/data/budgetData";
+import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, DIA_VALUES, DIA_LABELS, DIA_COLORS, deriveDia, type BudgetItem, type QuoteOption, type SubEvent, type DiaValue } from "@/data/budgetData";
+import { recalcItem } from "@/lib/budgetCalc";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useSubEventsApi } from "@/hooks/useSubEventsApi";
 import { useAuth } from "@/hooks/useAuth";
@@ -168,37 +169,50 @@ function ToggleCell({ value, onToggle, labelOn, labelOff }: { value: boolean | s
   );
 }
 
-function getApprovedQuote(item: BudgetItem) {
-  if (!item.quotes || item.quotes.length === 0) return null;
-  return item.quotes.find(q => q.id === item.approvedQuoteId) || item.quotes[0];
-}
-
-function recalcItem(item: BudgetItem): BudgetItem {
-  const qty = Number(item.qty) || 0;
-  const dias = Number(item.qtyDias) || 1;
-  const approved = getApprovedQuote(item);
-  if (approved) {
-    item.precioUnitario = Number(approved.precioUnitario) || 0;
-    item.proveedor = approved.label ?? "";
-    item.cotizacion = (approved.notes && approved.notes.length > 0) ? approved.notes : (approved.label ?? "");
-    item.cotizacionLink = approved.link ?? "";
-  }
-  const precio = Number(item.precioUnitario) || 0;
-  const byDias = item.porDias === "SI";
-  item.subtotal = byDias ? qty * dias * precio : qty * precio;
-  const feeApplies = item.agencyFee && item.aplicaFee !== "SI";
-  item.fee = feeApplies ? item.subtotal * 0.20 : 0;
-  item.feeIncluido = (item.agencyFee && item.aplicaFee === "SI") ? item.subtotal * 0.20 : 0;
-  item.subtotalConFee = item.subtotal + item.fee;
-  item.iva = item.exentoIva ? 0 : item.subtotalConFee * 0.13;
-  item.turismo = item.aplicaTurismo ? item.subtotalConFee * 0.05 : 0;
-  item.total = item.subtotalConFee + item.iva + (item.turismo || 0);
-  return item;
-}
-
 function getFeeProductora(item: BudgetItem): number {
   if (!item.agencyFee) return 0;
   return item.fee > 0 ? item.fee : (item.feeIncluido || 0);
+}
+
+function DiaCell({ dia, canEdit, onChange }: { dia: DiaValue; canEdit: boolean; onChange: (v: DiaValue) => void }) {
+  const badge = (
+    <span
+      className="text-[10px] px-1.5 py-0.5 rounded border font-medium whitespace-nowrap"
+      style={{
+        color: DIA_COLORS[dia],
+        backgroundColor: `${DIA_COLORS[dia]}1a`,
+        borderColor: `${DIA_COLORS[dia]}33`,
+      }}
+    >
+      {DIA_LABELS[dia]}
+    </span>
+  );
+  if (!canEdit) return badge;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button className="cursor-pointer hover:opacity-80 transition-opacity">{badge}</button>
+      </PopoverTrigger>
+      <PopoverContent className="w-32 p-1" align="center">
+        {DIA_VALUES.map(v => (
+          <button
+            key={v}
+            onClick={() => onChange(v)}
+            className={cn(
+              "w-full flex items-center justify-between px-2 py-1.5 rounded text-xs hover:bg-muted",
+              v === dia && "bg-primary/10 text-primary"
+            )}
+          >
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: DIA_COLORS[v] }} />
+              {DIA_LABELS[v]}
+            </span>
+            {v === dia && <span className="text-[10px]">✓</span>}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 const SEED_ITEMS = INITIAL_BUDGET_ITEMS.map(recalcItem);
@@ -265,6 +279,7 @@ export default function BudgetPage() {
   const [filterInKind, setFilterInKind] = useState("ALL");
   const [filterPrecio, setFilterPrecio] = useState("ALL");
   const [filterQtyDias, setFilterQtyDias] = useState<Set<number>>(new Set());
+  const [filterDia, setFilterDia] = useState<"ALL" | "dia-1" | "dia-2" | "ambos">("ALL");
   const [filterPending, setFilterPending] = useState(false);
   const [filterAccionReq, setFilterAccionReq] = useState(false);
   const [filterValidar, setFilterValidar] = useState(false);
@@ -378,6 +393,14 @@ export default function BudgetPage() {
     if (filterPrecio === "ZERO") out = out.filter(i => (Number(i.precioUnitario) || 0) === 0 && !i.inKind);
     else if (filterPrecio === "NONZERO") out = out.filter(i => (Number(i.precioUnitario) || 0) > 0);
     if (filterQtyDias.size > 0) out = out.filter(i => filterQtyDias.has(Number(i.qtyDias)));
+    if (filterDia !== "ALL") {
+      out = out.filter(i => {
+        const d = deriveDia(i);
+        if (filterDia === "ambos") return d === "ambos";
+        // "Día 1" / "Día 2" include items that run both days
+        return d === filterDia || d === "ambos";
+      });
+    }
     if (filterPending) out = out.filter(i => i.cotizacion === "PENDING");
     if (filterAccionReq) out = out.filter(i => i.accionRequerida);
     if (filterValidar) out = out.filter(i => i.validarCosto);
@@ -397,7 +420,7 @@ export default function BudgetPage() {
       );
     }
     return out;
-  }, [items, filterSubEvents, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterQtyDias, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
+  }, [items, filterSubEvents, filterEvento, filterArea, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterQtyDias, filterDia, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
 
   const sorted = useMemo(() => {
     if (!sortKey) return filtered;
@@ -537,7 +560,7 @@ export default function BudgetPage() {
       });
       const changed = next.find(i => i.id === id);
       if (changed) {
-        const recalcFields = ["qty", "qtyDias", "precioUnitario", "porDias", "aplicaFee", "agencyFee", "inKind", "exentoIva", "aplicaTurismo"] as const;
+        const recalcFields = ["qty", "qtyDias", "dia", "precioUnitario", "porDias", "aplicaFee", "agencyFee", "inKind", "exentoIva", "aplicaTurismo"] as const;
         if (recalcFields.includes(field as any)) {
           const { id: _id, ...rest } = changed;
           Object.entries(rest).forEach(([k, v]) => patchItem(id, k, v));
@@ -869,14 +892,14 @@ export default function BudgetPage() {
   const exportCSV = () => {
     const headers = [
       "SUB-EVENTO", "EVENTO", "AREA/ZONA", "CENTRO DE COSTO", "ITEM", "DESCRIPCION", "NOTAS/OBSERVACIONES",
-      "IN-KIND?", "AURORA 360?", "QTY", "UoM", "CONTRATACION POR DIAS?", "QTY DIAS",
+      "IN-KIND?", "AURORA 360?", "QTY", "UoM", "DIA APLICABLE", "CONTRATACION POR DIAS?", "QTY DIAS",
       "PRECIO UNITARIO", "SUBTOTAL", "VIA PRODUCTORA (AURORA 360)?", "FEE INCL. EN COTIZACION?",
       "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "SOLO PRESUPUESTADO?", "IMAGEN DE REFERENCIA", "PROVEEDOR",
       "REVIEWED BY", "VALIDAR COSTO?", "CONTRATAR APARTE?", "ACCIÓN REQUERIDA?", "NICE TO HAVE?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO", "STATUS COTIZACION"
     ];
     const rows = filtered.map(i => [
       subEventName(i.subEventId), i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
-      i.inKind ? "SI" : "NO", i.agencyFee ? "SI" : "NO", i.qty, i.uom,
+      i.inKind ? "SI" : "NO", i.agencyFee ? "SI" : "NO", i.qty, i.uom, DIA_LABELS[deriveDia(i)],
       i.porDias, i.qtyDias, i.precioUnitario, i.subtotal, i.agencyFee ? "SI" : "NO",
       i.aplicaFee, i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.soloPresupuestado ? "SI" : "NO", i.documento,
       i.proveedor || "", i.reviewedBy || "", i.validarCosto ? "SI" : "NO", i.contratarAparte ? "SI" : "NO",
@@ -1045,6 +1068,7 @@ export default function BudgetPage() {
             if (filterInKind !== "ALL") chips.push({ key: "ik", label: `In-Kind: ${filterInKind}`, onClear: () => setFilterInKind("ALL") });
             if (filterPrecio !== "ALL") chips.push({ key: "pr", label: `Precio: ${filterPrecio}`, onClear: () => setFilterPrecio("ALL") });
             if (filterQtyDias.size > 0) chips.push({ key: "qd", label: `Días: ${Array.from(filterQtyDias).sort().join(",")}`, onClear: () => setFilterQtyDias(new Set()) });
+            if (filterDia !== "ALL") chips.push({ key: "dia", label: `Día: ${DIA_LABELS[filterDia]}`, onClear: () => setFilterDia("ALL") });
             if (filterPending) chips.push({ key: "pn", label: "Pending Quotes", onClear: () => setFilterPending(false) });
             if (filterAccionReq) chips.push({ key: "ar", label: "Acción Req.", onClear: () => setFilterAccionReq(false) });
             if (filterValidar) chips.push({ key: "vl", label: "A Validar", onClear: () => setFilterValidar(false) });
@@ -1052,7 +1076,7 @@ export default function BudgetPage() {
             if (filterNiceToHave) chips.push({ key: "nh", label: "Nice to Have", onClear: () => setFilterNiceToHave(false) });
             return chips;
           })()}
-          onClearAll={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterQtyDias(new Set()); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
+          onClearAll={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterQtyDias(new Set()); setFilterDia("ALL"); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
         >
           <div className="flex flex-wrap gap-3 items-center">
           <Select value={filterProveedor} onValueChange={setFilterProveedor}>
@@ -1101,6 +1125,15 @@ export default function BudgetPage() {
               <SelectItem value="ALL">Precio: Todos</SelectItem>
               <SelectItem value="ZERO">Precio en $0</SelectItem>
               <SelectItem value="NONZERO">Con precio</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterDia} onValueChange={v => setFilterDia(v as typeof filterDia)}>
+            <SelectTrigger className="w-[160px] bg-card border-card-border text-xs"><SelectValue placeholder="Día" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Día: Todos</SelectItem>
+              <SelectItem value="dia-1">Día 1</SelectItem>
+              <SelectItem value="dia-2">Día 2</SelectItem>
+              <SelectItem value="ambos">Solo Ambos</SelectItem>
             </SelectContent>
           </Select>
           <Popover>
@@ -1221,6 +1254,9 @@ export default function BudgetPage() {
                 <th data-col="tipo" className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-16 bg-[hsl(var(--muted))] border-b border-border">
                   <ColHeader label="Tipo" info="Por Día / One-Time." align="center" />
                 </th>
+                <th data-col="dia" className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
+                  <ColHeader label="Día" info="Día al que aplica el ítem: Día 1, Día 2 o Ambos. Define cuántos días se cobra un costo por día." align="center" />
+                </th>
                 <th data-col="dias" className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-12 bg-[hsl(var(--muted))] border-b border-border">
                   <SortableHeader label="Dias" sortKey="dias" current={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
                 </th>
@@ -1305,7 +1341,7 @@ export default function BudgetPage() {
                         {hasInKind && <Badge className="text-[10px] bg-amber-500/15 text-amber-600 border-amber-500/20 font-normal py-0">In-Kind</Badge>}
                       </div>
                     </td>
-                    <td className="px-2 py-2" colSpan={14}></td>
+                    <td className="px-2 py-2" colSpan={15}></td>
                     <td className="px-2 py-2 text-right font-semibold" colSpan={canEdit ? 9 : 8}>
 
                       {groupTotal > 0 ? <span className="text-primary text-xs">{formatUSD(groupTotal)}</span> : <span className="text-muted-foreground text-[10px]">In-Kind / $0</span>}
@@ -1437,9 +1473,17 @@ export default function BudgetPage() {
                           {item.porDias === "SI" ? "Por Dia" : "One-Time"}
                         </button>
                       </td>
+                      <td data-col="dia" className="px-1 py-1.5 text-center align-top">
+                        <DiaCell dia={deriveDia(item)} canEdit={canEdit} onChange={v => updateItem(item.id, "dia", v)} />
+                      </td>
                       <td data-col="dias" className="px-1 py-1.5 text-center align-top">
                         {item.porDias === "SI" ? (
-                          <EditableCell value={String(item.qtyDias)} onSave={v => updateItem(item.id, "qtyDias", v)} className="text-center font-mono text-xs" type="number" disabled={!canEdit} />
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="text-center font-mono text-xs text-muted-foreground cursor-help">{item.qtyDias}</span>
+                            </TooltipTrigger>
+                            <TooltipContent>Derivado del Día aplicable (Ambos = 2, un día = 1)</TooltipContent>
+                          </Tooltip>
                         ) : (
                           <span className="text-muted-foreground/30 text-xs">--</span>
                         )}
@@ -1855,7 +1899,7 @@ export default function BudgetPage() {
                             {!__pex && <span className="text-[10px] text-muted-foreground">click para expandir</span>}
                           </div>
                         </td>
-                        <td colSpan={canEdit ? 21 : 20} className="px-2 py-1.5 text-right bg-primary/5">
+                        <td colSpan={canEdit ? 22 : 21} className="px-2 py-1.5 text-right bg-primary/5">
                           <span className="font-semibold text-primary text-xs">{formatUSD(__row.total)}</span>
                         </td>
                       </tr>
@@ -1872,7 +1916,7 @@ export default function BudgetPage() {
                 <td className="sticky-col-2 px-2 py-3 font-semibold text-muted-foreground text-xs bg-[hsl(var(--muted))]">
                   TOTAL -- {filtered.length} items
                 </td>
-                <td colSpan={14} className="px-3 py-3">
+                <td colSpan={15} className="px-3 py-3">
                 </td>
                 <td className="px-2 py-3 text-right font-bold text-sm text-primary font-mono">
                   {formatUSD(totalBudget)}

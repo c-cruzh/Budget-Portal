@@ -1,0 +1,1 @@
+- [Día day model](dia-day-model.md) — per-item Día 1/2/Ambos is single source of truth; recalcItem normalizes & drives day count; split dialogs must set dia explicitly.

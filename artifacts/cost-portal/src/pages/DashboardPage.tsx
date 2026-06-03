@@ -4,27 +4,12 @@ import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartTooltip,
   ResponsiveContainer
 } from "recharts";
-import { INITIAL_BUDGET_ITEMS, type BudgetItem } from "@/data/budgetData";
+import { INITIAL_BUDGET_ITEMS, DIA_LABELS, DIA_COLORS, deriveDia, type BudgetItem } from "@/data/budgetData";
+import { recalcItem } from "@/lib/budgetCalc";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { formatUSD } from "@/lib/utils";
 import { TrendingUp, DollarSign, Package, AlertCircle, Handshake, Building2, Percent, Users, Loader2, ShieldCheck, ShieldAlert, ChevronDown, ChevronUp, MessageSquare, Check, X, Star, ArrowDown, ArrowUp } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-
-function recalcItem(item: BudgetItem): BudgetItem {
-  const qty = Number(item.qty) || 0;
-  const dias = Number(item.qtyDias) || 1;
-  const precio = Number(item.precioUnitario) || 0;
-  const byDias = item.porDias === "SI";
-  item.subtotal = byDias ? qty * dias * precio : qty * precio;
-  const feeApplies = item.agencyFee && item.aplicaFee !== "SI";
-  item.fee = feeApplies ? item.subtotal * 0.20 : 0;
-  item.feeIncluido = (item.agencyFee && item.aplicaFee === "SI") ? item.subtotal * 0.20 : 0;
-  item.subtotalConFee = item.subtotal + item.fee;
-  item.iva = item.exentoIva ? 0 : item.subtotalConFee * 0.13;
-  item.turismo = item.aplicaTurismo ? item.subtotalConFee * 0.05 : 0;
-  item.total = item.subtotalConFee + item.iva + (item.turismo || 0);
-  return item;
-}
 
 const SEED_ITEMS = INITIAL_BUDGET_ITEMS.map(recalcItem);
 
@@ -122,6 +107,33 @@ export default function DashboardPage() {
       .sort((a, b) => b.value - a.value)
       .slice(0, 10);
   }, [items, centroExcludeInKind]);
+
+  const byDia = useMemo(() => {
+    let dia1 = 0, dia2 = 0, ambos = 0;
+    let dia1Count = 0, dia2Count = 0, ambosCount = 0;
+    items.filter(i => !i.inKind && i.total > 0).forEach(i => {
+      const d = deriveDia(i);
+      if (d === "ambos") {
+        ambos += i.total;
+        ambosCount++;
+        dia1 += i.total / 2;
+        dia2 += i.total / 2;
+      } else if (d === "dia-1") {
+        dia1 += i.total;
+        dia1Count++;
+      } else {
+        dia2 += i.total;
+        dia2Count++;
+      }
+    });
+    return {
+      chart: [
+        { name: DIA_LABELS["dia-1"], value: dia1, color: DIA_COLORS["dia-1"] },
+        { name: DIA_LABELS["dia-2"], value: dia2, color: DIA_COLORS["dia-2"] },
+      ],
+      dia1, dia2, ambos, dia1Count, dia2Count, ambosCount,
+    };
+  }, [items]);
 
   const byEvento = useMemo(() => {
     const map = new Map<string, number>();
@@ -395,6 +407,47 @@ export default function DashboardPage() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Gasto por Día</h3>
+          <span className="text-[10px] text-muted-foreground/70">Ítems "Ambos" repartidos 50/50 entre los dos días</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+          <div className="md:col-span-2">
+            <ResponsiveContainer width="100%" height={120}>
+              <BarChart data={byDia.chart} layout="vertical" margin={{ left: 0, right: 16 }}>
+                <XAxis type="number" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} width={70} />
+                <RechartTooltip
+                  formatter={(v: number) => [formatUSD(v), "Total"]}
+                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
+                />
+                <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                  {byDia.chart.map((d, i) => <Cell key={i} fill={d.color} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: DIA_COLORS["dia-1"] }} />{DIA_LABELS["dia-1"]}</span>
+              <span className="font-bold font-mono">{formatUSD(byDia.dia1)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: DIA_COLORS["dia-2"] }} />{DIA_LABELS["dia-2"]}</span>
+              <span className="font-bold font-mono">{formatUSD(byDia.dia2)}</span>
+            </div>
+            <div className="border-t border-border pt-2 flex items-center justify-between text-muted-foreground">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: DIA_COLORS["ambos"] }} />Ambos ({byDia.ambosCount})</span>
+              <span className="font-mono">{formatUSD(byDia.ambos)}</span>
+            </div>
+            <div className="text-[10px] text-muted-foreground/60">
+              {byDia.dia1Count} solo Día 1 · {byDia.dia2Count} solo Día 2
+            </div>
           </div>
         </div>
       </div>

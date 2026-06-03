@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { BudgetItem, SubEvent } from "@/data/budgetData";
+import { type BudgetItem, type SubEvent, type DiaValue } from "@/data/budgetData";
 import { recalcItem } from "@/lib/budgetCalc";
 import {
   Dialog,
@@ -59,10 +59,13 @@ function buildItemFromDraft(original: BudgetItem, draft: DraftRow): BudgetItem {
   const id = (typeof crypto !== "undefined" && crypto.randomUUID)
     ? crypto.randomUUID()
     : `split-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const dia: DiaValue | undefined =
+    draft.subEventId === "dia-1" ? "dia-1" : draft.subEventId === "dia-2" ? "dia-2" : undefined;
   const clone: BudgetItem = {
     ...original,
     id,
     subEventId: draft.subEventId,
+    dia,
     item: draft.item,
     qty: Number(draft.qty) || 0,
     qtyDias: Number(draft.qtyDias) || 1,

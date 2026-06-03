@@ -23,9 +23,67 @@ export const DEFAULT_SUB_EVENTS: SubEvent[] = [
 
 export const DEFAULT_SUB_EVENT_ID = "dia-2";
 
+export type DiaValue = "dia-1" | "dia-2" | "ambos";
+
+export const DIA_VALUES: DiaValue[] = ["dia-1", "dia-2", "ambos"];
+
+export const DIA_LABELS: Record<DiaValue, string> = {
+  "dia-1": "Día 1",
+  "dia-2": "Día 2",
+  "ambos": "Ambos",
+};
+
+export const DIA_COLORS: Record<DiaValue, string> = {
+  "dia-1": "#60a5fa",
+  "dia-2": "#34d399",
+  "ambos": "#a78bfa",
+};
+
+export function isDiaValue(v: unknown): v is DiaValue {
+  return v === "dia-1" || v === "dia-2" || v === "ambos";
+}
+
+interface DiaSource {
+  dia?: DiaValue;
+  item?: string;
+  descripcion?: string;
+  notas?: string;
+  porDias?: string;
+  qtyDias?: number | string;
+  subEventId?: string;
+}
+
+/**
+ * Single source of truth for the day that a budget item applies to.
+ * Consolidates the previously-scattered day signals (explicit `dia`,
+ * free-text hints, the qtyDias/porDias multiplier, and subEventId grouping)
+ * into one of: "dia-1" | "dia-2" | "ambos".
+ */
+export function deriveDia(item: DiaSource): DiaValue {
+  if (isDiaValue(item.dia)) return item.dia;
+  const text = `${item.item || ""} ${item.descripcion || ""} ${item.notas || ""}`.toUpperCase();
+  // Explicit "both days" text hints (e.g. "DIA 1 & 2", "DAY 1 AND 2")
+  if (/(D[IÍ]A|DAY)\s*1\s*(&|Y|AND)\s*2/.test(text)) return "ambos";
+  // Explicit single-day-only text hints (e.g. "DAY 1 ONLY", "SOLO DIA 2")
+  if (/(DAY|D[IÍ]A)\s*1\s*(ONLY|[ÚU]NIC)/.test(text) || /SOLO\s*(DAY|D[IÍ]A)\s*1/.test(text)) return "dia-1";
+  if (/(DAY|D[IÍ]A)\s*2\s*(ONLY|[ÚU]NIC)/.test(text) || /SOLO\s*(DAY|D[IÍ]A)\s*2/.test(text)) return "dia-2";
+  // Recurring cost across more than one day => both days
+  const dias = Number(item.qtyDias) || 1;
+  if (item.porDias === "SI" && dias >= 2) return "ambos";
+  // Fall back to the sub-event grouping
+  if (item.subEventId === "dia-1") return "dia-1";
+  if (item.subEventId === "dia-2") return "dia-2";
+  return "dia-2";
+}
+
+export function dayCountForDia(dia: DiaValue): number {
+  return dia === "ambos" ? 2 : 1;
+}
+
 export interface BudgetItem {
   id: string;
   subEventId?: string;
+  dia?: DiaValue;
   evento: string;
   area: string;
   centroCosto: string;
