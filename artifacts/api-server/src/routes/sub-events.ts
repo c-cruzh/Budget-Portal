@@ -23,8 +23,6 @@ const DEFAULT_SUB_EVENTS: SubEventRecord[] = [
   { id: "cena-ania", name: "Cena Privada ANIA", order: 4, color: "#f472b6" },
 ];
 
-export const DEFAULT_SUB_EVENT_ID = "dia-2";
-
 const ORG_PERMISSIONS: Record<string, { canEdit: boolean }> = {
   "C2 LABS": { canEdit: true },
   "OPINNO": { canEdit: false },
@@ -57,30 +55,6 @@ export async function ensureSubEventDefaults(): Promise<SubEventRecord[]> {
     console.error("Failed to log sub-event seeding:", err);
   }
   return DEFAULT_SUB_EVENTS;
-}
-
-export async function ensureBudgetSubEventDefaults(): Promise<void> {
-  const row = await db.select().from(appState).where(eq(appState.key, BUDGET_KEY)).limit(1);
-  if (row.length === 0) return;
-  const items = row[0].value as any[];
-  if (!Array.isArray(items) || items.length === 0) return;
-  let touched = false;
-  const next = items.map(it => {
-    if (!it || typeof it !== "object") return it;
-    if (!it.subEventId) {
-      touched = true;
-      return { ...it, subEventId: DEFAULT_SUB_EVENT_ID };
-    }
-    return it;
-  });
-  if (touched) {
-    await db.insert(appState)
-      .values({ key: BUDGET_KEY, value: next, updatedAt: new Date() })
-      .onConflictDoUpdate({
-        target: appState.key,
-        set: { value: next, updatedAt: new Date() },
-      });
-  }
 }
 
 router.get("/sub-events", async (req, res) => {

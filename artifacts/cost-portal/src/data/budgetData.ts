@@ -90,10 +90,19 @@ export function deriveDia(item: DiaSource): DiaValue {
   // Recurring cost across more than one day => both days
   const dias = Number(item.qtyDias) || 1;
   if (item.porDias === "SI" && dias >= 2) return "ambos";
-  // Fall back to the sub-event grouping
+  // Fall back to the sub-event grouping for the two day-named sub-events.
   if (item.subEventId === "dia-1") return "dia-1";
   if (item.subEventId === "dia-2") return "dia-2";
-  return "dia-2";
+  // No day signal at all (unassigned, or a non-day sub-event like Lanzamiento /
+  // Cena VIP). A per-day item that does NOT recur (qtyDias < 2) must stay on a
+  // single day — returning "ambos" would silently double its cost via
+  // dayCountForDia in recalcItem. Only the explicit multi-day branch above may
+  // promote to "ambos".
+  if (item.porDias === "SI") return "dia-2";
+  // Truly unassigned, non-recurring: spans/unspecified. No cost impact
+  // (dayCount only applies when porDias === "SI"); surfaces visibly as "Ambos"
+  // instead of silently claiming Día 2. The user can still pin an explicit day.
+  return "ambos";
 }
 
 export function dayCountForDia(dia: DiaValue): number {

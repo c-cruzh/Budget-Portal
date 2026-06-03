@@ -5,3 +5,4 @@
 - [Volunteer roles extraction](volunteer-roles-extraction.md) — unpaid PERSONA staffing slots live in Voluntarios roster, not budget; $0 predicate keeps totals stable; strip in 3 places.
 - [Dual budget tabs](dual-budget-storage.md) — Final (/budget-final, empty, all orgs) & legacy (/budget, seed, C2-only) share one component/hook/route factory via per-instance config; separate app_state keys.
 - [Spaces catalog structured](spaces-catalog-structured.md) — Espacios tab stores structured entries (zone+aforo) as source of truth; legacy Budget picker name arrays + capacities are derived; seed only when empty.
+- [Budget seed/backfill persistence](budget-seed-persistence.md) — DB is sole source of truth for legacy budget; never backfill subEventId or overwrite from seed; deriveDia "ambos" fallback must not double porDias cost.

@@ -74,32 +74,10 @@ export function useBudgetApi(
           }
 
           if (hasServerItems) {
-            const appliedVersion = localStorage.getItem("seed-version-applied");
-            if (appliedVersion !== SEED_VERSION) {
-              try {
-                const seedRes = await fetch(import.meta.env.BASE_URL + "seed-data.json");
-                if (seedRes.ok) {
-                  const seedItems = await seedRes.json();
-                  if (Array.isArray(seedItems) && seedItems.length > 0) {
-                    const seedStr = JSON.stringify(seedItems);
-                    const dbStr = JSON.stringify(data.items);
-                    if (seedStr.length > dbStr.length) {
-                      console.log("Seed data is newer, syncing to server...");
-                      const recalcedSeed = recalcFn ? seedItems.map(recalcFn) : seedItems;
-                      await saveFullToServer(recalcedSeed);
-                      setItemsState(recalcedSeed);
-                      localStorage.setItem("seed-version-applied", SEED_VERSION);
-                      initialLoadDone.current = true;
-                      setLoading(false);
-                      return;
-                    }
-                  }
-                }
-              } catch (seedErr) {
-                console.warn("Could not load seed data:", seedErr);
-              }
-              localStorage.setItem("seed-version-applied", SEED_VERSION);
-            }
+            // The server (DB) is the source of truth. Never overwrite stored
+            // items from the bundled seed — doing so would wipe manual edits
+            // such as sub-event assignments. The seed is only used to populate
+            // an empty DB (the branch below).
             const recalced = recalcFn ? data.items.map(recalcFn) : data.items;
             setItemsState(recalced);
           } else {

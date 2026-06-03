@@ -3,7 +3,6 @@ import { db, appState, withRetry } from "@workspace/db";
 import { users } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { getAuditUser, writeAuditEntries, diffBudgetItems } from "../lib/audit";
-import { ensureBudgetSubEventDefaults } from "./sub-events";
 import { ensureVolunteersExtracted } from "./volunteers";
 
 const router: IRouter = Router();
@@ -33,7 +32,6 @@ function registerBudgetRoutes(cfg: BudgetRouteConfig) {
   router.get(path, async (_req, res) => {
     try {
       if (runBackfills) {
-        try { await ensureBudgetSubEventDefaults(); } catch (e) { console.error("backfill subEventId failed:", e); }
         try { await ensureVolunteersExtracted(); } catch (e) { console.error("volunteer extraction failed:", e); }
       }
       const [row, metaRow] = await withRetry(() => Promise.all([
