@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard, TableProperties, Plane, Bus, Menu, X, ChevronRight,
   Wine, Coffee, Sandwich, LogOut, Info, Eye, MessageSquare, Pencil,
-  HandCoins, History, Calendar, BedDouble, ListChecks
+  HandCoins, History, Calendar, BedDouble, ListChecks, Truck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -16,6 +16,7 @@ import BudgetPage from "@/pages/BudgetPage";
 import GroundTransportPage from "@/pages/GroundTransportPage";
 import AerialTransportPage from "@/pages/AerialTransportPage";
 import HotelPage from "@/pages/HotelPage";
+import MontajePage from "@/pages/MontajePage";
 import CoctelPage from "@/pages/CoctelPage";
 import BarBebidasPage from "@/pages/BarBebidasPage";
 import LunchPage from "@/pages/LunchPage";
@@ -42,6 +43,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: "/travel/ground", label: "Ground Transport", icon: Bus },
   { path: "/travel/aerial", label: "Flights / Vuelos SAL", icon: Plane },
   { path: "/hotel", label: "Hotel / Acomodaciones SAL", icon: BedDouble },
+  { path: "/montaje", label: "Montaje / Desmontaje", icon: Truck },
   { path: "/coctel", label: "Networking Cocktail Day 2", icon: Wine },
   { path: "/bar-bebidas", label: "Bar & Bebidas", icon: Coffee, deprecated: true },
   { path: "/lunch", label: "Lunch & Coffee Breaks", icon: Sandwich, deprecated: true },
@@ -332,6 +334,7 @@ function AppRouter() {
       <Route path="/travel/ground" component={() => <Layout><GroundTransportPage /></Layout>} />
       <Route path="/travel/aerial" component={() => <Layout><AerialTransportPage /></Layout>} />
       <Route path="/hotel" component={() => <Layout><HotelPage /></Layout>} />
+      <Route path="/montaje" component={() => <Layout><MontajePage /></Layout>} />
       <Route path="/travel"><Redirect to="/travel/ground" /></Route>
       <Route path="/coctel" component={() => <Layout><CoctelPage /></Layout>} />
       <Route path="/bar-bebidas" component={() => <Layout><BarBebidasPage /></Layout>} />
