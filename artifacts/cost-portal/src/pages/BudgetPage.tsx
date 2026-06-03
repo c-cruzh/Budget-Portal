@@ -2432,7 +2432,35 @@ export default function BudgetPage({
         onExportCsv={bulkExportCsv}
         onSetStatus={(s) => bulkUpdate(it => ({ ...it, statusCotizacion: s }))}
         onSetProveedor={(p) => bulkUpdate(it => ({ ...it, proveedor: p }))}
-        onToggleFlag={(flag, on) => bulkUpdate(it => ({ ...it, [flag]: on } as BudgetItem))}
+        onToggleFlag={(flag, on) => {
+          const reviewerName = user?.name || "Unknown";
+          bulkUpdate(it => {
+            switch (flag) {
+              case "reviewed":
+                return { ...it, reviewedBy: on ? reviewerName : "" };
+              case "aplicaFee":
+                return { ...it, aplicaFee: on ? "SI" : "NO" };
+              case "porDias":
+                return { ...it, porDias: on ? "SI" : "NO" };
+              default:
+                return { ...it, [flag]: on } as BudgetItem;
+            }
+          });
+          const labels: Record<string, string> = {
+            inKind: "In-Kind",
+            validarCosto: "Validar costo",
+            contratarAparte: "Contratar aparte",
+            reviewed: "Reviewed",
+            aplicaFee: "Aplica Fee",
+            porDias: "Por Días",
+            accionRequerida: "Acción Requerida",
+            soloPresupuestado: "Solo Presupuestado",
+          };
+          toast({
+            title: on ? `${labels[flag]} marcado` : `${labels[flag]} quitado`,
+            description: `${selectedIds.size} item${selectedIds.size === 1 ? "" : "s"} actualizado${selectedIds.size === 1 ? "" : "s"}`,
+          });
+        }}
         onMoveArea={(a) => bulkUpdate(it => ({ ...it, area: a }))}
         onMoveCentro={(c) => bulkUpdate(it => ({ ...it, centroCosto: c }))}
         onSplitByDay={() => setBulkSplitOpen(true)}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trash2, X, Download, Tag, ShieldAlert, AlertTriangle, MoveRight, ChevronDown, Columns2, SendHorizontal } from "lucide-react";
+import { Trash2, X, Download, Tag, ShieldAlert, AlertTriangle, MoveRight, ChevronDown, Columns2, SendHorizontal, CheckCircle2, Percent, CalendarDays, Zap, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -12,6 +12,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+export type BulkFlag =
+  | "inKind"
+  | "validarCosto"
+  | "contratarAparte"
+  | "reviewed"
+  | "aplicaFee"
+  | "porDias"
+  | "accionRequerida"
+  | "soloPresupuestado";
+
 export interface BulkActionsProps {
   count: number;
   onClear: () => void;
@@ -19,7 +29,7 @@ export interface BulkActionsProps {
   onExportCsv: () => void;
   onSetStatus: (status: string) => void;
   onSetProveedor: (proveedor: string) => void;
-  onToggleFlag: (flag: "inKind" | "validarCosto" | "contratarAparte", on: boolean) => void;
+  onToggleFlag: (flag: BulkFlag, on: boolean) => void;
   onMoveArea: (area: string) => void;
   onMoveCentro: (centro: string) => void;
   onSplitByDay: () => void;
@@ -231,7 +241,7 @@ function SimplePicker({
 function FlagPicker({
   onToggle,
 }: {
-  onToggle: (flag: "inKind" | "validarCosto" | "contratarAparte", on: boolean) => void;
+  onToggle: (flag: BulkFlag, on: boolean) => void;
 }) {
   return (
     <Popover>
@@ -242,11 +252,16 @@ function FlagPicker({
           <ChevronDown className="w-3 h-3" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-56 p-1" align="start">
+      <PopoverContent className="w-60 p-1" align="start">
         {([
           { key: "inKind", label: "In-Kind", Icon: Tag },
           { key: "validarCosto", label: "Validar costo", Icon: AlertTriangle },
           { key: "contratarAparte", label: "Contratar aparte", Icon: ShieldAlert },
+          { key: "reviewed", label: "Reviewed", Icon: CheckCircle2 },
+          { key: "aplicaFee", label: "Aplica Fee", Icon: Percent },
+          { key: "porDias", label: "Por Días", Icon: CalendarDays },
+          { key: "accionRequerida", label: "Acción Requerida", Icon: Zap },
+          { key: "soloPresupuestado", label: "Solo Presupuestado", Icon: FileText },
         ] as const).map(({ key, label, Icon }) => (
           <div key={key} className="flex items-center justify-between px-2 py-1 text-xs">
             <span className="flex items-center gap-1.5">
