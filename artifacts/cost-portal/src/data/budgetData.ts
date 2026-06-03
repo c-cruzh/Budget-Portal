@@ -333,28 +333,181 @@ export const AVIANCA_ROUTES: AviancaRoute[] = [
   { id: "a4", grupo: "Medellín ⇄ San Salvador (SAL)", clase: "Business Flex", asientos: 1, costoPorPasajero: 903.93, costoTotal: 903.93 },
 ];
 
-export interface TransferItem {
-  id: string;
-  tipo: string;
-  grupo: string | number;
-  detalle: string;
-  hora: string;
-  pasajeros: number;
-  origen: string;
-  destino: string;
-  vehiculo: string;
-  vehiculos: number;
-  costoSinIva: number;
+// ── Ground Transport (SAL ⇄ Hyatt) — rebuilt from the transport snapshot ──
+// Generado 2026-06-03 · migración 60 min · llegada al aeropuerto 3h antes · IVA 13%
+
+export const GROUND_IVA_RATE = 0.13;
+export const MIGRATION_MIN = 60; // airport migration buffer after landing
+export const AIRPORT_LEAD_MIN = 180; // arrive at airport 3h before flight
+
+export type VehicleType = "Hiace" | "Sedan" | "Traverse";
+
+// Base unit prices (before IVA), in USD
+export const VEHICLE_UNIT_PRICES: Record<VehicleType, number> = {
+  Hiace: 65,
+  Sedan: 40,
+  Traverse: 95,
+};
+
+// Comfortable passenger capacity per vehicle type (drives the utilization bar)
+export const VEHICLE_CAPACITY: Record<VehicleType, number> = {
+  Hiace: 7,
+  Sedan: 5,
+  Traverse: 5,
+};
+
+export interface VehicleAssignment {
+  type: VehicleType;
+  pax: number;
+  maletas?: number;
+  carry?: number;
+  dobleEquipaje?: boolean;
 }
 
-export const TRANSFER_ITEMS: TransferItem[] = [
-  { id: "t1", tipo: "ARRIVALS", grupo: 1, detalle: "Colombia + México", hora: "4:00 p.m. + 7:05 p.m.", pasajeros: 6, origen: "Aeropuerto SAL", destino: "Hyatt Centric San Salvador", vehiculo: "Toyota Hiace", vehiculos: 1, costoSinIva: 65 },
-  { id: "t2", tipo: "ARRIVALS", grupo: 2, detalle: "Boston", hora: "8:15 p.m.", pasajeros: 14, origen: "Aeropuerto SAL", destino: "Hyatt Centric San Salvador", vehiculo: "Toyota Hiace", vehiculos: 2, costoSinIva: 130 },
-  { id: "t3", tipo: "ARRIVALS", grupo: 3, detalle: "San Francisco", hora: "8:50 p.m.", pasajeros: 11, origen: "Aeropuerto SAL", destino: "Hyatt Centric San Salvador", vehiculo: "Toyota Hiace", vehiculos: 2, costoSinIva: 130 },
-  { id: "t4", tipo: "IN-CITY", grupo: "Rehearsals", detalle: "Ida + Regreso", hora: "2:30 p.m. / 6:15 p.m.", pasajeros: 0, origen: "Hyatt Centric", destino: "ESEN", vehiculo: "Toyota Hiace", vehiculos: 3, costoSinIva: 435 },
-  { id: "t5", tipo: "IN-CITY", grupo: "Día 1 evento", detalle: "Ida + Regreso", hora: "6:45 a.m. / 7:30 p.m.", pasajeros: 0, origen: "Hyatt Centric", destino: "ESEN", vehiculo: "Toyota Hiace", vehiculos: 3, costoSinIva: 435 },
-  { id: "t6", tipo: "IN-CITY", grupo: "Día 2 evento", detalle: "Ida + Cena VIP + Retorno", hora: "6:45 a.m. / 7:30 p.m. / 10:30 p.m.", pasajeros: 0, origen: "Hyatt Centric", destino: "ESEN / Monarca", vehiculo: "Toyota Hiace", vehiculos: 3, costoSinIva: 435 },
-  { id: "t7", tipo: "DEPARTURES", grupo: 1, detalle: "Boston", hora: "7:45 a.m. vuelo / 4:00 a.m. salida", pasajeros: 14, origen: "Hyatt Centric", destino: "Aeropuerto SAL", vehiculo: "Toyota Hiace", vehiculos: 2, costoSinIva: 130 },
-  { id: "t8", tipo: "DEPARTURES", grupo: 2, detalle: "México + Medellín", hora: "9:05 a.m. vuelo / 5:00 a.m. salida", pasajeros: 6, origen: "Hyatt Centric", destino: "Aeropuerto SAL", vehiculo: "Toyota Hiace", vehiculos: 1, costoSinIva: 65 },
-  { id: "t9", tipo: "DEPARTURES", grupo: 3, detalle: "San Francisco", hora: "6:15 p.m. vuelo / 2:30 p.m. salida", pasajeros: 11, origen: "Hyatt Centric", destino: "Aeropuerto SAL", vehiculo: "Toyota Hiace", vehiculos: 2, costoSinIva: 130 },
-];
+export interface ArrivalGroup {
+  id: string;
+  label: string; // e.g. "Grupo A · SFO"
+  cabin?: string; // e.g. "Economy" | "Business"
+  pax: number;
+  maletas: number;
+  fecha: string; // e.g. "17 Nov"
+  aterriza: string; // landing time "HH:MM"
+  wazeMin: number;
+  vehicles: VehicleAssignment[];
+}
+
+export interface DepartureGroup {
+  id: string;
+  label: string;
+  cabin?: string;
+  pax: number;
+  maletas: number;
+  fecha: string;
+  vuelo: string; // flight time "HH:MM"
+  nota?: string; // extra context (e.g. combined groups)
+  wazeMin: number;
+  vehicles: VehicleAssignment[];
+}
+
+export interface LocalSegment {
+  id: string;
+  ruta: string; // "Hyatt → ESEN"
+  fecha: string;
+  nota: string;
+  wazeMin: number;
+  salir: string; // "HH:MM"
+  llegar: string; // display string, may include "(límite)"
+  objetivo?: string; // target time for on-time check, e.g. "19:00"
+  llegarMin?: number; // numeric arrival minutes for on-time comparison
+  vehicles: VehicleAssignment[];
+}
+
+export interface FreeTimeDay {
+  label: string; // "17 Nov · 8:00–22:00"
+  minutes: number;
+}
+
+export interface FreeTimeGroup {
+  id: string;
+  label: string;
+  cabin?: string;
+  pax: number;
+  maletas: number;
+  days: FreeTimeDay[];
+  ideas: string;
+}
+
+export interface GroundTransportData {
+  arrivals: ArrivalGroup[];
+  departures: DepartureGroup[];
+  localSegments: LocalSegment[];
+  freeTime: FreeTimeGroup[];
+}
+
+const IDEAS_FULL = `10-11:30am tour de palacio nacional
+lunch por ahi en algun lado - quien paga esto (12-1pm)
+1:30-3:00pm tour de binaes
+break en hotel despues y en la tarde noche llevarlos al tunco/la cajita?
+back home early or not so early flexibility (quien paga food and drinks?)
+
+todos el 18 slow morning free relax time y lunch to be covered`;
+
+const IDEAS_SHORT = `llegan solo a comer/dormir
+todos el 18 slow morning free relax time y lunch to be covered`;
+
+export const GROUND_TRANSPORT_DATA: GroundTransportData = {
+  arrivals: [
+    { id: "arr-a", label: "Grupo A · SFO", pax: 7, maletas: 7, fecha: "17 Nov", aterriza: "20:50", wazeMin: 50, vehicles: [
+      { type: "Hiace", pax: 7, maletas: 7, carry: 7 },
+    ] },
+    { id: "arr-b-eco", label: "Grupo B · BOS Economy", cabin: "Economy", pax: 8, maletas: 8, fecha: "16 Nov", aterriza: "20:15", wazeMin: 50, vehicles: [
+      { type: "Hiace", pax: 7, maletas: 7, carry: 7 },
+      { type: "Sedan", pax: 1, maletas: 1, carry: 1 },
+    ] },
+    { id: "arr-b-bus", label: "Grupo B · BOS Business", cabin: "Business", pax: 3, maletas: 6, fecha: "16 Nov", aterriza: "20:15", wazeMin: 50, vehicles: [
+      { type: "Traverse", pax: 3, maletas: 6, carry: 3, dobleEquipaje: true },
+    ] },
+    { id: "arr-c", label: "Grupo C · MEX", pax: 5, maletas: 5, fecha: "17 Nov", aterriza: "19:05", wazeMin: 50, vehicles: [
+      { type: "Hiace", pax: 5, maletas: 5, carry: 5 },
+    ] },
+    { id: "arr-d", label: "Grupo D · MDE", pax: 1, maletas: 1, fecha: "17 Nov", aterriza: "16:00", wazeMin: 50, vehicles: [
+      { type: "Sedan", pax: 1, maletas: 1, carry: 1 },
+    ] },
+  ],
+  departures: [
+    { id: "dep-a", label: "Grupo A · SFO", pax: 7, maletas: 7, fecha: "20 Nov", vuelo: "07:45", wazeMin: 50, vehicles: [
+      { type: "Hiace", pax: 7, maletas: 7, carry: 7 },
+    ] },
+    { id: "dep-b-eco", label: "Grupo B · BOS Economy", cabin: "Economy", pax: 8, maletas: 8, fecha: "20 Nov", vuelo: "07:45", wazeMin: 50, vehicles: [
+      { type: "Hiace", pax: 7, maletas: 7, carry: 7 },
+      { type: "Sedan", pax: 1, maletas: 1, carry: 1 },
+    ] },
+    { id: "dep-b-bus", label: "Grupo B · BOS Business", cabin: "Business", pax: 3, maletas: 6, fecha: "20 Nov", vuelo: "07:45", wazeMin: 50, vehicles: [
+      { type: "Traverse", pax: 3, maletas: 6, carry: 3, dobleEquipaje: true },
+    ] },
+    { id: "dep-cd", label: "Grupo C + D · MEX + MDE", pax: 6, maletas: 6, fecha: "20 Nov", vuelo: "09:05", nota: "C: MEX 09:05 · 5 pax  —  D: MDE 09:05 · 1 pax", wazeMin: 50, vehicles: [
+      { type: "Hiace", pax: 6, maletas: 6, carry: 6 },
+    ] },
+  ],
+  localSegments: [
+    { id: "loc-1", ruta: "Hyatt → ESEN", fecha: "18 Nov", nota: "Estar en ESEN 14:00 como tarde", wazeMin: 20, salir: "13:40", llegar: "14:00 (límite)", vehicles: [
+      { type: "Hiace", pax: 12 }, { type: "Hiace", pax: 12 },
+    ] },
+    { id: "loc-2", ruta: "ESEN → Il Buon Gustaio", fecha: "18 Nov", nota: "Evento termina 18:30 → cena 19:00", wazeMin: 20, salir: "18:30", llegar: "18:50", objetivo: "19:00", llegarMin: 18 * 60 + 50, vehicles: [
+      { type: "Hiace", pax: 12 }, { type: "Hiace", pax: 12 },
+    ] },
+    { id: "loc-3", ruta: "Il Buon Gustaio → Hyatt", fecha: "18 Nov", nota: "Cena termina 21:30–22:00", wazeMin: 20, salir: "21:30", llegar: "21:50", vehicles: [
+      { type: "Hiace", pax: 12 }, { type: "Hiace", pax: 12 },
+    ] },
+    { id: "loc-4", ruta: "Hyatt → ESEN", fecha: "19 Nov", nota: "Estar en ESEN 07:30 como tarde", wazeMin: 20, salir: "07:10", llegar: "07:30 (límite)", vehicles: [
+      { type: "Hiace", pax: 12 }, { type: "Hiace", pax: 12 },
+    ] },
+    { id: "loc-5", ruta: "ESEN → Monarca", fecha: "19 Nov", nota: "Salir 18:30 de ESEN → Monarca 19:00", wazeMin: 20, salir: "18:30", llegar: "18:50", objetivo: "19:00", llegarMin: 18 * 60 + 50, vehicles: [
+      { type: "Hiace", pax: 12 }, { type: "Hiace", pax: 12 },
+    ] },
+    { id: "loc-6", ruta: "Monarca → Hyatt", fecha: "19 Nov", nota: "Cena termina 21:30", wazeMin: 20, salir: "21:30", llegar: "21:50", vehicles: [
+      { type: "Hiace", pax: 12 }, { type: "Hiace", pax: 12 },
+    ] },
+  ],
+  freeTime: [
+    { id: "ft-b-eco", label: "Grupo B · BOS Economy", cabin: "Economy", pax: 8, maletas: 8, days: [
+      { label: "17 Nov · 8:00–22:00", minutes: 14 * 60 },
+      { label: "18 Nov · 8:00–13:40", minutes: 5 * 60 + 40 },
+    ], ideas: IDEAS_FULL },
+    { id: "ft-b-bus", label: "Grupo B · BOS Business", cabin: "Business", pax: 3, maletas: 6, days: [
+      { label: "17 Nov · 8:00–22:00", minutes: 14 * 60 },
+      { label: "18 Nov · 8:00–13:40", minutes: 5 * 60 + 40 },
+    ], ideas: IDEAS_FULL },
+    { id: "ft-d", label: "Grupo D · MDE", pax: 1, maletas: 1, days: [
+      { label: "17 Nov · 17:50–22:00", minutes: 4 * 60 + 10 },
+      { label: "18 Nov · 8:00–13:40", minutes: 5 * 60 + 40 },
+    ], ideas: IDEAS_SHORT },
+    { id: "ft-c", label: "Grupo C · MEX", pax: 5, maletas: 5, days: [
+      { label: "17 Nov · 20:55–22:00", minutes: 1 * 60 + 5 },
+      { label: "18 Nov · 8:00–13:40", minutes: 5 * 60 + 40 },
+    ], ideas: IDEAS_SHORT },
+    { id: "ft-a", label: "Grupo A · SFO", pax: 7, maletas: 7, days: [
+      { label: "18 Nov · 8:00–13:40", minutes: 5 * 60 + 40 },
+    ], ideas: IDEAS_SHORT },
+  ],
+};

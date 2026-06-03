@@ -39,7 +39,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: "/", label: "Overview", icon: LayoutDashboard },
   { path: "/budget", label: "Budget Items", icon: TableProperties },
   { path: "/agenda", label: "Agenda", icon: Calendar },
-  { path: "/travel/ground", label: "Ground Transport", icon: Bus, deprecated: true },
+  { path: "/travel/ground", label: "Ground Transport", icon: Bus },
   { path: "/travel/aerial", label: "Flights / Vuelos SAL", icon: Plane },
   { path: "/hotel", label: "Hotel / Acomodaciones SAL", icon: BedDouble },
   { path: "/coctel", label: "Networking Cocktail Day 2", icon: Wine },
