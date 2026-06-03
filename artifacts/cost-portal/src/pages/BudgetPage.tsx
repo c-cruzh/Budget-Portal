@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, Info,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
-  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus, MapPin
+  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus, MapPin, Lock
 } from "lucide-react";
 import { CreateTaskFromItemDialog } from "@/components/CreateTaskFromItemDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -178,6 +178,17 @@ function getFeeProductora(item: BudgetItem): number {
   return item.fee > 0 ? item.fee : (item.feeIncluido || 0);
 }
 
+function RedactedMark() {
+  return (
+    <span
+      className="inline-flex items-center justify-center text-muted-foreground/40"
+      title="Costo oculto"
+    >
+      <Lock className="w-3 h-3" />
+    </span>
+  );
+}
+
 function DiaCell({ dia, canEdit, onChange }: { dia: DiaValue; canEdit: boolean; onChange: (v: DiaValue) => void }) {
   const badge = (
     <span
@@ -229,6 +240,12 @@ export default function BudgetPage() {
   const canEdit = permissions.canEdit;
   const canComment = permissions.canComment;
   const canEditTaxonomy = (user?.organization || "") === "C2 LABS";
+  const redactMode = (user?.organization || "") === "AURORA360";
+  const isAuroraOwned = useCallback((it: BudgetItem) => {
+    if (it.agencyFee === true) return true;
+    const p = (it.proveedor || "").toUpperCase().replace(/\s+/g, "");
+    return p.includes("AURORA360");
+  }, []);
   const [search, setSearch] = useState("");
   const [portalUsers, setPortalUsers] = useState<PortalUser[]>([]);
   const [filterSubEvents, setFilterSubEvents] = useState<Set<string>>(new Set());
@@ -1003,16 +1020,19 @@ export default function BudgetPage() {
       "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "SOLO PRESUPUESTADO?", "IMAGEN DE REFERENCIA", "PROVEEDOR",
       "REVIEWED BY", "VALIDAR COSTO?", "CONTRATAR APARTE?", "ACCIÓN REQUERIDA?", "NICE TO HAVE?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO", "STATUS COTIZACION"
     ];
-    const rows = filtered.map(i => [
-      subEventName(i.subEventId), i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
-      i.inKind ? "SI" : "NO", i.agencyFee ? "SI" : "NO", i.qty, i.uom, DIA_LABELS[deriveDia(i)],
-      i.espacioDia1 || "", i.espacioDia2 || "",
-      i.porDias, i.qtyDias, i.precioUnitario, i.subtotal, i.agencyFee ? "SI" : "NO",
-      i.aplicaFee, i.fee, i.subtotalConFee, i.iva, i.total, i.cotizacion, i.soloPresupuestado ? "SI" : "NO", i.documento,
-      i.proveedor || "", i.reviewedBy || "", i.validarCosto ? "SI" : "NO", i.contratarAparte ? "SI" : "NO",
-      i.accionRequerida ? "SI" : "NO", i.niceToHave ? "SI" : "NO", i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || "", i.statusCotizacion || "",
-      i.aplicaTurismo ? "SI" : "NO", i.turismo || 0, i.feeIncluido || 0
-    ]);
+    const rows = filtered.map(i => {
+      const redact = redactMode && !isAuroraOwned(i);
+      return [
+        subEventName(i.subEventId), i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
+        i.inKind ? "SI" : "NO", i.agencyFee ? "SI" : "NO", i.qty, i.uom, DIA_LABELS[deriveDia(i)],
+        i.espacioDia1 || "", i.espacioDia2 || "",
+        i.porDias, i.qtyDias, redact ? "" : i.precioUnitario, redact ? "" : i.subtotal, i.agencyFee ? "SI" : "NO",
+        i.aplicaFee, redact ? "" : i.fee, redact ? "" : i.subtotalConFee, redact ? "" : i.iva, redact ? "" : i.total, i.cotizacion, i.soloPresupuestado ? "SI" : "NO", i.documento,
+        i.proveedor || "", i.reviewedBy || "", i.validarCosto ? "SI" : "NO", i.contratarAparte ? "SI" : "NO",
+        i.accionRequerida ? "SI" : "NO", i.niceToHave ? "SI" : "NO", i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || "", i.statusCotizacion || "",
+        i.aplicaTurismo ? "SI" : "NO", redact ? "" : (i.turismo || 0), redact ? "" : (i.feeIncluido || 0)
+      ];
+    });
     const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -1667,7 +1687,9 @@ export default function BudgetPage() {
                         )}
                       </td>
                       <td data-col="precioUnit" className="px-2 py-1.5 text-right align-top font-mono">
-                        {item.quotes && item.quotes.length > 0 ? (
+                        {redactMode && !isAuroraOwned(item) ? (
+                          <RedactedMark />
+                        ) : item.quotes && item.quotes.length > 0 ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <span className="inline-flex items-center gap-1 text-right font-mono text-xs text-emerald-700 cursor-help">
@@ -1686,7 +1708,7 @@ export default function BudgetPage() {
                         )}
                       </td>
                       <td data-col="subtotal" className="px-2 py-1.5 text-right align-top font-mono text-muted-foreground">
-                        {item.subtotal > 0 ? formatUSD(item.subtotal) : "--"}
+                        {redactMode && !isAuroraOwned(item) ? <RedactedMark /> : item.subtotal > 0 ? formatUSD(item.subtotal) : "--"}
                       </td>
                       <td data-col="viaProductora" className="px-1 py-1.5 text-center align-top">
                         <button
@@ -1721,7 +1743,9 @@ export default function BudgetPage() {
                         )}
                       </td>
                       <td data-col="fee" className="px-2 py-1.5 text-right align-top font-mono">
-                        {item.fee > 0 ? (
+                        {redactMode && !isAuroraOwned(item) ? (
+                          <RedactedMark />
+                        ) : item.fee > 0 ? (
                           <span className="text-muted-foreground">{formatUSD(item.fee)}</span>
                         ) : (item.feeIncluido || 0) > 0 ? (
                           <Tooltip>
@@ -1737,7 +1761,9 @@ export default function BudgetPage() {
                         )}
                       </td>
                       <td data-col="iva" className="px-2 py-1.5 text-right align-top">
-                        {item.exentoIva ? (
+                        {redactMode && !isAuroraOwned(item) ? (
+                          <RedactedMark />
+                        ) : item.exentoIva ? (
                           <button
                             onClick={canEdit ? () => { updateItem(item.id, "exentoIva", false); } : undefined}
                             className={cn("text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/20 font-medium", canEdit && "hover:bg-amber-500/20 transition-colors", !canEdit && "cursor-default")}
@@ -1757,7 +1783,9 @@ export default function BudgetPage() {
                         )}
                       </td>
                       <td data-col="turismo" className="px-2 py-1.5 text-right align-top">
-                        {item.aplicaTurismo ? (
+                        {redactMode && !isAuroraOwned(item) ? (
+                          <RedactedMark />
+                        ) : item.aplicaTurismo ? (
                           <button
                             onClick={canEdit ? () => { updateItem(item.id, "aplicaTurismo", false); } : undefined}
                             className={cn("text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-600 border border-cyan-500/20 font-medium font-mono", canEdit && "hover:bg-cyan-500/20 transition-colors", !canEdit && "cursor-default")}
@@ -1771,7 +1799,9 @@ export default function BudgetPage() {
                         )}
                       </td>
                       <td data-col="total" className="px-2 py-1.5 text-right align-top">
-                        {item.inKind ? (
+                        {redactMode && !isAuroraOwned(item) ? (
+                          <RedactedMark />
+                        ) : item.inKind ? (
                           <span className="text-amber-600 font-semibold text-xs">In-Kind</span>
                         ) : item.total > 0 ? (
                           <span className="font-semibold text-foreground font-mono text-xs">{formatUSD(item.total)}</span>
