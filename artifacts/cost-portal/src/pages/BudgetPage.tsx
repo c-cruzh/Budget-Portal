@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, Info,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
-  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus
+  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus, MapPin
 } from "lucide-react";
 import { CreateTaskFromItemDialog } from "@/components/CreateTaskFromItemDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,6 +24,7 @@ import { SpaceCapacityManager, type SpaceLoadInfo } from "@/components/budget/Sp
 import { useAuth } from "@/hooks/useAuth";
 import { ComboInput } from "@/components/ComboInput";
 import { SubEventsManagerDialog } from "@/components/SubEventsManagerDialog";
+import { SpacesManagerDialog } from "@/components/SpacesManagerDialog";
 import { SplitByDayDialog } from "@/components/SplitByDayDialog";
 import { BulkSplitByDayDialog } from "@/components/BulkSplitByDayDialog";
 import { toast } from "@/hooks/use-toast";
@@ -223,7 +224,7 @@ const SEED_ITEMS = INITIAL_BUDGET_ITEMS.map(recalcItem);
 export default function BudgetPage() {
   const { items, setItems, loading, error, meta, saveCommentOnly, patchItem, saveFull } = useBudgetApi(SEED_ITEMS, recalcItem);
   const { subEvents, setSubEvents } = useSubEventsApi();
-  const { spaces, addSpace, setCapacity } = useSpacesApi();
+  const { spaces, addSpace, setCapacity, renameSpace, removeSpace } = useSpacesApi();
   const { permissions, user } = useAuth();
   const canEdit = permissions.canEdit;
   const canComment = permissions.canComment;
@@ -232,6 +233,7 @@ export default function BudgetPage() {
   const [portalUsers, setPortalUsers] = useState<PortalUser[]>([]);
   const [filterSubEvents, setFilterSubEvents] = useState<Set<string>>(new Set());
   const [showSubEventsManager, setShowSubEventsManager] = useState(false);
+  const [showSpacesManager, setShowSpacesManager] = useState(false);
 
   const subEventMap = useMemo(() => {
     const m = new Map<string, SubEvent>();
@@ -872,6 +874,41 @@ export default function BudgetPage() {
     patchItem(id, field, value, true);
   }, [setItems, patchItem]);
 
+  const handleRenameSpace = useCallback((day: SpaceDayKey, oldName: string, newName: string) => {
+    const canonical = renameSpace(day, oldName, newName);
+    if (!canonical) return;
+    const field = day === "dia-1" ? "espacioDia1" : "espacioDia2";
+    setItems(prev => {
+      let changed = false;
+      const next = prev.map(it => {
+        if ((it[field] || "").trim().toLowerCase() === oldName.toLowerCase()) {
+          changed = true;
+          return { ...it, [field]: canonical };
+        }
+        return it;
+      });
+      if (changed) saveFull(next);
+      return next;
+    });
+  }, [renameSpace, setItems, saveFull]);
+
+  const handleDeleteSpace = useCallback((day: SpaceDayKey, name: string) => {
+    removeSpace(day, name);
+    const field = day === "dia-1" ? "espacioDia1" : "espacioDia2";
+    setItems(prev => {
+      let changed = false;
+      const next = prev.map(it => {
+        if ((it[field] || "").trim().toLowerCase() === name.toLowerCase()) {
+          changed = true;
+          return { ...it, [field]: "" };
+        }
+        return it;
+      });
+      if (changed) saveFull(next);
+      return next;
+    });
+  }, [removeSpace, setItems, saveFull]);
+
   const toggleArea = (key: string) => {
     setExpandedAreas(prev => {
       const next = new Set(prev);
@@ -1049,15 +1086,26 @@ export default function BudgetPage() {
             </TabsList>
           </Tabs>
           {canEdit && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSubEventsManager(true)}
-              className="h-7 gap-1.5 ml-auto"
-            >
-              <Settings className="w-3.5 h-3.5" />
-              Gestionar sub-eventos
-            </Button>
+            <div className="flex items-center gap-2 ml-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSubEventsManager(true)}
+                className="h-7 gap-1.5"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                Gestionar sub-eventos
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSpacesManager(true)}
+                className="h-7 gap-1.5"
+              >
+                <MapPin className="w-3.5 h-3.5" />
+                Gestionar espacios
+              </Button>
+            </div>
           )}
         </div>
       )}
@@ -2310,6 +2358,16 @@ export default function BudgetPage() {
         items={items}
         canEdit={canEditTaxonomy}
         onSave={setSubEvents}
+      />
+
+      <SpacesManagerDialog
+        open={showSpacesManager}
+        onOpenChange={setShowSpacesManager}
+        spaces={spaces}
+        items={items}
+        canEdit={canEdit}
+        onRename={handleRenameSpace}
+        onDelete={handleDeleteSpace}
       />
 
       <SplitByDayDialog

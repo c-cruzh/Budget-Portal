@@ -134,5 +134,71 @@ export function useSpacesApi() {
     });
   }, [persist]);
 
-  return { spaces, addSpace, setCapacity, loading, error };
+  // Renames a space within a day's catalog. Returns the canonical stored name
+  // (which may differ if a space with the new name already existed and the two
+  // are merged). Returns "" when the new name is empty or the old name is absent.
+  const renameSpace = useCallback((day: SpaceDayKey, oldName: string, newName: string): string => {
+    const trimmed = newName.trim();
+    if (!trimmed) return "";
+    let canonical = trimmed;
+    setSpacesState(prev => {
+      const list = prev[day];
+      const idx = list.findIndex(s => s.toLowerCase() === oldName.toLowerCase());
+      if (idx === -1) { canonical = ""; return prev; }
+      const replaced = list.map((s, i) => (i === idx ? trimmed : s));
+      const deduped = normalizeList(replaced).sort((a, b) => a.localeCompare(b));
+      const found = deduped.find(s => s.toLowerCase() === trimmed.toLowerCase());
+      if (found) canonical = found;
+      const caps = { ...(prev.capacities || {}) };
+      const next: SpacesCatalog = {
+        "dia-1": [...prev["dia-1"]],
+        "dia-2": [...prev["dia-2"]],
+        capacities: caps,
+      };
+      next[day] = deduped;
+      // Migrate the capacity entry only when the old name no longer exists on
+      // either day (capacity is shared across both days).
+      const stillExists =
+        next["dia-1"].some(s => s.toLowerCase() === oldName.toLowerCase()) ||
+        next["dia-2"].some(s => s.toLowerCase() === oldName.toLowerCase());
+      if (!stillExists) {
+        const capKey = Object.keys(caps).find(k => k.toLowerCase() === oldName.toLowerCase());
+        if (capKey != null) {
+          const val = caps[capKey];
+          delete caps[capKey];
+          const targetKey = Object.keys(caps).find(k => k.toLowerCase() === canonical.toLowerCase());
+          if (targetKey == null) caps[canonical] = val;
+        }
+      }
+      persist(next);
+      return next;
+    });
+    return canonical;
+  }, [persist]);
+
+  // Removes a space from a day's catalog (case-insensitive). Budget line cleanup
+  // is handled by the caller.
+  const removeSpace = useCallback((day: SpaceDayKey, name: string) => {
+    setSpacesState(prev => {
+      const caps = { ...(prev.capacities || {}) };
+      const next: SpacesCatalog = {
+        "dia-1": [...prev["dia-1"]],
+        "dia-2": [...prev["dia-2"]],
+        capacities: caps,
+      };
+      next[day] = prev[day].filter(s => s.toLowerCase() !== name.toLowerCase());
+      // Drop the capacity entry only when the space is gone from both days.
+      const stillExists =
+        next["dia-1"].some(s => s.toLowerCase() === name.toLowerCase()) ||
+        next["dia-2"].some(s => s.toLowerCase() === name.toLowerCase());
+      if (!stillExists) {
+        const capKey = Object.keys(caps).find(k => k.toLowerCase() === name.toLowerCase());
+        if (capKey != null) delete caps[capKey];
+      }
+      persist(next);
+      return next;
+    });
+  }, [persist]);
+
+  return { spaces, addSpace, setCapacity, renameSpace, removeSpace, loading, error };
 }
