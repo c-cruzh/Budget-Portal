@@ -145,10 +145,24 @@ function hasAnyEntries(catalog: SpacesCatalog): boolean {
 export async function ensureSpacesDefaults(): Promise<SpacesCatalog> {
   const row = await db.select().from(appState).where(eq(appState.key, SPACES_KEY)).limit(1);
   if (row.length > 0 && row[0].value && typeof row[0].value === "object" && !Array.isArray(row[0].value)) {
-    const normalized = normalizeCatalog(row[0].value);
-    if (hasAnyEntries(normalized)) return normalized;
+    const stored = row[0].value as any;
+    // Only an explicit structured `entries` payload counts as curated content
+    // from the Espacios tab — that always writes `entries`. A stored value that
+    // lacks `entries` is pre-Espacios legacy data (old flat name arrays that
+    // never carried Área/Zona), so we reseed it with the authoritative venue
+    // layout instead of migrating those obsolete names forward.
+    const hasStructuredEntries =
+      stored.entries && typeof stored.entries === "object" && !Array.isArray(stored.entries);
+    if (hasStructuredEntries) {
+      const normalized = normalizeCatalog(stored);
+      // Preserve a curated catalog only when it actually has entries; a
+      // structured-but-empty catalog falls through to reseed.
+      if (hasAnyEntries(normalized)) return normalized;
+    }
   }
-  // Empty (or never seeded): seed the faithful Día 1 / Día 2 layout.
+  // Empty, never seeded, or legacy/pre-Espacios shape: seed the faithful
+  // Día 1 / Día 2 layout. This is self-healing — once seeded (or once a user
+  // edits in the Espacios tab) the stored value has `entries` and is preserved.
   const seed = buildSpacesSeedEntries();
   const catalog = catalogFromEntries(seed["dia-1"], seed["dia-2"]);
   await db.insert(appState)
