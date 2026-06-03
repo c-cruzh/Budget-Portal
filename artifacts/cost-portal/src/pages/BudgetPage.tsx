@@ -21,11 +21,10 @@ import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useSubEventsApi } from "@/hooks/useSubEventsApi";
 import { useSpacesApi } from "@/hooks/useSpacesApi";
 import { SpaceCell } from "@/components/budget/SpaceCell";
-import { SpaceCapacityManager, type SpaceLoadInfo } from "@/components/budget/SpaceCapacityManager";
+import { SpacesSheet, type SpaceLoadInfo } from "@/components/budget/SpacesSheet";
 import { useAuth } from "@/hooks/useAuth";
 import { ComboInput } from "@/components/ComboInput";
 import { SubEventsManagerDialog } from "@/components/SubEventsManagerDialog";
-import { SpacesManagerDialog } from "@/components/SpacesManagerDialog";
 import { SplitByDayDialog } from "@/components/SplitByDayDialog";
 import { BulkSplitByDayDialog } from "@/components/BulkSplitByDayDialog";
 import { toast } from "@/hooks/use-toast";
@@ -251,7 +250,7 @@ export default function BudgetPage() {
   const [portalUsers, setPortalUsers] = useState<PortalUser[]>([]);
   const [filterSubEvents, setFilterSubEvents] = useState<Set<string>>(new Set());
   const [showSubEventsManager, setShowSubEventsManager] = useState(false);
-  const [showSpacesManager, setShowSpacesManager] = useState(false);
+  const [showSpacesSheet, setShowSpacesSheet] = useState(false);
 
   const subEventMap = useMemo(() => {
     const m = new Map<string, SubEvent>();
@@ -1116,15 +1115,6 @@ export default function BudgetPage() {
                 <Settings className="w-3.5 h-3.5" />
                 Gestionar sub-eventos
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowSpacesManager(true)}
-                className="h-7 gap-1.5"
-              >
-                <MapPin className="w-3.5 h-3.5" />
-                Gestionar espacios
-              </Button>
             </div>
           )}
         </div>
@@ -1207,13 +1197,15 @@ export default function BudgetPage() {
             <SelectContent>{centros.map(c => <SelectItem key={c} value={c}>{c === "ALL" ? "All Centers" : c}</SelectItem>)}</SelectContent>
           </Select>
           <div className="flex gap-2 ml-auto">
-            <SpaceCapacityManager
-              spaces={spaces}
-              loadInfo={spaceLoadInfo}
-              overCount={overCapacity.length}
-              canEdit={canEdit}
-              onSetCapacity={setCapacity}
-            />
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowSpacesSheet(true)}>
+              {overCapacity.length > 0 ? <AlertTriangle className="w-4 h-4 text-destructive" /> : <MapPin className="w-4 h-4" />}
+              Espacios
+              {overCapacity.length > 0 && (
+                <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-semibold">
+                  {overCapacity.length}
+                </span>
+              )}
+            </Button>
             <ColumnsMenu visible={visibleColumns} onChange={setVisibleColumns} density={density} onDensityChange={setDensity} />
             <BudgetHelpGuide />
             <Button variant="outline" size="sm" onClick={exportCSV} className="gap-2"><Download className="w-4 h-4" />Export CSV</Button>
@@ -2387,14 +2379,18 @@ export default function BudgetPage() {
         onSave={setSubEvents}
       />
 
-      <SpacesManagerDialog
-        open={showSpacesManager}
-        onOpenChange={setShowSpacesManager}
+      <SpacesSheet
+        open={showSpacesSheet}
+        onOpenChange={setShowSpacesSheet}
         spaces={spaces}
         items={items}
+        loadInfo={spaceLoadInfo}
+        overCount={overCapacity.length}
         canEdit={canEdit}
+        onAddSpace={addSpace}
         onRename={handleRenameSpace}
         onDelete={handleDeleteSpace}
+        onSetCapacity={setCapacity}
       />
 
       <SplitByDayDialog

@@ -62,7 +62,7 @@ function DaySpacePicker({ day, dayLabel, value, options, canEdit, over, onAssign
       <PopoverTrigger asChild>
         <button className="cursor-pointer hover:opacity-80 transition-opacity">{trigger}</button>
       </PopoverTrigger>
-      <PopoverContent className="w-52 p-1" align="start">
+      <PopoverContent className="min-w-[220px] p-1" align="start">
         <div className="max-h-56 overflow-y-auto">
           <button
             onClick={() => { onAssign(day, ""); setOpen(false); }}
