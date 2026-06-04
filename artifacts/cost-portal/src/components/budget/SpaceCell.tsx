@@ -3,13 +3,13 @@ import { MapPin, Plus, Check, AlertTriangle } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { DiaValue, SpaceDayKey } from "@/data/budgetData";
+import type { DiaValue, SpaceDayKey, SpaceOptionGroup } from "@/data/budgetData";
 
 interface DayPickerProps {
   day: SpaceDayKey;
   dayLabel: string;
   value?: string;
-  options: string[];
+  optionGroups: SpaceOptionGroup[];
   canEdit: boolean;
   over?: boolean;
   onAssign: (day: SpaceDayKey, value: string) => void;
@@ -17,7 +17,7 @@ interface DayPickerProps {
   showDayPrefix?: boolean;
 }
 
-function DaySpacePicker({ day, dayLabel, value, options, canEdit, over, onAssign, onAddSpace, showDayPrefix }: DayPickerProps) {
+function DaySpacePicker({ day, dayLabel, value, optionGroups, canEdit, over, onAssign, onAddSpace, showDayPrefix }: DayPickerProps) {
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -74,18 +74,29 @@ function DaySpacePicker({ day, dayLabel, value, options, canEdit, over, onAssign
             <span>Sin asignar</span>
             {!value && <Check className="w-3 h-3" />}
           </button>
-          {options.map(opt => (
-            <button
-              key={opt}
-              onClick={() => { onAssign(day, opt); setOpen(false); }}
-              className={cn(
-                "w-full flex items-center justify-between px-2 py-1.5 rounded text-xs hover:bg-muted",
-                opt === value && "bg-primary/10 text-primary"
-              )}
-            >
-              <span className="truncate text-left">{opt}</span>
-              {opt === value && <Check className="w-3 h-3 shrink-0" />}
-            </button>
+          {optionGroups.length === 0 && (
+            <p className="px-2 py-1.5 text-[11px] text-muted-foreground">Sin espacios disponibles</p>
+          )}
+          {optionGroups.map((group, gi) => (
+            <div key={`${group.lugar}-${group.zone}-${gi}`} className="mb-0.5">
+              <div className="px-2 pt-1.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-foreground/70">
+                {group.lugar}
+                <span className="ml-1 font-normal normal-case text-muted-foreground">· {group.zone}</span>
+              </div>
+              {group.names.map(opt => (
+                <button
+                  key={`${gi}-${opt}`}
+                  onClick={() => { onAssign(day, opt); setOpen(false); }}
+                  className={cn(
+                    "w-full flex items-center justify-between px-2 py-1.5 rounded text-xs hover:bg-muted",
+                    opt === value && "bg-primary/10 text-primary"
+                  )}
+                >
+                  <span className="truncate text-left">{opt}</span>
+                  {opt === value && <Check className="w-3 h-3 shrink-0" />}
+                </button>
+              ))}
+            </div>
           ))}
         </div>
         <div className="border-t border-border mt-1 pt-1">
@@ -126,8 +137,8 @@ interface SpaceCellProps {
   dia: DiaValue;
   espacioDia1?: string;
   espacioDia2?: string;
-  spacesDia1: string[];
-  spacesDia2: string[];
+  optionsDia1: SpaceOptionGroup[];
+  optionsDia2: SpaceOptionGroup[];
   canEdit: boolean;
   overDia1?: boolean;
   overDia2?: boolean;
@@ -135,11 +146,11 @@ interface SpaceCellProps {
   onAddSpace: (day: SpaceDayKey, name: string) => void;
 }
 
-export function SpaceCell({ dia, espacioDia1, espacioDia2, spacesDia1, spacesDia2, canEdit, overDia1, overDia2, onAssign, onAddSpace }: SpaceCellProps) {
+export function SpaceCell({ dia, espacioDia1, espacioDia2, optionsDia1, optionsDia2, canEdit, overDia1, overDia2, onAssign, onAddSpace }: SpaceCellProps) {
   if (dia === "dia-1") {
     return (
       <DaySpacePicker
-        day="dia-1" dayLabel="D1" value={espacioDia1} options={spacesDia1}
+        day="dia-1" dayLabel="D1" value={espacioDia1} optionGroups={optionsDia1}
         canEdit={canEdit} over={overDia1} onAssign={onAssign} onAddSpace={onAddSpace}
       />
     );
@@ -147,7 +158,7 @@ export function SpaceCell({ dia, espacioDia1, espacioDia2, spacesDia1, spacesDia
   if (dia === "dia-2") {
     return (
       <DaySpacePicker
-        day="dia-2" dayLabel="D2" value={espacioDia2} options={spacesDia2}
+        day="dia-2" dayLabel="D2" value={espacioDia2} optionGroups={optionsDia2}
         canEdit={canEdit} over={overDia2} onAssign={onAssign} onAddSpace={onAddSpace}
       />
     );
@@ -155,11 +166,11 @@ export function SpaceCell({ dia, espacioDia1, espacioDia2, spacesDia1, spacesDia
   return (
     <div className="flex flex-col gap-1 items-start">
       <DaySpacePicker
-        day="dia-1" dayLabel="D1" value={espacioDia1} options={spacesDia1}
+        day="dia-1" dayLabel="D1" value={espacioDia1} optionGroups={optionsDia1}
         canEdit={canEdit} over={overDia1} onAssign={onAssign} onAddSpace={onAddSpace} showDayPrefix
       />
       <DaySpacePicker
-        day="dia-2" dayLabel="D2" value={espacioDia2} options={spacesDia2}
+        day="dia-2" dayLabel="D2" value={espacioDia2} optionGroups={optionsDia2}
         canEdit={canEdit} over={overDia2} onAssign={onAssign} onAddSpace={onAddSpace} showDayPrefix
       />
     </div>

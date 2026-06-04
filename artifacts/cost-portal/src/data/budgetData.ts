@@ -181,8 +181,9 @@ export interface SpaceEntry {
  * A Lugar/Sede (physical venue): Hotel, Aeropuerto, restaurantes de cenas VIP,
  * BINAES, etc. Groups its own Áreas/Zonas + Espacios and is independent of the
  * ESEN Día 1 / Día 2 axis. A venue entry may carry an Área/Zona without an
- * assigned Espacio (empty `name`). Venues are NOT wired to the Budget space
- * picker or aforo alerts — they live only in the Espacios catalog.
+ * assigned Espacio (empty `name`). Venues feed the Budget space picker (filtered
+ * by their `subEventIds` association) and the aforo/capacity alerts, alongside
+ * the ESEN day entries.
  */
 export interface Venue {
   id: string;
@@ -190,6 +191,23 @@ export interface Venue {
   /** Optional descriptor, e.g. 'Cena VIP "Ania" (Día 1)' or "Lanzamiento". */
   subtitle?: string;
   entries: SpaceEntry[];
+  /**
+   * Sub-events this Lugar belongs to. When non-empty, the venue's Espacios are
+   * only offered in the Budget space picker for items in one of these
+   * sub-events. When empty/undefined the venue is treated as global (offered
+   * for every item), so legacy venues without an association stay visible.
+   */
+  subEventIds?: string[];
+}
+
+/** A grouped option for the Budget space picker: Lugar › Zona/Área › names. */
+export interface SpaceOptionGroup {
+  /** Lugar/Sede label, e.g. "ESEN", "Hotel". */
+  lugar: string;
+  /** Área/Zona heading. */
+  zone: string;
+  /** Espacio names under this zone (deduped, first-appearance order). */
+  names: string[];
 }
 
 export interface SpacesCatalog {
@@ -255,6 +273,20 @@ export function deriveCapacities(entries: SpaceEntry[]): Record<string, number> 
   return out;
 }
 
+/** Derives the name→aforo map from every Lugar/Sede venue (positive ints only). */
+export function deriveVenueCapacities(venues: Venue[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const v of venues) {
+    for (const e of v.entries) {
+      const name = (e.name || "").trim();
+      if (!name) continue;
+      const a = Number(e.aforo);
+      if (Number.isFinite(a) && a > 0) out[name] = Math.floor(a);
+    }
+  }
+  return out;
+}
+
 /** Builds a full catalog (legacy derived fields + entries + venues) from parts. */
 export function buildSpacesCatalog(
   entriesD1: SpaceEntry[],
@@ -264,10 +296,23 @@ export function buildSpacesCatalog(
   return {
     "dia-1": deriveSpaceNames(entriesD1),
     "dia-2": deriveSpaceNames(entriesD2),
-    capacities: { ...deriveCapacities(entriesD1), ...deriveCapacities(entriesD2) },
+    // ESEN capacities take precedence over a same-named venue space.
+    capacities: {
+      ...deriveVenueCapacities(venues),
+      ...deriveCapacities(entriesD1),
+      ...deriveCapacities(entriesD2),
+    },
     entries: { "dia-1": entriesD1, "dia-2": entriesD2 },
     venues,
   };
+}
+
+/** Whether a venue is offered for an item in the given sub-event. */
+export function venueMatchesSubEvent(venue: Venue, subEventId?: string): boolean {
+  const ids = venue.subEventIds;
+  if (!ids || ids.length === 0) return true; // unassociated = global
+  if (!subEventId) return false;
+  return ids.includes(subEventId);
 }
 
 /** Groups entries by zone, preserving first-appearance order (faithful to Excel). */
@@ -280,6 +325,62 @@ export function groupSpacesByZone(entries: SpaceEntry[]): [string, SpaceEntry[]]
     map.get(zone)!.push(e);
   }
   return order.map(z => [z, map.get(z)!]);
+}
+
+/** Pushes zone-grouped, deduped, named entries of one Lugar into `out`. */
+function pushOptionGroups(out: SpaceOptionGroup[], lugar: string, entries: SpaceEntry[]): void {
+  for (const [zone, zoneEntries] of groupSpacesByZone(entries)) {
+    const names: string[] = [];
+    const seen = new Set<string>();
+    for (const e of zoneEntries) {
+      const n = (e.name || "").trim();
+      if (!n) continue;
+      const k = n.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      names.push(n);
+    }
+    if (names.length) out.push({ lugar, zone, names });
+  }
+}
+
+/**
+ * Builds the grouped space options for a Budget item on a given day. Always
+ * includes the ESEN entries for that day (the main venue, kept for backward
+ * compatibility) plus the Espacios of every Lugar/Sede associated with the
+ * item's sub-event, grouped by Lugar › Zona/Área.
+ */
+export function spaceOptionGroupsForItem(
+  catalog: SpacesCatalog,
+  subEventId: string | undefined,
+  day: SpaceDayKey,
+): SpaceOptionGroup[] {
+  const out: SpaceOptionGroup[] = [];
+  pushOptionGroups(out, "ESEN", catalog.entries?.[day] ?? []);
+  for (const v of catalog.venues ?? []) {
+    if (!venueMatchesSubEvent(v, subEventId)) continue;
+    pushOptionGroups(out, v.name, v.entries);
+  }
+  return out;
+}
+
+/** Flat, deduped, sorted list of space names offered for an item on a day. */
+export function spaceNamesForItem(
+  catalog: SpacesCatalog,
+  subEventId: string | undefined,
+  day: SpaceDayKey,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const g of spaceOptionGroupsForItem(catalog, subEventId, day)) {
+    for (const n of g.names) {
+      const k = n.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(n);
+    }
+  }
+  return out.sort((a, b) => a.localeCompare(b));
 }
 
 export const INITIAL_BUDGET_ITEMS: BudgetItem[] = [

@@ -7,7 +7,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { useSpacesApi } from "@/hooks/useSpacesApi";
-import { groupSpacesByZone, type SpaceDayKey, type SpaceEntry, type Venue } from "@/data/budgetData";
+import { useSubEventsApi } from "@/hooks/useSubEventsApi";
+import { groupSpacesByZone, type SpaceDayKey, type SpaceEntry, type Venue, type SubEvent } from "@/data/budgetData";
 
 const DAYS: { key: SpaceDayKey; label: string }[] = [
   { key: "dia-1", label: "Día 1" },
@@ -25,6 +26,7 @@ export default function EspaciosPage() {
     addVenue, updateVenue, removeVenue,
     addVenueEntry, updateVenueEntry, removeVenueEntry, renameVenueZone, removeVenueZone,
   } = useSpacesApi();
+  const { subEvents } = useSubEventsApi();
 
   const entries = spaces.entries || { "dia-1": [], "dia-2": [] };
   const venues = spaces.venues || [];
@@ -75,7 +77,8 @@ export default function EspaciosPage() {
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
             Layout por Lugar/Sede › Área/Zona › Espacio (con aforo). La ESEN conserva su separación
             Día 1 / Día 2; los demás lugares (Hotel, Aeropuerto, restaurantes, BINAES) son independientes
-            del día. La ESEN sigue siendo la fuente del selector de espacios y las alertas de aforo del Budget.
+            del día. Todos los lugares alimentan el selector de espacios y las alertas de aforo del Budget:
+            cada lugar puede asociarse a uno o más subeventos para acotar dónde aparecen sus espacios.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -133,7 +136,7 @@ export default function EspaciosPage() {
           </div>
           <div className="min-w-0">
             <p className="font-semibold text-foreground text-sm truncate">{ESEN_TITLE}</p>
-            <p className="text-[11px] text-muted-foreground">Sede principal · Día 1 / Día 2</p>
+            <p className="text-[11px] text-muted-foreground">Sede principal · Día 1 / Día 2 · asociada automáticamente a los subeventos Día 1 y Día 2</p>
           </div>
           <Badge variant="secondary" className="ml-auto text-[10px] flex-shrink-0">Sede principal</Badge>
         </div>
@@ -160,6 +163,7 @@ export default function EspaciosPage() {
         <VenueSection
           key={v.id}
           venue={v}
+          subEvents={subEvents}
           canEdit={canEdit}
           onUpdateVenue={updateVenue}
           onRemoveVenue={removeVenue}
@@ -247,11 +251,12 @@ function DaySection({
 /* -------------------------------------------------------------------------- */
 
 function VenueSection({
-  venue, canEdit, onUpdateVenue, onRemoveVenue, onAddEntry, onUpdateEntry, onRemoveEntry, onRenameZone, onRemoveZone,
+  venue, subEvents, canEdit, onUpdateVenue, onRemoveVenue, onAddEntry, onUpdateEntry, onRemoveEntry, onRenameZone, onRemoveZone,
 }: {
   venue: Venue;
+  subEvents: SubEvent[];
   canEdit: boolean;
-  onUpdateVenue: (venueId: string, patch: { name?: string; subtitle?: string }) => void;
+  onUpdateVenue: (venueId: string, patch: { name?: string; subtitle?: string; subEventIds?: string[] }) => void;
   onRemoveVenue: (venueId: string) => void;
   onAddEntry: (venueId: string, partial: { zone?: string; name?: string; aforo?: number }) => string;
   onUpdateEntry: (venueId: string, entryId: string, patch: Partial<Omit<SpaceEntry, "id">>) => void;
@@ -335,6 +340,13 @@ function VenueSection({
         )}
       </div>
 
+      <VenueSubEventPicker
+        venue={venue}
+        subEvents={subEvents}
+        canEdit={canEdit}
+        onChange={ids => onUpdateVenue(venue.id, { subEventIds: ids })}
+      />
+
       <datalist id={datalistId}>
         {zones.map(z => <option key={z} value={z} />)}
       </datalist>
@@ -368,6 +380,71 @@ function VenueSection({
         />
       )}
     </section>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Venue → sub-event association (chips toggler)                               */
+/* -------------------------------------------------------------------------- */
+
+function VenueSubEventPicker({
+  venue, subEvents, canEdit, onChange,
+}: {
+  venue: Venue;
+  subEvents: SubEvent[];
+  canEdit: boolean;
+  onChange: (ids: string[]) => void;
+}) {
+  const selected = venue.subEventIds ?? [];
+  const selectedSet = new Set(selected);
+  const isGlobal = selected.length === 0;
+
+  const toggle = (id: string) => {
+    if (!canEdit) return;
+    const next = selectedSet.has(id) ? selected.filter(s => s !== id) : [...selected, id];
+    onChange(next);
+  };
+
+  if (!canEdit && isGlobal) {
+    return (
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-muted/10 text-[11px] text-muted-foreground">
+        <CalendarDays className="w-3.5 h-3.5 flex-shrink-0" />
+        <span>Disponible en todos los subeventos del Budget.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-border bg-muted/10">
+      <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground mr-1">
+        <CalendarDays className="w-3.5 h-3.5" /> Subeventos:
+      </span>
+      {subEvents.map(se => {
+        const active = selectedSet.has(se.id);
+        return (
+          <button
+            key={se.id}
+            type="button"
+            disabled={!canEdit}
+            onClick={() => toggle(se.id)}
+            className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${
+              active
+                ? "border-transparent text-white"
+                : "border-border bg-card text-muted-foreground hover:border-primary/50"
+            } ${canEdit ? "cursor-pointer" : "cursor-default"}`}
+            style={active ? { backgroundColor: se.color || "#6366f1" } : undefined}
+            title={canEdit ? (active ? `Quitar de ${se.name}` : `Asociar a ${se.name}`) : se.name}
+          >
+            {se.name}
+          </button>
+        );
+      })}
+      {isGlobal && (
+        <span className="text-[10px] text-muted-foreground/70 italic ml-1">
+          (sin asociación: disponible en todos)
+        </span>
+      )}
+    </div>
   );
 }
 

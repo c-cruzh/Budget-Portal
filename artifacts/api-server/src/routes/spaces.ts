@@ -130,6 +130,17 @@ function normalizeVenues(input: unknown): Venue[] {
     const venue: Venue = { id, name, entries: normalizeVenueEntries(r.entries, id) };
     const subtitle = String(r.subtitle ?? "").trim();
     if (subtitle) venue.subtitle = subtitle;
+    if (Array.isArray(r.subEventIds)) {
+      const seen = new Set<string>();
+      const ids: string[] = [];
+      for (const raw of r.subEventIds) {
+        const sid = String(raw ?? "").trim();
+        if (!sid || seen.has(sid)) continue;
+        seen.add(sid);
+        ids.push(sid);
+      }
+      if (ids.length) venue.subEventIds = ids;
+    }
     out.push(venue);
   });
   return out;
@@ -165,6 +176,20 @@ function migrateLegacyToEntries(value: any, day: DayKey): SpaceEntry[] {
   return out;
 }
 
+/** name→aforo map derived from every Lugar/Sede venue (positive ints only). */
+function deriveVenueCapacities(venues: Venue[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const v of venues) {
+    for (const e of v.entries) {
+      const name = (e.name || "").trim();
+      if (!name) continue;
+      const a = Number(e.aforo);
+      if (Number.isFinite(a) && a > 0) out[name] = Math.floor(a);
+    }
+  }
+  return out;
+}
+
 function catalogFromEntries(
   entriesD1: SpaceEntry[],
   entriesD2: SpaceEntry[],
@@ -173,7 +198,12 @@ function catalogFromEntries(
   return {
     "dia-1": deriveSpaceNames(entriesD1),
     "dia-2": deriveSpaceNames(entriesD2),
-    capacities: { ...deriveCapacities(entriesD1), ...deriveCapacities(entriesD2) },
+    // ESEN capacities take precedence over a same-named venue space.
+    capacities: {
+      ...deriveVenueCapacities(venues),
+      ...deriveCapacities(entriesD1),
+      ...deriveCapacities(entriesD2),
+    },
     entries: { "dia-1": entriesD1, "dia-2": entriesD2 },
     venues,
   };

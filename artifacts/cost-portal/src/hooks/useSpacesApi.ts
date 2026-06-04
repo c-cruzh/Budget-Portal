@@ -107,6 +107,17 @@ function venuesFromPayload(data: any): Venue[] {
     const venue: Venue = { id, name, entries: normalizeVenueEntries(r.entries) };
     const subtitle = String(r.subtitle ?? "").trim();
     if (subtitle) venue.subtitle = subtitle;
+    if (Array.isArray(r.subEventIds)) {
+      const seen = new Set<string>();
+      const ids: string[] = [];
+      for (const rawId of r.subEventIds) {
+        const sid = String(rawId ?? "").trim();
+        if (!sid || seen.has(sid)) continue;
+        seen.add(sid);
+        ids.push(sid);
+      }
+      if (ids.length) venue.subEventIds = ids;
+    }
     out.push(venue);
   }
   return out;
@@ -224,7 +235,7 @@ export function useSpacesApi() {
     return id;
   }, [mutateVenues]);
 
-  const updateVenue = useCallback((venueId: string, patch: { name?: string; subtitle?: string }) => {
+  const updateVenue = useCallback((venueId: string, patch: { name?: string; subtitle?: string; subEventIds?: string[] }) => {
     mutateVenues(vs => vs.map(v => {
       if (v.id !== venueId) return v;
       const next: Venue = { ...v };
@@ -232,6 +243,17 @@ export function useSpacesApi() {
       if (patch.subtitle !== undefined) {
         const sub = patch.subtitle.trim();
         if (sub) next.subtitle = patch.subtitle; else delete next.subtitle;
+      }
+      if (patch.subEventIds !== undefined) {
+        const seen = new Set<string>();
+        const ids: string[] = [];
+        for (const raw of patch.subEventIds) {
+          const sid = (raw || "").trim();
+          if (!sid || seen.has(sid)) continue;
+          seen.add(sid);
+          ids.push(sid);
+        }
+        if (ids.length) next.subEventIds = ids; else delete next.subEventIds;
       }
       return next;
     }));

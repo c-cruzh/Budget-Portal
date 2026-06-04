@@ -1,19 +1,31 @@
 ---
 name: Espacios venue (Lugar/Sede) hierarchy
-description: How the Lugar/Sede › Área/Zona › Espacio model coexists with ESEN's day-keyed entries in the spaces catalog.
+description: How the Lugar/Sede › Área/Zona › Espacio model coexists with ESEN's day-keyed entries in the spaces catalog, and how venues feed the Budget picker/aforo.
 ---
 
 # Venue (Lugar/Sede) layer in Espacios
 
-The spaces catalog has TWO parallel sources, intentionally not unified:
+The spaces catalog has TWO parallel sources, intentionally not unified at the data level but BOTH now feed Budget:
 
-- `entries` (`dia-1` / `dia-2`, day-keyed) — **ESEN only**. This remains the SOLE source for everything Budget consumes: `spaces["dia-1"]`/`["dia-2"]` space pickers, `spaces.capacities`, and zone suggestions in BudgetPage. Never route Budget off `venues`.
-- `venues: Venue[]` — additive, day-independent lugares (Hotel, Aeropuerto, Il Bongustaio, Monarca, BINAES, plus any user-added). Each `Venue` has `id`, `name`, optional `subtitle`, and `entries: SpaceEntry[]` (reusing the SpaceEntry shape but **allowing empty `name`** so an área/zona can exist with no specific space yet).
+- `entries` (`dia-1` / `dia-2`, day-keyed) — **ESEN only**. Always offered in the Budget space picker (for the matching day) and in aforo alerts.
+- `venues: Venue[]` — additive, day-independent lugares (Hotel, Aeropuerto, Il Bongustaio, Monarca, BINAES, plus user-added). Each `Venue` has `id`, `name`, optional `subtitle`, `entries: SpaceEntry[]` (empty `name` allowed = área with no space yet), and optional `subEventIds?: string[]`.
 
-**Why split:** Budget already derives capacity/aforo alerts and space pickers from the ESEN day-keyed structure. Keeping `venues` purely additive (NOT wired to Budget) means new venues can't break aforo alerts or the picker. This was an explicit task constraint.
+## Venues feed Budget (updated — supersedes the old "never wire venues into Budget" rule)
 
-**How to apply:**
-- New venues are catalog/UI only. Do not add `venues` data into any Budget derivation.
-- Seeding/migration lives in `ensureSpacesDefaults` (api-server `routes/spaces.ts`): legacy/empty catalogs get venues seeded; an existing `entries`-but-no-`venues` catalog is migrated once. A `venues` key present (even empty `[]`) counts as curated and is preserved — so once a catalog has the key, reseed won't re-add. New seed reaches prod only via republish (same caveat as the structured spaces catalog).
-- `normalizeVenueEntries` keeps zone-only / empty-name rows (don't filter them out like normal space entries).
-- UI: `EspaciosPage.tsx` renders ESEN as a Lugar card wrapping two `DaySection`s; venues render as `VenueSection` cards. A generic `ZoneGroup` (day/venue-agnostic via closures) and shared `AddRow` (with `allowEmptyName`) back both. Org gating via `permissions.canEdit` (C2 LABS edit; OPINNO/AURORA360 read-only); server PUT also enforces `ORG_PERMISSIONS`.
+- **Capacities/aforo:** `buildSpacesCatalog` (client) and `catalogFromEntries` (server) merge `deriveVenueCapacities(venues)` into `spaces.capacities`, ESEN spread LAST so ESEN wins on a name collision. So any assigned venue space with a positive aforo participates in over-capacity alerts (alerts only fire when a space is actually assigned to an item, so unassigned venue spaces are harmless).
+- **Picker options:** `spaceOptionGroupsForItem(catalog, subEventId, day)` returns `SpaceOptionGroup[]` (`{lugar, zone, names}`) = ESEN entries for that day (always, backward-compat) + every venue where `venueMatchesSubEvent(venue, subEventId)` is true, grouped Lugar › Zona. `spaceNamesForItem(...)` is the flat deduped+sorted version used by the add/edit `ComboInput` dialogs. `SpaceCell` takes `optionsDia1/optionsDia2: SpaceOptionGroup[]` (NOT flat `spacesDia1/2` anymore).
+- **Association semantics:** `venueMatchesSubEvent` = empty/undefined `subEventIds` → GLOBAL (offered for every item, so legacy venues without an association stay visible); non-empty → offered only for items whose `subEventId` is in the list. ESEN is implicitly the day axis (no association needed/stored).
+
+**Why:** Task #100 required ALL lugares (not just ESEN) to feed the Budget picker + aforo, with per-Lugar sub-event association. This intentionally overrode the earlier additive-only constraint. Cost math (deriveDia/dayCountForDia/fee/IVA/turismo) was NOT touched — only the picker option source and the capacities map changed.
+
+## Seeding / migration
+
+- `buildVenuesSeed` (api-server `data/spacesSeed.ts`) seeds `subEventIds` per venue (Hotel/Aeropuerto→dia-1,dia-2; Il Bongustaio→cena-ania; Monarca→cena-vip; BINAES→lanzamiento). Sub-event ids come from `DEFAULT_SUB_EVENTS`.
+- Seeds reach a fresh/empty or legacy catalog only; an existing curated catalog (a `venues` key present, even `[]`) is preserved untouched — so existing dev/prod venues stay association-less (= global) until a user associates them in the Espacios UI. New seed reaches prod only via republish.
+- `normalizeVenues` (server + client `venuesFromPayload`) and client `updateVenue` all dedupe/trim and DROP the `subEventIds` key when empty.
+- `normalizeVenueEntries` keeps zone-only / empty-name rows (don't filter them).
+
+## UI
+
+- `EspaciosPage.tsx`: ESEN renders as a Lugar card with two `DaySection`s; venues render as `VenueSection` cards. `VenueSubEventPicker` (chips toggler, color from the sub-event) sits under each venue header; reads `subEvents` from `useSubEventsApi`. Org gating via `permissions.canEdit` (C2 LABS edit; OPINNO/AURORA360 read-only); server PUT also enforces `ORG_PERMISSIONS`.
+- `allSpaces` (BudgetPage filter dropdown) also includes venue space names.

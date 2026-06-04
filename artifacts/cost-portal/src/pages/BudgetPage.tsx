@@ -15,7 +15,7 @@ import { BulkActionsBar } from "@/components/budget/BulkActionsBar";
 import { BudgetHelpGuide } from "@/components/budget/BudgetHelpGuide";
 import { BUDGET_COLUMNS, DEFAULT_VISIBLE } from "@/components/budget/columns";
 import type { LinkedBudgetItem } from "@/data/tasksBoardData";
-import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, DIA_VALUES, DIA_LABELS, DIA_COLORS, STATUS_COLORS, STATUS_SHORT_LABELS, deriveDia, type BudgetItem, type QuoteOption, type SubEvent, type DiaValue, type SpaceDayKey } from "@/data/budgetData";
+import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, DIA_VALUES, DIA_LABELS, DIA_COLORS, STATUS_COLORS, STATUS_SHORT_LABELS, deriveDia, spaceOptionGroupsForItem, spaceNamesForItem, type BudgetItem, type QuoteOption, type SubEvent, type DiaValue, type SpaceDayKey } from "@/data/budgetData";
 import { recalcItem } from "@/lib/budgetCalc";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useSubEventsApi } from "@/hooks/useSubEventsApi";
@@ -355,6 +355,12 @@ export default function BudgetPage({
     const set = new Set<string>();
     for (const s of spaces["dia-1"]) set.add(s);
     for (const s of spaces["dia-2"]) set.add(s);
+    for (const v of spaces.venues || []) {
+      for (const e of v.entries) {
+        const n = (e.name || "").trim();
+        if (n) set.add(n);
+      }
+    }
     for (const i of items) {
       if ((i.espacioDia1 || "").trim()) set.add(i.espacioDia1!.trim());
       if ((i.espacioDia2 || "").trim()) set.add(i.espacioDia2!.trim());
@@ -1738,8 +1744,8 @@ export default function BudgetPage({
                           dia={deriveDia(item)}
                           espacioDia1={item.espacioDia1}
                           espacioDia2={item.espacioDia2}
-                          spacesDia1={spaces["dia-1"]}
-                          spacesDia2={spaces["dia-2"]}
+                          optionsDia1={spaceOptionGroupsForItem(spaces, item.subEventId, "dia-1")}
+                          optionsDia2={spaceOptionGroupsForItem(spaces, item.subEventId, "dia-2")}
                           canEdit={canEdit}
                           overDia1={!!(item.espacioDia1 && overSpacesByDay["dia-1"].has(item.espacioDia1.trim()))}
                           overDia2={!!(item.espacioDia2 && overSpacesByDay["dia-2"].has(item.espacioDia2.trim()))}
@@ -2257,13 +2263,13 @@ export default function BudgetPage({
               <label className="text-xs font-medium mb-1 block">Espacio asignado</label>
               {deriveDia(newItem) === "ambos" ? (
                 <div className="space-y-1.5">
-                  <ComboInput value={newItem.espacioDia1 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia1: v }))} options={spaces["dia-1"]} placeholder="Espacio Día 1..." />
-                  <ComboInput value={newItem.espacioDia2 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia2: v }))} options={spaces["dia-2"]} placeholder="Espacio Día 2..." />
+                  <ComboInput value={newItem.espacioDia1 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia1: v }))} options={spaceNamesForItem(spaces, newItem.subEventId, "dia-1")} placeholder="Espacio Día 1..." />
+                  <ComboInput value={newItem.espacioDia2 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia2: v }))} options={spaceNamesForItem(spaces, newItem.subEventId, "dia-2")} placeholder="Espacio Día 2..." />
                 </div>
               ) : deriveDia(newItem) === "dia-1" ? (
-                <ComboInput value={newItem.espacioDia1 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia1: v }))} options={spaces["dia-1"]} placeholder="Seleccionar espacio..." />
+                <ComboInput value={newItem.espacioDia1 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia1: v }))} options={spaceNamesForItem(spaces, newItem.subEventId, "dia-1")} placeholder="Seleccionar espacio..." />
               ) : (
-                <ComboInput value={newItem.espacioDia2 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia2: v }))} options={spaces["dia-2"]} placeholder="Seleccionar espacio..." />
+                <ComboInput value={newItem.espacioDia2 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia2: v }))} options={spaceNamesForItem(spaces, newItem.subEventId, "dia-2")} placeholder="Seleccionar espacio..." />
               )}
             </div>
             <div>
@@ -2408,13 +2414,13 @@ export default function BudgetPage({
               <label className="text-xs font-medium mb-1 block">Espacio asignado</label>
               {deriveDia(editItem) === "ambos" ? (
                 <div className="space-y-1.5">
-                  <ComboInput value={editItem.espacioDia1 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia1: v }))} options={spaces["dia-1"]} placeholder="Espacio Día 1..." />
-                  <ComboInput value={editItem.espacioDia2 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia2: v }))} options={spaces["dia-2"]} placeholder="Espacio Día 2..." />
+                  <ComboInput value={editItem.espacioDia1 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia1: v }))} options={spaceNamesForItem(spaces, editItem.subEventId, "dia-1")} placeholder="Espacio Día 1..." />
+                  <ComboInput value={editItem.espacioDia2 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia2: v }))} options={spaceNamesForItem(spaces, editItem.subEventId, "dia-2")} placeholder="Espacio Día 2..." />
                 </div>
               ) : deriveDia(editItem) === "dia-1" ? (
-                <ComboInput value={editItem.espacioDia1 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia1: v }))} options={spaces["dia-1"]} placeholder="Seleccionar espacio..." />
+                <ComboInput value={editItem.espacioDia1 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia1: v }))} options={spaceNamesForItem(spaces, editItem.subEventId, "dia-1")} placeholder="Seleccionar espacio..." />
               ) : (
-                <ComboInput value={editItem.espacioDia2 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia2: v }))} options={spaces["dia-2"]} placeholder="Seleccionar espacio..." />
+                <ComboInput value={editItem.espacioDia2 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia2: v }))} options={spaceNamesForItem(spaces, editItem.subEventId, "dia-2")} placeholder="Seleccionar espacio..." />
               )}
             </div>
             <div>

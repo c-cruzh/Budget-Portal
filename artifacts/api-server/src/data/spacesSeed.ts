@@ -16,6 +16,8 @@ export interface Venue {
   name: string;
   subtitle?: string;
   entries: SpaceEntry[];
+  /** Sub-events this Lugar belongs to (empty/undefined = global). */
+  subEventIds?: string[];
 }
 
 interface SeedRow {
@@ -116,6 +118,7 @@ interface VenueSeedRow {
 interface VenueSeed {
   name: string;
   subtitle?: string;
+  subEventIds?: string[];
   rows: VenueSeedRow[];
 }
 
@@ -128,6 +131,7 @@ interface VenueSeed {
 const VENUES_SEED: VenueSeed[] = [
   {
     name: "Hotel",
+    subEventIds: ["dia-1", "dia-2"],
     rows: [
       { zone: "Nativo Lounge Bar" },
       { zone: "Breakfast", name: "Las Tunas" },
@@ -138,6 +142,7 @@ const VENUES_SEED: VenueSeed[] = [
   },
   {
     name: "Aeropuerto",
+    subEventIds: ["dia-1", "dia-2"],
     rows: [
       { zone: "Sala VIP", name: "SAL (CEPA)" },
       { zone: "Pickup zone de Sala VIP", name: "SAL (CEPA)" },
@@ -146,16 +151,19 @@ const VENUES_SEED: VenueSeed[] = [
   {
     name: "Il Bongustaio",
     subtitle: 'Cena VIP "Ania" (Día 1)',
+    subEventIds: ["cena-ania"],
     rows: [{ zone: "Cena VIP (Día 1)", name: "Salón principal" }],
   },
   {
     name: "Monarca",
     subtitle: "Cena VIP (Día 2)",
+    subEventIds: ["cena-vip"],
     rows: [{ zone: "Cena VIP (Día 2)", name: "Terraza" }],
   },
   {
     name: "BINAES — Biblioteca Nacional de El Salvador",
     subtitle: "Lanzamiento",
+    subEventIds: ["lanzamiento"],
     rows: [
       { zone: "Nivel 7", name: "Auditorio" },
       { zone: "Nivel 7", name: "Vestíbulo frente al auditorio" },
@@ -168,6 +176,7 @@ export function buildVenuesSeed(): Venue[] {
     id: `venue-${vi + 1}`,
     name: v.name,
     ...(v.subtitle ? { subtitle: v.subtitle } : {}),
+    ...(v.subEventIds && v.subEventIds.length ? { subEventIds: v.subEventIds } : {}),
     entries: v.rows.map((r, ri) => ({
       id: `venue-${vi + 1}-${ri + 1}`,
       zone: r.zone,
