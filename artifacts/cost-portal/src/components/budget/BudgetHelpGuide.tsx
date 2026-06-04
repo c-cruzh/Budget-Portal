@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
-  DIA_VALUES, DIA_LABELS, DIA_COLORS,
+  EVENT_PHASES,
   STATUS_COLORS, STATUS_SHORT_LABELS,
 } from "@/data/budgetData";
 
@@ -32,17 +32,17 @@ interface GuideSection {
   extra?: ReactNode;
 }
 
-function DiaBadgeExample({ dia }: { dia: (typeof DIA_VALUES)[number] }) {
+function PhaseBadgeExample({ name, color }: { name: string; color: string }) {
   return (
     <span
       className="text-[10px] px-1.5 py-0.5 rounded border font-medium whitespace-nowrap"
       style={{
-        color: DIA_COLORS[dia],
-        backgroundColor: `${DIA_COLORS[dia]}1a`,
-        borderColor: `${DIA_COLORS[dia]}33`,
+        color,
+        backgroundColor: `${color}1a`,
+        borderColor: `${color}33`,
       }}
     >
-      {DIA_LABELS[dia]}
+      {name}
     </span>
   );
 }
@@ -78,11 +78,11 @@ const BadgeExamples = (
     </div>
     <div>
       <p className="text-[11px] font-semibold text-foreground/70 uppercase tracking-wide mb-1.5">
-        Día aplicable
+        Día (fase del evento)
       </p>
       <div className="flex flex-wrap gap-1.5">
-        {DIA_VALUES.map((d) => (
-          <DiaBadgeExample key={d} dia={d} />
+        {EVENT_PHASES.map((p) => (
+          <PhaseBadgeExample key={p.id} name={p.name} color={p.color} />
         ))}
       </div>
     </div>
@@ -189,8 +189,8 @@ const SECTIONS: GuideSection[] = [
     intro: "Las etiquetas de color comunican de un vistazo el estado de cotización y a qué día pertenece cada item. Estos son los badges reales tal como aparecen en la tabla:",
     entries: [
       { term: "Estado de cotización", desc: "Verde = recibida sin observaciones; amarillo = recibida con observaciones; naranja = cotización pending; rojo = pendiente de cotizar; violeta = no aplica / in-kind; ámbar = pendiente de alternativa." },
-      { term: "Badge de Día", desc: "Azul = Día 1, verde = Día 2, violeta = Ambos. Indica a qué día corresponde el item." },
-      { term: "Reasignar día", desc: "Con permiso de edición, haz clic en el badge de Día y elige Día 1, Día 2 o Ambos en el menú emergente." },
+      { term: "Badge de Día", desc: "Indica la fase del evento del item: Lanzamiento, Main Event Día 1, Main Event Día 2, Cena VIP, Cena VIP Ania, Day of Arrivals (16–17 Nov) y Day of Departures (20 Nov). Cada fase tiene su color." },
+      { term: "Reasignar día", desc: "Con permiso de edición, haz clic en el badge de Día (o en la etiqueta de color del item) y elige la fase del evento. Ambos editan el mismo valor, así que nunca se contradicen. Day of Arrivals cuenta 2 días para costos por día; el resto cuenta 1." },
     ],
     extra: BadgeExamples,
   },

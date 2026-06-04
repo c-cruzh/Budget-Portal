@@ -3,7 +3,7 @@ import { MapPin, Plus, Check, AlertTriangle } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { DiaValue, SpaceDayKey, SpaceOptionGroup } from "@/data/budgetData";
+import type { SpaceDayKey, SpaceOptionGroup } from "@/data/budgetData";
 
 interface DayPickerProps {
   day: SpaceDayKey;
@@ -134,45 +134,21 @@ function DaySpacePicker({ day, dayLabel, value, optionGroups, canEdit, over, onA
 }
 
 interface SpaceCellProps {
-  dia: DiaValue;
-  espacioDia1?: string;
-  espacioDia2?: string;
-  optionsDia1: SpaceOptionGroup[];
-  optionsDia2: SpaceOptionGroup[];
+  // Each item maps to exactly one space-catalog day, derived from its phase.
+  day: SpaceDayKey;
+  value?: string;
+  options: SpaceOptionGroup[];
   canEdit: boolean;
-  overDia1?: boolean;
-  overDia2?: boolean;
+  over?: boolean;
   onAssign: (day: SpaceDayKey, value: string) => void;
   onAddSpace: (day: SpaceDayKey, name: string) => void;
 }
 
-export function SpaceCell({ dia, espacioDia1, espacioDia2, optionsDia1, optionsDia2, canEdit, overDia1, overDia2, onAssign, onAddSpace }: SpaceCellProps) {
-  if (dia === "dia-1") {
-    return (
-      <DaySpacePicker
-        day="dia-1" dayLabel="D1" value={espacioDia1} optionGroups={optionsDia1}
-        canEdit={canEdit} over={overDia1} onAssign={onAssign} onAddSpace={onAddSpace}
-      />
-    );
-  }
-  if (dia === "dia-2") {
-    return (
-      <DaySpacePicker
-        day="dia-2" dayLabel="D2" value={espacioDia2} optionGroups={optionsDia2}
-        canEdit={canEdit} over={overDia2} onAssign={onAssign} onAddSpace={onAddSpace}
-      />
-    );
-  }
+export function SpaceCell({ day, value, options, canEdit, over, onAssign, onAddSpace }: SpaceCellProps) {
   return (
-    <div className="flex flex-col gap-1 items-start">
-      <DaySpacePicker
-        day="dia-1" dayLabel="D1" value={espacioDia1} optionGroups={optionsDia1}
-        canEdit={canEdit} over={overDia1} onAssign={onAssign} onAddSpace={onAddSpace} showDayPrefix
-      />
-      <DaySpacePicker
-        day="dia-2" dayLabel="D2" value={espacioDia2} optionGroups={optionsDia2}
-        canEdit={canEdit} over={overDia2} onAssign={onAssign} onAddSpace={onAddSpace} showDayPrefix
-      />
-    </div>
+    <DaySpacePicker
+      day={day} dayLabel={day === "dia-2" ? "D2" : "D1"} value={value} optionGroups={options}
+      canEdit={canEdit} over={over} onAssign={onAssign} onAddSpace={onAddSpace}
+    />
   );
 }

@@ -1,4 +1,4 @@
-import { deriveDia, dayCountForDia, type BudgetItem, type QuoteOption } from "@/data/budgetData";
+import { deriveDia, phaseDayCount, type BudgetItem, type QuoteOption } from "@/data/budgetData";
 
 export function getApprovedQuote(item: BudgetItem): QuoteOption | null {
   if (!item.quotes || item.quotes.length === 0) return null;
@@ -18,10 +18,17 @@ export function recalcItem(item: BudgetItem): BudgetItem {
   }
   const precio = Number(item.precioUnitario) || 0;
   const byDias = item.porDias === "SI";
-  // Per-day costs multiply by the number of days the item runs (Ambos = 2,
-  // single day = 1). Keep qtyDias in sync so it never double-counts a one-day space.
-  const dayCount = byDias ? dayCountForDia(item.dia) : 1;
-  if (byDias) item.qtyDias = dayCount;
+  // Per-day costs multiply by the number of days the item runs. The event phase
+  // (subEventId) defines the natural span: single-day phases = 1, Day of Arrivals
+  // = 2. `qtyDias` holds the actual billed days; default it to the phase span but
+  // keep an explicit stored value >= 2 so legacy multi-day ("ambos") items keep
+  // their totals when migrated onto a single-day phase.
+  let dayCount = 1;
+  if (byDias) {
+    const stored = Number(item.qtyDias) || 0;
+    dayCount = stored >= 2 ? stored : phaseDayCount(item.subEventId);
+    item.qtyDias = dayCount;
+  }
   item.subtotal = byDias ? qty * dayCount * precio : qty * precio;
   const feeApplies = item.agencyFee && item.aplicaFee !== "SI";
   item.fee = feeApplies ? item.subtotal * 0.20 : 0;

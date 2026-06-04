@@ -4,7 +4,7 @@ import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartTooltip,
   ResponsiveContainer
 } from "recharts";
-import { INITIAL_BUDGET_ITEMS, DIA_LABELS, DIA_COLORS, deriveDia, type BudgetItem } from "@/data/budgetData";
+import { INITIAL_BUDGET_ITEMS, EVENT_PHASES, derivePhase, type BudgetItem } from "@/data/budgetData";
 import { recalcItem } from "@/lib/budgetCalc";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { formatUSD } from "@/lib/utils";
@@ -109,29 +109,24 @@ export default function DashboardPage() {
   }, [items, centroExcludeInKind]);
 
   const byDia = useMemo(() => {
-    let dia1 = 0, dia2 = 0, ambos = 0;
-    let dia1Count = 0, dia2Count = 0, ambosCount = 0;
+    const totals = new Map<string, number>();
+    const counts = new Map<string, number>();
     items.filter(i => !i.inKind && i.total > 0).forEach(i => {
-      const d = deriveDia(i);
-      if (d === "ambos") {
-        ambos += i.total;
-        ambosCount++;
-        dia1 += i.total / 2;
-        dia2 += i.total / 2;
-      } else if (d === "dia-1") {
-        dia1 += i.total;
-        dia1Count++;
-      } else {
-        dia2 += i.total;
-        dia2Count++;
-      }
+      const id = derivePhase(i);
+      totals.set(id, (totals.get(id) || 0) + i.total);
+      counts.set(id, (counts.get(id) || 0) + 1);
     });
+    const rows = EVENT_PHASES.map(p => ({
+      id: p.id,
+      name: p.name,
+      shortName: p.name.length > 16 ? p.name.slice(0, 16) + "\u2026" : p.name,
+      color: p.color,
+      value: totals.get(p.id) || 0,
+      count: counts.get(p.id) || 0,
+    }));
     return {
-      chart: [
-        { name: DIA_LABELS["dia-1"], value: dia1, color: DIA_COLORS["dia-1"] },
-        { name: DIA_LABELS["dia-2"], value: dia2, color: DIA_COLORS["dia-2"] },
-      ],
-      dia1, dia2, ambos, dia1Count, dia2Count, ambosCount,
+      chart: rows.filter(r => r.value > 0).map(r => ({ name: r.shortName, value: r.value, color: r.color })),
+      rows,
     };
   }, [items]);
 
@@ -414,14 +409,14 @@ export default function DashboardPage() {
       <div className="rounded-xl border border-card-border bg-card p-5 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Gasto por Día</h3>
-          <span className="text-[10px] text-muted-foreground/70">Ítems "Ambos" repartidos 50/50 entre los dos días</span>
+          <span className="text-[10px] text-muted-foreground/70">Por fase del evento</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
           <div className="md:col-span-2">
-            <ResponsiveContainer width="100%" height={120}>
+            <ResponsiveContainer width="100%" height={Math.max(120, byDia.chart.length * 34)}>
               <BarChart data={byDia.chart} layout="vertical" margin={{ left: 0, right: 16 }}>
                 <XAxis type="number" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} width={70} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} width={120} />
                 <RechartTooltip
                   formatter={(v: number) => [formatUSD(v), "Total"]}
                   contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 12 }}
@@ -433,21 +428,15 @@ export default function DashboardPage() {
             </ResponsiveContainer>
           </div>
           <div className="space-y-2 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: DIA_COLORS["dia-1"] }} />{DIA_LABELS["dia-1"]}</span>
-              <span className="font-bold font-mono">{formatUSD(byDia.dia1)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: DIA_COLORS["dia-2"] }} />{DIA_LABELS["dia-2"]}</span>
-              <span className="font-bold font-mono">{formatUSD(byDia.dia2)}</span>
-            </div>
-            <div className="border-t border-border pt-2 flex items-center justify-between text-muted-foreground">
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: DIA_COLORS["ambos"] }} />Ambos ({byDia.ambosCount})</span>
-              <span className="font-mono">{formatUSD(byDia.ambos)}</span>
-            </div>
-            <div className="text-[10px] text-muted-foreground/60">
-              {byDia.dia1Count} solo Día 1 · {byDia.dia2Count} solo Día 2
-            </div>
+            {byDia.rows.map(r => (
+              <div key={r.id} className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: r.color }} />
+                  {r.name}{r.count > 0 ? ` (${r.count})` : ""}
+                </span>
+                <span className={r.value > 0 ? "font-bold font-mono" : "font-mono text-muted-foreground/50"}>{formatUSD(r.value)}</span>
+              </div>
+            ))}
           </div>
         </div>
       </div>

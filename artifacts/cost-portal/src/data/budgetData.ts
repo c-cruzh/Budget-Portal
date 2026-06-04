@@ -13,13 +13,39 @@ export interface SubEvent {
   color?: string;
 }
 
-export const DEFAULT_SUB_EVENTS: SubEvent[] = [
-  { id: "lanzamiento", name: "Lanzamiento", order: 0, color: "#a78bfa" },
-  { id: "dia-1", name: "Día 1", order: 1, color: "#60a5fa" },
-  { id: "dia-2", name: "Día 2", order: 2, color: "#34d399" },
-  { id: "cena-vip", name: "Cena VIP", order: 3, color: "#fbbf24" },
-  { id: "cena-ania", name: "Cena Privada ANIA", order: 4, color: "#f472b6" },
+/**
+ * The 7 event phases. The phase (stored on a budget item as `subEventId`) is the
+ * SINGLE source of truth for where an item falls in the event timeline. It drives
+ * the colored tag, the grouping, the "Día" selector and the "por días" cost.
+ * `days` = how many natural days the phase spans (only Arrivals spans 2).
+ */
+export interface EventPhase {
+  id: string;
+  name: string;
+  color: string;
+  days: number;
+}
+
+export const EVENT_PHASES: EventPhase[] = [
+  { id: "lanzamiento", name: "Lanzamiento", color: "#a78bfa", days: 1 },
+  { id: "dia-1", name: "Main Event Día 1", color: "#60a5fa", days: 1 },
+  { id: "dia-2", name: "Main Event Día 2", color: "#34d399", days: 1 },
+  { id: "cena-vip", name: "Cena VIP", color: "#fbbf24", days: 1 },
+  { id: "cena-ania", name: "Cena VIP Ania", color: "#f472b6", days: 1 },
+  { id: "arrivals", name: "Day of Arrivals (16–17 Nov)", color: "#22d3ee", days: 2 },
+  { id: "departures", name: "Day of Departures (20 Nov)", color: "#fb923c", days: 1 },
 ];
+
+const EVENT_PHASE_MAP: Record<string, EventPhase> = Object.fromEntries(
+  EVENT_PHASES.map(p => [p.id, p]),
+);
+
+export const DEFAULT_SUB_EVENTS: SubEvent[] = EVENT_PHASES.map((p, i) => ({
+  id: p.id,
+  name: p.name,
+  order: i,
+  color: p.color,
+}));
 
 export const DEFAULT_SUB_EVENT_ID = "dia-2";
 
@@ -107,6 +133,39 @@ export function deriveDia(item: DiaSource): DiaValue {
 
 export function dayCountForDia(dia: DiaValue): number {
   return dia === "ambos" ? 2 : 1;
+}
+
+/**
+ * How many natural days a phase spans for "por días" cost. Single-day phases
+ * count 1; Day of Arrivals (16–17 Nov) counts 2. Custom/unknown sub-events
+ * default to 1.
+ */
+export function phaseDayCount(subEventId: string | undefined): number {
+  if (!subEventId) return 1;
+  return EVENT_PHASE_MAP[subEventId]?.days ?? 1;
+}
+
+/**
+ * Maps a phase to the space-catalog day used by the espacio picker. Main Event
+ * Día 2 uses the Día 2 ESEN layout; every other phase uses the Día 1 layout as
+ * a single space list (venues are still filtered by the item's phase).
+ */
+export function phaseSpaceDay(subEventId: string | undefined): SpaceDayKey {
+  return subEventId === "dia-2" ? "dia-2" : "dia-1";
+}
+
+/**
+ * Single source of truth for an item's event phase. Any assigned `subEventId`
+ * (including custom user-created sub-events) wins. Items predating the phase
+ * field fall back to the legacy day derivation so migration keeps them visible
+ * without overwriting stored data; legacy "ambos" lands on the default phase.
+ */
+export function derivePhase(item: DiaSource): string {
+  if (item.subEventId && item.subEventId.trim()) return item.subEventId;
+  const d = deriveDia(item);
+  if (d === "dia-1") return "dia-1";
+  if (d === "dia-2") return "dia-2";
+  return DEFAULT_SUB_EVENT_ID;
 }
 
 export interface BudgetItem {

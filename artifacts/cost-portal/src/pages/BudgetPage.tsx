@@ -15,7 +15,7 @@ import { BulkActionsBar } from "@/components/budget/BulkActionsBar";
 import { BudgetHelpGuide } from "@/components/budget/BudgetHelpGuide";
 import { BUDGET_COLUMNS, DEFAULT_VISIBLE } from "@/components/budget/columns";
 import type { LinkedBudgetItem } from "@/data/tasksBoardData";
-import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, DIA_VALUES, DIA_LABELS, DIA_COLORS, STATUS_COLORS, STATUS_SHORT_LABELS, deriveDia, spaceOptionGroupsForItem, spaceNamesForItem, type BudgetItem, type QuoteOption, type SubEvent, type DiaValue, type SpaceDayKey } from "@/data/budgetData";
+import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, STATUS_COLORS, STATUS_SHORT_LABELS, derivePhase, phaseSpaceDay, phaseDayCount, spaceOptionGroupsForItem, spaceNamesForItem, type BudgetItem, type QuoteOption, type SubEvent, type SpaceDayKey } from "@/data/budgetData";
 import { recalcItem } from "@/lib/budgetCalc";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useSubEventsApi } from "@/hooks/useSubEventsApi";
@@ -169,17 +169,27 @@ function RedactedMark() {
   );
 }
 
-function DiaCell({ dia, canEdit, onChange }: { dia: DiaValue; canEdit: boolean; onChange: (v: DiaValue) => void }) {
+// The "Día" column shows the item's event phase (subEventId). It is unified with
+// the colored phase tag in the item cell — both edit the same value, so they can
+// never contradict. Picking a phase here updates the badge and the grouping.
+function PhaseCell({ value, name, color, subEvents, canEdit, onChange }: {
+  value: string | undefined;
+  name: string;
+  color: string;
+  subEvents: SubEvent[];
+  canEdit: boolean;
+  onChange: (id: string) => void;
+}) {
   const badge = (
     <span
       className="text-[10px] px-1.5 py-0.5 rounded border font-medium whitespace-nowrap"
       style={{
-        color: DIA_COLORS[dia],
-        backgroundColor: `${DIA_COLORS[dia]}1a`,
-        borderColor: `${DIA_COLORS[dia]}33`,
+        color,
+        backgroundColor: `${color}1a`,
+        borderColor: `${color}33`,
       }}
     >
-      {DIA_LABELS[dia]}
+      {name}
     </span>
   );
   if (!canEdit) return badge;
@@ -188,21 +198,21 @@ function DiaCell({ dia, canEdit, onChange }: { dia: DiaValue; canEdit: boolean; 
       <PopoverTrigger asChild>
         <button className="cursor-pointer hover:opacity-80 transition-opacity">{badge}</button>
       </PopoverTrigger>
-      <PopoverContent className="w-32 p-1" align="center">
-        {DIA_VALUES.map(v => (
+      <PopoverContent className="w-52 p-1" align="center">
+        {subEvents.map(s => (
           <button
-            key={v}
-            onClick={() => onChange(v)}
+            key={s.id}
+            onClick={() => onChange(s.id)}
             className={cn(
               "w-full flex items-center justify-between px-2 py-1.5 rounded text-xs hover:bg-muted",
-              v === dia && "bg-primary/10 text-primary"
+              s.id === value && "bg-primary/10 text-primary"
             )}
           >
             <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: DIA_COLORS[v] }} />
-              {DIA_LABELS[v]}
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color || "#94a3b8" }} />
+              {s.name}
             </span>
-            {v === dia && <span className="text-[10px]">✓</span>}
+            {s.id === value && <span className="text-[10px]">✓</span>}
           </button>
         ))}
       </PopoverContent>
@@ -298,7 +308,7 @@ export default function BudgetPage({
   const [filterInKind, setFilterInKind] = useState("ALL");
   const [filterPrecio, setFilterPrecio] = useState("ALL");
   const [filterQtyDias, setFilterQtyDias] = useState<Set<number>>(new Set());
-  const [filterDia, setFilterDia] = useState<"ALL" | "dia-1" | "dia-2" | "ambos">("ALL");
+  const [filterPhase, setFilterPhase] = useState<string>("ALL");
   const [filterPending, setFilterPending] = useState(false);
   const [filterAccionReq, setFilterAccionReq] = useState(false);
   const [filterValidar, setFilterValidar] = useState(false);
@@ -340,7 +350,7 @@ export default function BudgetPage({
 
   const subEventFilteredItems = useMemo(() => {
     if (filterSubEvents.size === 0) return items;
-    return items.filter(i => filterSubEvents.has(i.subEventId || "__unassigned__"));
+    return items.filter(i => filterSubEvents.has(derivePhase(i)));
   }, [items, filterSubEvents]);
   const areas = useMemo(() => {
     return ["ALL", ...Array.from(new Set(subEventFilteredItems.map(i => i.area).filter(v => v && v.trim())))];
@@ -478,7 +488,7 @@ export default function BudgetPage({
 
   const filtered = useMemo(() => {
     let out = items;
-    if (filterSubEvents.size > 0) out = out.filter(i => filterSubEvents.has(i.subEventId || "__unassigned__"));
+    if (filterSubEvents.size > 0) out = out.filter(i => filterSubEvents.has(derivePhase(i)));
     if (filterArea !== "ALL") out = out.filter(i => i.area === filterArea);
     if (filterEspacio === "(Sin asignar)") out = out.filter(i => !(i.espacioDia1 || "").trim() && !(i.espacioDia2 || "").trim());
     else if (filterEspacio !== "ALL") out = out.filter(i => i.espacioDia1 === filterEspacio || i.espacioDia2 === filterEspacio);
@@ -500,14 +510,7 @@ export default function BudgetPage({
     if (filterPrecio === "ZERO") out = out.filter(i => (Number(i.precioUnitario) || 0) === 0 && !i.inKind);
     else if (filterPrecio === "NONZERO") out = out.filter(i => (Number(i.precioUnitario) || 0) > 0);
     if (filterQtyDias.size > 0) out = out.filter(i => filterQtyDias.has(Number(i.qtyDias)));
-    if (filterDia !== "ALL") {
-      out = out.filter(i => {
-        const d = deriveDia(i);
-        if (filterDia === "ambos") return d === "ambos";
-        // "Día 1" / "Día 2" include items that run both days
-        return d === filterDia || d === "ambos";
-      });
-    }
+    if (filterPhase !== "ALL") out = out.filter(i => derivePhase(i) === filterPhase);
     if (filterPending) out = out.filter(i => i.cotizacion === "PENDING");
     if (filterAccionReq) out = out.filter(i => i.accionRequerida);
     if (filterValidar) out = out.filter(i => i.validarCosto);
@@ -527,7 +530,7 @@ export default function BudgetPage({
       );
     }
     return out;
-  }, [items, filterSubEvents, filterArea, filterEspacio, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterQtyDias, filterDia, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
+  }, [items, filterSubEvents, filterArea, filterEspacio, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterQtyDias, filterPhase, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
 
   const sorted = useMemo(() => {
     if (!sortKey) return filtered;
@@ -569,7 +572,7 @@ export default function BudgetPage({
   const grouped = useMemo(() => {
     const map = new Map<string, { subEventId: string; evento: string; area: string; centroCosto: string; items: BudgetItem[] }>();
     sorted.forEach(item => {
-      const seId = item.subEventId || "__unassigned__";
+      const seId = derivePhase(item);
       const cc = item.centroCosto || "(Sin centro)";
       const key = `${seId}__${item.area}__${cc}`;
       if (!map.has(key)) map.set(key, { subEventId: seId, evento: item.evento, area: item.area, centroCosto: cc, items: [] });
@@ -577,8 +580,8 @@ export default function BudgetPage({
     });
     const entries = Array.from(map.entries());
     entries.sort((a, b) => {
-      const oa = subEventOrder(a[1].subEventId === "__unassigned__" ? undefined : a[1].subEventId);
-      const ob = subEventOrder(b[1].subEventId === "__unassigned__" ? undefined : b[1].subEventId);
+      const oa = subEventOrder(a[1].subEventId);
+      const ob = subEventOrder(b[1].subEventId);
       if (oa !== ob) return oa - ob;
       const ac = a[1].area.localeCompare(b[1].area);
       if (ac !== 0) return ac;
@@ -644,7 +647,7 @@ export default function BudgetPage({
     };
     for (const s of subEvents) ensure(s.id);
     for (const it of items) {
-      const id = it.subEventId || "__unassigned__";
+      const id = derivePhase(it);
       const b = ensure(id);
       b.count++;
       if (it.inKind) b.inKind += it.total;
@@ -663,11 +666,17 @@ export default function BudgetPage({
       const next = prev.map(item => {
         if (item.id !== id) return item;
         const updated = { ...item, [field]: value };
+        // Changing the phase explicitly makes the phase authoritative for the
+        // billed day count (Llegadas = 2, resto = 1). recalc's legacy "ambos"
+        // preservation guard only applies on load, not on a deliberate change.
+        if (field === "subEventId") {
+          updated.qtyDias = updated.porDias === "SI" ? phaseDayCount(value as string) : 1;
+        }
         return recalc(updated);
       });
       const changed = next.find(i => i.id === id);
       if (changed) {
-        const recalcFields = ["qty", "qtyDias", "dia", "precioUnitario", "porDias", "aplicaFee", "agencyFee", "inKind", "exentoIva", "aplicaTurismo"] as const;
+        const recalcFields = ["qty", "qtyDias", "dia", "subEventId", "precioUnitario", "porDias", "aplicaFee", "agencyFee", "inKind", "exentoIva", "aplicaTurismo"] as const;
         if (recalcFields.includes(field as any)) {
           const { id: _id, ...rest } = changed;
           Object.entries(rest).forEach(([k, v]) => patchItem(id, k, v));
@@ -862,7 +871,7 @@ export default function BudgetPage({
   }, [setItems, patchItem, user]);
 
   const openEditModal = useCallback((item: BudgetItem) => {
-    setEditItem({ ...item });
+    setEditItem({ ...item, subEventId: derivePhase(item) });
     setShowEditModal(true);
   }, []);
 
@@ -888,7 +897,7 @@ export default function BudgetPage({
           qty: Number(editItem.qty) || i.qty,
           uom: editItem.uom ?? i.uom,
           porDias: editItem.porDias ?? i.porDias,
-          qtyDias: Number(editItem.qtyDias) || i.qtyDias,
+          qtyDias: (editItem.porDias ?? i.porDias) === "SI" ? phaseDayCount(editItem.subEventId) : 1,
           precioUnitario: Number(editItem.precioUnitario) ?? i.precioUnitario,
           aplicaFee: editItem.aplicaFee ?? i.aplicaFee,
           cotizacion: editItem.cotizacion ?? i.cotizacion,
@@ -953,7 +962,7 @@ export default function BudgetPage({
     });
     // Auto-expand the group the new item lands in so it's immediately visible
     // (groups are collapsed by default; important when starting from an empty table).
-    const seId = base.subEventId || "__unassigned__";
+    const seId = derivePhase(base);
     const cc = base.centroCosto || "(Sin centro)";
     const groupKey = `${seId}__${base.area}__${cc}`;
     setExpandedAreas(prev => {
@@ -1105,8 +1114,8 @@ export default function BudgetPage({
     const rows = filtered.map(i => {
       const redact = redactMode && !isAuroraOwned(i);
       return [
-        subEventName(i.subEventId), i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
-        i.inKind ? "SI" : "NO", i.agencyFee ? "SI" : "NO", i.qty, i.uom, DIA_LABELS[deriveDia(i)],
+        subEventName(derivePhase(i)), i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
+        i.inKind ? "SI" : "NO", i.agencyFee ? "SI" : "NO", i.qty, i.uom, subEventName(derivePhase(i)),
         i.espacioDia1 || "", i.espacioDia2 || "",
         i.porDias, i.qtyDias, redact ? "" : i.precioUnitario, redact ? "" : i.subtotal, i.agencyFee ? "SI" : "NO",
         i.aplicaFee, redact ? "" : i.fee, redact ? "" : i.subtotalConFee, redact ? "" : i.iva, redact ? "" : i.total, i.cotizacion, i.soloPresupuestado ? "SI" : "NO", i.documento,
@@ -1319,7 +1328,7 @@ export default function BudgetPage({
             if (filterInKind !== "ALL") chips.push({ key: "ik", label: `In-Kind: ${filterInKind}`, onClear: () => setFilterInKind("ALL") });
             if (filterPrecio !== "ALL") chips.push({ key: "pr", label: `Precio: ${filterPrecio}`, onClear: () => setFilterPrecio("ALL") });
             if (filterQtyDias.size > 0) chips.push({ key: "qd", label: `Días: ${Array.from(filterQtyDias).sort().join(",")}`, onClear: () => setFilterQtyDias(new Set()) });
-            if (filterDia !== "ALL") chips.push({ key: "dia", label: `Día: ${DIA_LABELS[filterDia]}`, onClear: () => setFilterDia("ALL") });
+            if (filterPhase !== "ALL") chips.push({ key: "dia", label: `Día: ${subEventName(filterPhase)}`, onClear: () => setFilterPhase("ALL") });
             if (filterEspacio !== "ALL") chips.push({ key: "esp", label: `Espacio: ${filterEspacio}`, onClear: () => setFilterEspacio("ALL") });
             if (filterPending) chips.push({ key: "pn", label: "Pending Quotes", onClear: () => setFilterPending(false) });
             if (filterAccionReq) chips.push({ key: "ar", label: "Acción Req.", onClear: () => setFilterAccionReq(false) });
@@ -1328,7 +1337,7 @@ export default function BudgetPage({
             if (filterNiceToHave) chips.push({ key: "nh", label: "Nice to Have", onClear: () => setFilterNiceToHave(false) });
             return chips;
           })()}
-          onClearAll={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterQtyDias(new Set()); setFilterDia("ALL"); setFilterEspacio("ALL"); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
+          onClearAll={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterQtyDias(new Set()); setFilterPhase("ALL"); setFilterEspacio("ALL"); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
         >
           <div className="flex flex-wrap gap-3 items-center">
           <Select value={filterProveedor} onValueChange={setFilterProveedor}>
@@ -1379,13 +1388,18 @@ export default function BudgetPage({
               <SelectItem value="NONZERO">Con precio</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={filterDia} onValueChange={v => setFilterDia(v as typeof filterDia)}>
+          <Select value={filterPhase} onValueChange={setFilterPhase}>
             <SelectTrigger className="w-[160px] bg-card border-card-border text-xs"><SelectValue placeholder="Día" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="ALL">Día: Todos</SelectItem>
-              <SelectItem value="dia-1">Día 1</SelectItem>
-              <SelectItem value="dia-2">Día 2</SelectItem>
-              <SelectItem value="ambos">Solo Ambos</SelectItem>
+              {subEvents.map(se => (
+                <SelectItem key={se.id} value={se.id}>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: se.color || "#94a3b8" }} />
+                    {se.name}
+                  </span>
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Select value={filterEspacio} onValueChange={setFilterEspacio}>
@@ -1515,10 +1529,10 @@ export default function BudgetPage({
                   <ColHeader label="Tipo" info="Por Día / One-Time." align="center" />
                 </th>
                 <th data-col="dia" className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-20 bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Día" info="Día al que aplica el ítem: Día 1, Día 2 o Ambos. Define cuántos días se cobra un costo por día." align="center" />
+                  <ColHeader label="Día" info="Fase del evento a la que aplica el ítem (Lanzamiento, Main Event Día 1/2, Cenas VIP, Llegadas, Salidas). Unificado con la etiqueta de color. Llegadas cuenta 2 días para costos por día; el resto, 1." align="center" />
                 </th>
                 <th data-col="espacio" className="text-left px-1 py-2.5 font-semibold text-muted-foreground min-w-[110px] bg-[hsl(var(--muted))] border-b border-border">
-                  <ColHeader label="Espacio" info="Espacio/sala físico donde estará el ítem. La lista depende del día (Día 1 / Día 2). Para ítems de Ambos se asigna un espacio por día." align="left" />
+                  <ColHeader label="Espacio" info="Espacio/sala físico donde estará el ítem. La lista depende de la fase del evento." align="left" />
                 </th>
                 <th data-col="dias" className="text-center px-1 py-2.5 font-semibold text-muted-foreground w-12 bg-[hsl(var(--muted))] border-b border-border">
                   <SortableHeader label="Dias" sortKey="dias" current={sortKey} dir={sortDir} onSort={toggleSort} align="center" />
@@ -1592,9 +1606,9 @@ export default function BudgetPage({
                       <div className="flex items-center gap-2 flex-wrap">
                         <span
                           className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-white"
-                          style={{ backgroundColor: subEventColor(group.subEventId === "__unassigned__" ? undefined : group.subEventId) }}
+                          style={{ backgroundColor: subEventColor(group.subEventId) }}
                         >
-                          {subEventName(group.subEventId === "__unassigned__" ? undefined : group.subEventId)}
+                          {subEventName(group.subEventId)}
                         </span>
                         <span className="font-semibold text-foreground text-xs">{group.area}</span>
                         <span className="text-muted-foreground text-[10px]">›</span>
@@ -1612,7 +1626,9 @@ export default function BudgetPage({
                   </tr>,
 
                   ...(isExpanded ? (renderRowsByGroup.get(key) ?? []).flatMap(__row => {
-                    const renderItemTr = (item: BudgetItem) => (
+                    const renderItemTr = (item: BudgetItem) => {
+                    const itemPhaseId = derivePhase(item);
+                    return (
                     <tr
                       key={item.id}
                       className={cn(
@@ -1659,10 +1675,10 @@ export default function BudgetPage({
                               <PopoverTrigger asChild>
                                 <button
                                   className="text-[9px] font-semibold px-1.5 py-0.5 rounded text-white hover:opacity-80 transition-opacity"
-                                  style={{ backgroundColor: subEventColor(item.subEventId) }}
+                                  style={{ backgroundColor: subEventColor(itemPhaseId) }}
                                   title="Cambiar sub-evento"
                                 >
-                                  {subEventName(item.subEventId)}
+                                  {subEventName(itemPhaseId)}
                                 </button>
                               </PopoverTrigger>
                               <PopoverContent className="w-48 p-1" align="start">
@@ -1673,7 +1689,7 @@ export default function BudgetPage({
                                       onClick={() => updateItem(item.id, "subEventId", s.id)}
                                       className={cn(
                                         "flex items-center gap-2 px-2 py-1 rounded text-[11px] text-left hover:bg-muted transition-colors",
-                                        item.subEventId === s.id && "bg-muted font-semibold"
+                                        itemPhaseId === s.id && "bg-muted font-semibold"
                                       )}
                                     >
                                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color || "#94a3b8" }} />
@@ -1686,9 +1702,9 @@ export default function BudgetPage({
                           ) : (
                             <span
                               className="text-[9px] font-semibold px-1.5 py-0.5 rounded text-white"
-                              style={{ backgroundColor: subEventColor(item.subEventId) }}
+                              style={{ backgroundColor: subEventColor(itemPhaseId) }}
                             >
-                              {subEventName(item.subEventId)}
+                              {subEventName(itemPhaseId)}
                             </span>
                           )}
                         </div>
@@ -1737,24 +1753,34 @@ export default function BudgetPage({
                         </button>
                       </td>
                       <td data-col="dia" className="px-1 py-1.5 text-center align-top">
-                        <DiaCell dia={deriveDia(item)} canEdit={canEdit} onChange={v => updateItem(item.id, "dia", v)} />
+                        <PhaseCell
+                          value={itemPhaseId}
+                          name={subEventName(itemPhaseId)}
+                          color={subEventColor(itemPhaseId)}
+                          subEvents={subEvents}
+                          canEdit={canEdit}
+                          onChange={id => updateItem(item.id, "subEventId", id)}
+                        />
                       </td>
                       <td data-col="espacio" className="px-1 py-1.5 align-top">
-                        <SpaceCell
-                          dia={deriveDia(item)}
-                          espacioDia1={item.espacioDia1}
-                          espacioDia2={item.espacioDia2}
-                          optionsDia1={spaceOptionGroupsForItem(spaces, item.subEventId, "dia-1")}
-                          optionsDia2={spaceOptionGroupsForItem(spaces, item.subEventId, "dia-2")}
-                          canEdit={canEdit}
-                          overDia1={!!(item.espacioDia1 && overSpacesByDay["dia-1"].has(item.espacioDia1.trim()))}
-                          overDia2={!!(item.espacioDia2 && overSpacesByDay["dia-2"].has(item.espacioDia2.trim()))}
-                          onAssign={(day, value) => updateItem(item.id, day === "dia-1" ? "espacioDia1" : "espacioDia2", value)}
-                          onAddSpace={(day, name) => {
-                            const canonical = addSpace(day, name);
-                            if (canonical) updateItem(item.id, day === "dia-1" ? "espacioDia1" : "espacioDia2", canonical);
-                          }}
-                        />
+                        {(() => {
+                          const spaceDay = phaseSpaceDay(itemPhaseId);
+                          const spaceVal = spaceDay === "dia-2" ? item.espacioDia2 : item.espacioDia1;
+                          return (
+                            <SpaceCell
+                              day={spaceDay}
+                              value={spaceVal}
+                              options={spaceOptionGroupsForItem(spaces, itemPhaseId, spaceDay)}
+                              canEdit={canEdit}
+                              over={!!(spaceVal && overSpacesByDay[spaceDay].has(spaceVal.trim()))}
+                              onAssign={(day, value) => updateItem(item.id, day === "dia-1" ? "espacioDia1" : "espacioDia2", value)}
+                              onAddSpace={(day, name) => {
+                                const canonical = addSpace(day, name);
+                                if (canonical) updateItem(item.id, day === "dia-1" ? "espacioDia1" : "espacioDia2", canonical);
+                              }}
+                            />
+                          );
+                        })()}
                       </td>
                       <td data-col="dias" className="px-1 py-1.5 text-center align-top">
                         {item.porDias === "SI" ? (
@@ -1762,7 +1788,7 @@ export default function BudgetPage({
                             <TooltipTrigger asChild>
                               <span className="text-center font-mono text-xs text-muted-foreground cursor-help">{item.qtyDias}</span>
                             </TooltipTrigger>
-                            <TooltipContent>Derivado del Día aplicable (Ambos = 2, un día = 1)</TooltipContent>
+                            <TooltipContent>Derivado de la fase del evento (Llegadas = 2, resto = 1)</TooltipContent>
                           </Tooltip>
                         ) : (
                           <span className="text-muted-foreground/30 text-xs">--</span>
@@ -2178,6 +2204,7 @@ export default function BudgetPage({
                       )}
                     </tr>
                     );
+                    };
                     if (__row.kind === "single") return [renderItemTr(__row.item)];
                     const __pex = expandedParents.has(__row.key);
                     const __parentRow = (
@@ -2240,9 +2267,9 @@ export default function BudgetPage({
               <Input value={newItem.item} onChange={e => setNewItem(p => ({ ...p, item: e.target.value }))} placeholder="e.g. CATERING COFFEE BREAK" />
             </div>
             <div>
-              <label className="text-xs font-medium mb-1 block">Sub-evento</label>
+              <label className="text-xs font-medium mb-1 block">Día (Fase del evento)</label>
               <Select value={newItem.subEventId} onValueChange={v => setNewItem(p => ({ ...p, subEventId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar sub-evento" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Seleccionar fase" /></SelectTrigger>
                 <SelectContent>
                   {subEvents.map(se => (
                     <SelectItem key={se.id} value={se.id}>
@@ -2261,15 +2288,10 @@ export default function BudgetPage({
             </div>
             <div>
               <label className="text-xs font-medium mb-1 block">Espacio asignado</label>
-              {deriveDia(newItem) === "ambos" ? (
-                <div className="space-y-1.5">
-                  <ComboInput value={newItem.espacioDia1 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia1: v }))} options={spaceNamesForItem(spaces, newItem.subEventId, "dia-1")} placeholder="Espacio Día 1..." />
-                  <ComboInput value={newItem.espacioDia2 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia2: v }))} options={spaceNamesForItem(spaces, newItem.subEventId, "dia-2")} placeholder="Espacio Día 2..." />
-                </div>
-              ) : deriveDia(newItem) === "dia-1" ? (
-                <ComboInput value={newItem.espacioDia1 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia1: v }))} options={spaceNamesForItem(spaces, newItem.subEventId, "dia-1")} placeholder="Seleccionar espacio..." />
-              ) : (
+              {phaseSpaceDay(newItem.subEventId) === "dia-2" ? (
                 <ComboInput value={newItem.espacioDia2 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia2: v }))} options={spaceNamesForItem(spaces, newItem.subEventId, "dia-2")} placeholder="Seleccionar espacio..." />
+              ) : (
+                <ComboInput value={newItem.espacioDia1 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia1: v }))} options={spaceNamesForItem(spaces, newItem.subEventId, "dia-1")} placeholder="Seleccionar espacio..." />
               )}
             </div>
             <div>
@@ -2374,9 +2396,9 @@ export default function BudgetPage({
               <Input value={editItem.item || ""} onChange={e => setEditItem(p => ({ ...p, item: e.target.value }))} />
             </div>
             <div>
-              <label className="text-xs font-medium mb-1 block">Sub-evento</label>
+              <label className="text-xs font-medium mb-1 block">Día (Fase del evento)</label>
               <Select value={editItem.subEventId || "__unassigned__"} onValueChange={v => setEditItem(p => ({ ...p, subEventId: v === "__unassigned__" ? undefined : v }))}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar sub-evento" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Seleccionar fase" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__unassigned__">Sin asignar</SelectItem>
                   {subEvents.map(se => (
@@ -2395,32 +2417,11 @@ export default function BudgetPage({
               <ComboInput value={editItem.area || ""} onChange={v => setEditItem(p => ({ ...p, area: v }))} options={allZones} placeholder="Seleccionar zona..." />
             </div>
             <div>
-              <label className="text-xs font-medium mb-1 block">Día</label>
-              <Select value={editItem.dia && DIA_VALUES.includes(editItem.dia as DiaValue) ? editItem.dia : deriveDia(editItem)} onValueChange={v => setEditItem(p => ({ ...p, dia: v as DiaValue }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {DIA_VALUES.map(v => (
-                    <SelectItem key={v} value={v}>
-                      <span className="inline-flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: DIA_COLORS[v] }} />
-                        {DIA_LABELS[v]}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
               <label className="text-xs font-medium mb-1 block">Espacio asignado</label>
-              {deriveDia(editItem) === "ambos" ? (
-                <div className="space-y-1.5">
-                  <ComboInput value={editItem.espacioDia1 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia1: v }))} options={spaceNamesForItem(spaces, editItem.subEventId, "dia-1")} placeholder="Espacio Día 1..." />
-                  <ComboInput value={editItem.espacioDia2 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia2: v }))} options={spaceNamesForItem(spaces, editItem.subEventId, "dia-2")} placeholder="Espacio Día 2..." />
-                </div>
-              ) : deriveDia(editItem) === "dia-1" ? (
-                <ComboInput value={editItem.espacioDia1 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia1: v }))} options={spaceNamesForItem(spaces, editItem.subEventId, "dia-1")} placeholder="Seleccionar espacio..." />
-              ) : (
+              {phaseSpaceDay(editItem.subEventId) === "dia-2" ? (
                 <ComboInput value={editItem.espacioDia2 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia2: v }))} options={spaceNamesForItem(spaces, editItem.subEventId, "dia-2")} placeholder="Seleccionar espacio..." />
+              ) : (
+                <ComboInput value={editItem.espacioDia1 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia1: v }))} options={spaceNamesForItem(spaces, editItem.subEventId, "dia-1")} placeholder="Seleccionar espacio..." />
               )}
             </div>
             <div>
