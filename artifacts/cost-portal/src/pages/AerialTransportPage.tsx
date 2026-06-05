@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import {
   Plane, Users, Handshake, Cloud, CloudOff, Loader2, ExternalLink,
   TrendingDown, TrendingUp, CheckCircle2, ListChecks, MapPin, Calendar,
-  UserPlus, Trash2, ChevronDown, ChevronRight, AlertTriangle, Download, Printer,
+  UserPlus, Trash2, ChevronDown, ChevronRight, AlertTriangle, Download, FileText,
 } from "lucide-react";
 import FlightOrderPrintView from "@/components/FlightOrderPrintView";
 import { useFlightsApi } from "@/hooks/useFlightsApi";
@@ -313,18 +313,17 @@ export default function AerialTransportPage() {
     }));
   };
 
-  const handlePrint = () => {
-    const orderRows = buildFlightOrderRows(state.routes);
+  const handleExportPdf = () => {
     const w = window.open("", "_blank", "width=1100,height=850");
     if (!w) return;
-    w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Orden de vuelos — EmTech Digital El Salvador 2026</title></head><body><div id="root"></div></body></html>`);
+    w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Orden final de vuelos — EmTech Digital El Salvador 2026</title></head><body><div id="root"></div></body></html>`);
     w.document.close();
     const mount = w.document.getElementById("root");
     if (!mount) return;
     const root = createRoot(mount);
     root.render(
       <FlightOrderPrintView
-        rows={orderRows}
+        rows={buildFlightOrderRows(state.routes)}
         totals={{ totalSelected: summary.totalSelected, totalOriginal: summary.totalOriginal, totalPax: summary.totalPax }}
         arrivals={derivedLogistics.arrivals}
         departures={derivedLogistics.departures}
@@ -362,17 +361,7 @@ export default function AerialTransportPage() {
           </div>
           <div className="flex flex-col items-end gap-2">
             <SyncIndicator saving={saving} lastSaved={lastSaved} error={error} />
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1.5"
-                onClick={handlePrint}
-                title="Abre una versión imprimible / PDF de la orden de vuelos"
-              >
-                <Printer className="w-4 h-4" />
-                Imprimir / PDF
-              </Button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
               <Button
                 size="sm"
                 variant="outline"
@@ -387,6 +376,15 @@ export default function AerialTransportPage() {
               >
                 <Download className="w-4 h-4" />
                 Exportar CSV
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={handleExportPdf}
+              >
+                <FileText className="w-4 h-4" />
+                Exportar PDF
               </Button>
             </div>
           </div>
