@@ -446,6 +446,9 @@ export default function BudgetPage({
     };
     for (const e of spaces.entries?.["dia-1"] || []) add(e.zone);
     for (const e of spaces.entries?.["dia-2"] || []) add(e.zone);
+    for (const v of spaces.venues || []) {
+      for (const e of v.entries) add(e.zone);
+    }
     return out.sort((a, b) => a.localeCompare(b));
   }, [spaces]);
 

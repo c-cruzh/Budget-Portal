@@ -16,7 +16,7 @@ The spaces catalog has TWO parallel sources, intentionally not unified at the da
 - **Picker options:** `spaceOptionGroupsForItem(catalog, subEventId, day)` returns `SpaceOptionGroup[]` (`{lugar, zone, names}`) = ESEN entries for that day (always, backward-compat) + every venue where `venueMatchesSubEvent(venue, subEventId)` is true, grouped Lugar › Zona. `spaceNamesForItem(...)` is the flat deduped+sorted version used by the add/edit `ComboInput` dialogs. `SpaceCell` takes `optionsDia1/optionsDia2: SpaceOptionGroup[]` (NOT flat `spacesDia1/2` anymore).
 - **Association semantics:** `venueMatchesSubEvent` = empty/undefined `subEventIds` → GLOBAL (offered for every item, so legacy venues without an association stay visible); non-empty → offered only for items whose `subEventId` is in the list. ESEN is implicitly the day axis (no association needed/stored).
 
-**Why:** Task #100 required ALL lugares (not just ESEN) to feed the Budget picker + aforo, with per-Lugar sub-event association. This intentionally overrode the earlier additive-only constraint. Cost math (deriveDia/dayCountForDia/fee/IVA/turismo) was NOT touched — only the picker option source and the capacities map changed.
+**Why:** A requirement that ALL lugares (not just ESEN) feed the Budget picker + aforo, with per-Lugar sub-event association, intentionally overrode the earlier additive-only constraint. Cost math (deriveDia/dayCountForDia/fee/IVA/turismo) was NOT touched — only the picker option source and the capacities map changed. The Area/Zona picker (`allZones` in BudgetPage) must therefore include venue zones too, not just ESEN entries.
 
 ## Seeding / migration
 
