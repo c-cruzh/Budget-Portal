@@ -25,6 +25,7 @@ import { SpacesSheet, type SpaceLoadInfo } from "@/components/budget/SpacesSheet
 import { useAuth } from "@/hooks/useAuth";
 import { ComboInput } from "@/components/ComboInput";
 import { BudgetItemDialog } from "@/components/budget/BudgetItemDialog";
+import { CostBreakdown } from "@/components/budget/CostBreakdown";
 import { SubEventsManagerDialog } from "@/components/SubEventsManagerDialog";
 import { SplitByDayDialog } from "@/components/SplitByDayDialog";
 import { BulkSplitByDayDialog } from "@/components/BulkSplitByDayDialog";
@@ -1927,7 +1928,14 @@ export default function BudgetPage({
                         ) : item.inKind ? (
                           <span className="text-amber-600 font-semibold text-xs">In-Kind</span>
                         ) : item.total > 0 ? (
-                          <span className="font-semibold text-foreground font-mono text-xs">{formatUSD(item.total)}</span>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="font-semibold text-foreground font-mono text-xs cursor-help border-b border-dotted border-muted-foreground/40">{formatUSD(item.total)}</span>
+                            </TooltipTrigger>
+                            <TooltipContent side="left" className="max-w-[280px] p-3">
+                              <CostBreakdown item={item} title="Cómo se construye el total" />
+                            </TooltipContent>
+                          </Tooltip>
                         ) : (
                           <span className="text-muted-foreground">$0.00</span>
                         )}

@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ComboInput } from "@/components/ComboInput";
+import { CostBreakdown } from "@/components/budget/CostBreakdown";
 import { cn } from "@/lib/utils";
 import {
   phaseSpaceDay,
@@ -408,6 +409,11 @@ export function BudgetItemDialog({
               SOLO PRESUPUESTADO
             </label>
           </div>
+        </div>
+
+        {/* Live cost breakdown — mirrors the canonical recalcItem chain */}
+        <div className="mt-4 rounded-lg border border-border bg-muted/30 p-3">
+          <CostBreakdown item={value as BudgetItem} title="Cómo se construye el total" />
         </div>
 
         <div className="flex justify-end gap-2 mt-4">

@@ -78,3 +78,126 @@ export function recalcItem(item: BudgetItem): BudgetItem {
   item.exentoIva = mode === "exento";
   return item;
 }
+
+/** A single line in the per-item cost breakdown. Amounts are raw numbers; the
+ *  UI formats them. `badge` replaces a summed amount with a label (e.g.
+ *  "Exento", "Incluido"); `muted` marks a line that is informational only and
+ *  does NOT add to the total. */
+export interface BreakdownRow {
+  key: string;
+  label: string;
+  /** Short explanation shown under the label (formula / rate). */
+  hint?: string;
+  amount: number;
+  /** Shown instead of (or beside) the amount, e.g. "Exento" / "Incluido". */
+  badge?: string;
+  /** True when the line is informational and not added to the running total. */
+  muted?: boolean;
+  /** True for the final Total line. */
+  emphasis?: boolean;
+}
+
+export interface CostBreakdown {
+  inKind: boolean;
+  qty: number;
+  precio: number;
+  byDias: boolean;
+  dayCount: number;
+  gross: number;
+  rows: BreakdownRow[];
+  total: number;
+}
+
+/**
+ * Builds the human-readable breakdown of how a single line's total is assembled,
+ * derived ENTIRELY from `recalcItem` so it can never drift from the canonical
+ * math chain (gross → pre-IVA base → agency fee → IVA → tourism → total).
+ */
+export function getCostBreakdown(input: BudgetItem): CostBreakdown {
+  // Run the canonical chain on a clone; read every figure back from it.
+  const item = recalcItem({ ...input });
+  const mode: IvaMode = item.ivaMode ?? (item.exentoIva ? "exento" : "raw");
+
+  const qty = Number(item.qty) || 0;
+  const precio = Number(item.precioUnitario) || 0;
+  const byDias = item.porDias === "SI";
+  const dayCount = byDias ? Math.max(1, Number(item.qtyDias) || 1) : 1;
+  const gross = byDias ? qty * dayCount * precio : qty * precio;
+
+  const base = Number(item.subtotal) || 0;
+  const fee = Number(item.fee) || 0;
+  const feeIncluido = Number(item.feeIncluido) || 0;
+  const iva = Number(item.iva) || 0;
+  const turismo = Number(item.turismo) || 0;
+  const subtotalConFee = Number(item.subtotalConFee) || 0;
+  const total = Number(item.total) || 0;
+
+  const rows: BreakdownRow[] = [];
+
+  // 1) Gross — the entered price × quantity (× days when billed per day).
+  rows.push({
+    key: "gross",
+    label: "Bruto",
+    hint: byDias ? "Cant. × días × P. unit." : "Cant. × P. unit.",
+    amount: gross,
+  });
+
+  // 2) Pre-IVA base — only differs from gross when IVA is embedded in the price.
+  if (mode === "incluido") {
+    rows.push({
+      key: "base",
+      label: "Base antes de IVA",
+      hint: "Precio ÷ 1.13 (IVA ya incluido)",
+      amount: base,
+    });
+  }
+
+  // 3) Agency fee (20% on the pre-IVA base), once.
+  if (fee > 0) {
+    rows.push({ key: "fee", label: "Fee Aurora 360", hint: "20% sobre la base", amount: fee });
+    rows.push({ key: "subFee", label: "Subtotal + fee", amount: subtotalConFee });
+  } else if (feeIncluido > 0) {
+    rows.push({
+      key: "fee",
+      label: "Fee Aurora 360",
+      hint: "Ya incluido en la cotización — no suma",
+      amount: feeIncluido,
+      badge: "Incluido",
+      muted: true,
+    });
+  }
+
+  // 4) IVA 13%.
+  if (mode === "exento") {
+    rows.push({ key: "iva", label: "IVA 13%", amount: 0, badge: "Exento", muted: true });
+  } else if (mode === "incluido") {
+    rows.push({
+      key: "iva",
+      label: "IVA 13%",
+      hint: "Porción ya dentro del precio",
+      amount: iva,
+      badge: "Incluido",
+    });
+  } else {
+    rows.push({ key: "iva", label: "IVA 13%", hint: "Sobre subtotal + fee", amount: iva });
+  }
+
+  // 5) Tourism 5% — only when it applies.
+  if (turismo > 0) {
+    rows.push({ key: "turismo", label: "Impuesto turismo 5%", hint: "Sobre subtotal + fee", amount: turismo });
+  }
+
+  // 6) Final total.
+  rows.push({ key: "total", label: "Total", amount: total, emphasis: true });
+
+  return {
+    inKind: !!item.inKind,
+    qty,
+    precio,
+    byDias,
+    dayCount,
+    gross,
+    rows,
+    total,
+  };
+}
