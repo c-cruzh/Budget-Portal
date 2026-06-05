@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
+import { createRoot } from "react-dom/client";
 import { motion } from "framer-motion";
 import {
   Plane, Users, Handshake, Cloud, CloudOff, Loader2, ExternalLink,
   TrendingDown, TrendingUp, CheckCircle2, ListChecks, MapPin, Calendar,
-  UserPlus, Trash2, ChevronDown, ChevronRight, AlertTriangle, Download,
+  UserPlus, Trash2, ChevronDown, ChevronRight, AlertTriangle, Download, Printer,
 } from "lucide-react";
+import FlightOrderPrintView from "@/components/FlightOrderPrintView";
 import { useFlightsApi } from "@/hooks/useFlightsApi";
 import { useAuth } from "@/hooks/useAuth";
 import type {
@@ -311,6 +313,27 @@ export default function AerialTransportPage() {
     }));
   };
 
+  const handlePrint = () => {
+    const orderRows = buildFlightOrderRows(state.routes);
+    const w = window.open("", "_blank", "width=1100,height=850");
+    if (!w) return;
+    w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Orden de vuelos — EmTech Digital El Salvador 2026</title></head><body><div id="root"></div></body></html>`);
+    w.document.close();
+    const mount = w.document.getElementById("root");
+    if (!mount) return;
+    const root = createRoot(mount);
+    root.render(
+      <FlightOrderPrintView
+        rows={orderRows}
+        totals={{ totalSelected: summary.totalSelected, totalOriginal: summary.totalOriginal, totalPax: summary.totalPax }}
+        arrivals={derivedLogistics.arrivals}
+        departures={derivedLogistics.departures}
+        nextSteps={state.nextSteps}
+        generatedAt={new Date()}
+      />
+    );
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
@@ -339,21 +362,33 @@ export default function AerialTransportPage() {
           </div>
           <div className="flex flex-col items-end gap-2">
             <SyncIndicator saving={saving} lastSaved={lastSaved} error={error} />
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
-              onClick={() => downloadFlightOrderCsv(
-                state.routes,
-                { totalSelected: summary.totalSelected, totalOriginal: summary.totalOriginal, totalPax: summary.totalPax },
-                derivedLogistics.arrivals,
-                derivedLogistics.departures,
-                state.nextSteps,
-              )}
-            >
-              <Download className="w-4 h-4" />
-              Exportar orden de vuelos
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={handlePrint}
+                title="Abre una versión imprimible / PDF de la orden de vuelos"
+              >
+                <Printer className="w-4 h-4" />
+                Imprimir / PDF
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => downloadFlightOrderCsv(
+                  state.routes,
+                  { totalSelected: summary.totalSelected, totalOriginal: summary.totalOriginal, totalPax: summary.totalPax },
+                  derivedLogistics.arrivals,
+                  derivedLogistics.departures,
+                  state.nextSteps,
+                )}
+              >
+                <Download className="w-4 h-4" />
+                Exportar CSV
+              </Button>
+            </div>
           </div>
         </div>
         {meta && (
