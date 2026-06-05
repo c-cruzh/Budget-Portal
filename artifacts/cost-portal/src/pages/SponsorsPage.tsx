@@ -8,27 +8,12 @@ import { cn, formatUSD } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useSponsorsApi, type Sponsor } from "@/hooks/useSponsorsApi";
-import { INITIAL_BUDGET_ITEMS, type BudgetItem } from "@/data/budgetData";
+import { INITIAL_BUDGET_ITEMS } from "@/data/budgetData";
+import { recalcItem } from "@/lib/budgetCalc";
 import { EditableCell } from "@/components/EditableCell";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-
-function recalcItem(item: BudgetItem): BudgetItem {
-  const qty = Number(item.qty) || 0;
-  const dias = Number(item.qtyDias) || 1;
-  const precio = Number(item.precioUnitario) || 0;
-  const byDias = item.porDias === "SI";
-  item.subtotal = byDias ? qty * dias * precio : qty * precio;
-  const feeApplies = item.agencyFee && item.aplicaFee !== "SI";
-  item.fee = feeApplies ? item.subtotal * 0.20 : 0;
-  item.feeIncluido = (item.agencyFee && item.aplicaFee === "SI") ? item.subtotal * 0.20 : 0;
-  item.subtotalConFee = item.subtotal + item.fee;
-  item.iva = item.exentoIva ? 0 : item.subtotalConFee * 0.13;
-  item.turismo = item.aplicaTurismo ? item.subtotalConFee * 0.05 : 0;
-  item.total = item.subtotalConFee + item.iva + (item.turismo || 0);
-  return item;
-}
 
 const STATUS_OPTIONS: Array<{ value: NonNullable<Sponsor["status"]>; label: string; color: string }> = [
   { value: "CONFIRMED", label: "Confirmado", color: "bg-emerald-500/10 text-emerald-700 border-emerald-500/30" },

@@ -15,7 +15,7 @@ import { BulkActionsBar } from "@/components/budget/BulkActionsBar";
 import { BudgetHelpGuide } from "@/components/budget/BudgetHelpGuide";
 import { BUDGET_COLUMNS, DEFAULT_VISIBLE } from "@/components/budget/columns";
 import type { LinkedBudgetItem } from "@/data/tasksBoardData";
-import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, STATUS_COLORS, STATUS_SHORT_LABELS, derivePhase, phaseSpaceDay, phaseDayCount, spaceOptionGroupsForItem, spaceNamesForItem, type BudgetItem, type QuoteOption, type SubEvent, type SpaceDayKey } from "@/data/budgetData";
+import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, STATUS_COLORS, STATUS_SHORT_LABELS, derivePhase, phaseSpaceDay, spaceOptionGroupsForItem, spaceNamesForItem, type BudgetItem, type QuoteOption, type SubEvent, type SpaceDayKey } from "@/data/budgetData";
 import { recalcItem } from "@/lib/budgetCalc";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useSubEventsApi } from "@/hooks/useSubEventsApi";
@@ -24,6 +24,7 @@ import { SpaceCell } from "@/components/budget/SpaceCell";
 import { SpacesSheet, type SpaceLoadInfo } from "@/components/budget/SpacesSheet";
 import { useAuth } from "@/hooks/useAuth";
 import { ComboInput } from "@/components/ComboInput";
+import { BudgetItemDialog } from "@/components/budget/BudgetItemDialog";
 import { SubEventsManagerDialog } from "@/components/SubEventsManagerDialog";
 import { SplitByDayDialog } from "@/components/SplitByDayDialog";
 import { BulkSplitByDayDialog } from "@/components/BulkSplitByDayDialog";
@@ -47,13 +48,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -345,7 +339,7 @@ export default function BudgetPage({
     evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "",
     inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1,
     precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0,
-    cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "",
+    cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, ivaMode: "raw", soloPresupuestado: false, accionRequerida: false, statusCotizacion: "",
   });
 
   const subEventFilteredItems = useMemo(() => {
@@ -669,17 +663,11 @@ export default function BudgetPage({
       const next = prev.map(item => {
         if (item.id !== id) return item;
         const updated = { ...item, [field]: value };
-        // Changing the phase explicitly makes the phase authoritative for the
-        // billed day count (Llegadas = 2, resto = 1). recalc's legacy "ambos"
-        // preservation guard only applies on load, not on a deliberate change.
-        if (field === "subEventId") {
-          updated.qtyDias = updated.porDias === "SI" ? phaseDayCount(value as string) : 1;
-        }
         return recalc(updated);
       });
       const changed = next.find(i => i.id === id);
       if (changed) {
-        const recalcFields = ["qty", "qtyDias", "dia", "subEventId", "precioUnitario", "porDias", "aplicaFee", "agencyFee", "inKind", "exentoIva", "aplicaTurismo"] as const;
+        const recalcFields = ["qty", "qtyDias", "dia", "subEventId", "precioUnitario", "porDias", "aplicaFee", "agencyFee", "inKind", "exentoIva", "ivaMode", "aplicaTurismo"] as const;
         if (recalcFields.includes(field as any)) {
           const { id: _id, ...rest } = changed;
           Object.entries(rest).forEach(([k, v]) => patchItem(id, k, v));
@@ -900,7 +888,7 @@ export default function BudgetPage({
           qty: Number(editItem.qty) || i.qty,
           uom: editItem.uom ?? i.uom,
           porDias: editItem.porDias ?? i.porDias,
-          qtyDias: (editItem.porDias ?? i.porDias) === "SI" ? phaseDayCount(editItem.subEventId) : 1,
+          qtyDias: (editItem.porDias ?? i.porDias) === "SI" ? Math.max(1, Number(editItem.qtyDias) || 1) : 1,
           precioUnitario: Number(editItem.precioUnitario) ?? i.precioUnitario,
           aplicaFee: editItem.aplicaFee ?? i.aplicaFee,
           cotizacion: editItem.cotizacion ?? i.cotizacion,
@@ -908,7 +896,7 @@ export default function BudgetPage({
           documento: editItem.documento ?? i.documento,
           proveedor: editItem.proveedor ?? i.proveedor,
           assignedTo: editItem.assignedTo ?? i.assignedTo,
-          exentoIva: editItem.exentoIva ?? i.exentoIva,
+          ivaMode: editItem.ivaMode ?? i.ivaMode ?? (i.exentoIva ? "exento" : "raw"),
           aplicaTurismo: editItem.aplicaTurismo ?? i.aplicaTurismo ?? false,
           validarCosto: editItem.validarCosto ?? i.validarCosto ?? false,
           contratarAparte: editItem.contratarAparte ?? i.contratarAparte ?? false,
@@ -930,6 +918,8 @@ export default function BudgetPage({
     const base: BudgetItem = {
       id,
       evento: newItem.evento || "MAIN EVENT",
+      // Phase is a required field in the dialog (no NO APLICA option), so this is
+      // always a real phase; the fallback only guards a never-touched default.
       subEventId: newItem.subEventId || DEFAULT_SUB_EVENT_ID,
       area: newItem.area || "",
       espacioDia1: newItem.espacioDia1 || "",
@@ -943,20 +933,23 @@ export default function BudgetPage({
       qty: newItem.qty || 0,
       uom: newItem.uom || "",
       porDias: newItem.porDias || "NO",
-      qtyDias: newItem.qtyDias || 1,
+      qtyDias: (newItem.porDias || "NO") === "SI" ? Math.max(1, Number(newItem.qtyDias) || 1) : 1,
       precioUnitario: Number(newItem.precioUnitario) || 0,
       subtotal: 0, aplicaFee: newItem.aplicaFee || "NO",
       fee: 0, subtotalConFee: 0, iva: 0, total: 0,
       cotizacion: newItem.cotizacion || "",
       documento: newItem.documento || "",
       proveedor: newItem.proveedor || "",
-      validarCosto: false,
-      contratarAparte: false,
-      cotizacionLink: "",
-      exentoIva: newItem.exentoIva || false,
+      assignedTo: newItem.assignedTo || "",
+      validarCosto: newItem.validarCosto || false,
+      contratarAparte: newItem.contratarAparte || false,
+      cotizacionLink: newItem.cotizacionLink || "",
+      ivaMode: newItem.ivaMode || "raw",
       aplicaTurismo: newItem.aplicaTurismo || false,
-      soloPresupuestado: false,
-      accionRequerida: false,
+      soloPresupuestado: newItem.soloPresupuestado || false,
+      accionRequerida: newItem.accionRequerida || false,
+      niceToHave: newItem.niceToHave || false,
+      statusCotizacion: newItem.statusCotizacion || "",
     };
     setItems(prev => {
       const next = [...prev, recalc(base)];
@@ -974,7 +967,7 @@ export default function BudgetPage({
       return nextSet;
     });
     setShowAddModal(false);
-    setNewItem({ evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, exentoIva: false, aplicaTurismo: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "" });
+    setNewItem({ evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, ivaMode: "raw", aplicaTurismo: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "" });
   }, [newItem, setItems, saveFull]);
 
   const updateComment = useCallback((id: string, field: "notas" | "descripcion", value: string) => {
@@ -1874,24 +1867,43 @@ export default function BudgetPage({
                       <td data-col="iva" className="px-2 py-1.5 text-right align-top">
                         {redactMode && !isAuroraOwned(item) ? (
                           <RedactedMark />
-                        ) : item.exentoIva ? (
-                          <button
-                            onClick={canEdit ? () => { updateItem(item.id, "exentoIva", false); } : undefined}
-                            className={cn("text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/20 font-medium", canEdit && "hover:bg-amber-500/20 transition-colors", !canEdit && "cursor-default")}
-                          >EXENTO</button>
-                        ) : item.iva > 0 ? (
-                          <span
-                            className={cn("font-mono text-muted-foreground", canEdit && "cursor-pointer hover:text-amber-600 transition-colors")}
-                            title={canEdit ? "Click para marcar exento de IVA" : undefined}
-                            onClick={canEdit ? () => { updateItem(item.id, "exentoIva", true); } : undefined}
-                          >{formatUSD(item.iva)}</span>
-                        ) : (
-                          <span
-                            className={cn("text-muted-foreground/30", canEdit && "cursor-pointer hover:text-amber-600 transition-colors")}
-                            title={canEdit ? "Click para marcar exento de IVA" : undefined}
-                            onClick={canEdit ? () => { updateItem(item.id, "exentoIva", true); } : undefined}
-                          >--</span>
-                        )}
+                        ) : (() => {
+                          const mode = item.ivaMode ?? (item.exentoIva ? "exento" : "raw");
+                          const next: Record<string, "raw" | "incluido" | "exento"> = { raw: "incluido", incluido: "exento", exento: "raw" };
+                          const cycle = canEdit ? () => updateItem(item.id, "ivaMode", next[mode]) : undefined;
+                          const title = canEdit ? "Click para alternar IVA: +13% → incluido → exento" : undefined;
+                          if (mode === "exento") {
+                            return (
+                              <button
+                                onClick={cycle}
+                                className={cn("text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/20 font-medium", canEdit && "hover:bg-amber-500/20 transition-colors", !canEdit && "cursor-default")}
+                              >EXENTO</button>
+                            );
+                          }
+                          if (mode === "incluido") {
+                            return (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    onClick={cycle}
+                                    className={cn("inline-flex items-center gap-1 font-mono text-muted-foreground", canEdit && "cursor-pointer hover:text-sky-600 transition-colors", !canEdit && "cursor-default")}
+                                  >
+                                    <span className="text-[8px] px-1 py-0.5 rounded bg-sky-500/10 text-sky-600 border border-sky-500/20 font-sans font-medium">INCL</span>
+                                    {formatUSD(item.iva)}
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="text-xs font-normal max-w-[200px]">
+                                  IVA ya incluido en el precio — no se suma extra; base derivada (precio ÷ 1.13).
+                                </TooltipContent>
+                              </Tooltip>
+                            );
+                          }
+                          return item.iva > 0 ? (
+                            <span className={cn("font-mono text-muted-foreground", canEdit && "cursor-pointer hover:text-amber-600 transition-colors")} title={title} onClick={cycle}>{formatUSD(item.iva)}</span>
+                          ) : (
+                            <span className={cn("text-muted-foreground/30", canEdit && "cursor-pointer hover:text-amber-600 transition-colors")} title={title} onClick={cycle}>--</span>
+                          );
+                        })()}
                       </td>
                       <td data-col="turismo" className="px-2 py-1.5 text-right align-top">
                         {redactMode && !isAuroraOwned(item) ? (
@@ -2258,321 +2270,37 @@ export default function BudgetPage({
         </div>
       </div>
 
-      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Add Budget Item</DialogTitle>
-            <DialogDescription>Fill in the fields below to add a new budget line item.</DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-3 gap-3 mt-2 text-sm">
-            <div className="col-span-3">
-              <label className="text-xs font-medium mb-1 block">Item Name *</label>
-              <Input value={newItem.item} onChange={e => setNewItem(p => ({ ...p, item: e.target.value }))} placeholder="e.g. CATERING COFFEE BREAK" />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Día (Fase del evento)</label>
-              <Select value={newItem.subEventId} onValueChange={v => setNewItem(p => ({ ...p, subEventId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar fase" /></SelectTrigger>
-                <SelectContent>
-                  {subEvents.map(se => (
-                    <SelectItem key={se.id} value={se.id}>
-                      <span className="inline-flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: se.color }} />
-                        {se.name}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Area / Zona</label>
-              <ComboInput value={newItem.area || ""} onChange={v => setNewItem(p => ({ ...p, area: v }))} options={allZones} placeholder="Seleccionar zona..." />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Espacio asignado</label>
-              {phaseSpaceDay(newItem.subEventId) === "dia-2" ? (
-                <ComboInput value={newItem.espacioDia2 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia2: v }))} options={spaceNamesForItem(spaces, newItem.subEventId, "dia-2")} placeholder="Seleccionar espacio..." />
-              ) : (
-                <ComboInput value={newItem.espacioDia1 || ""} onChange={v => setNewItem(p => ({ ...p, espacioDia1: v }))} options={spaceNamesForItem(spaces, newItem.subEventId, "dia-1")} placeholder="Seleccionar espacio..." />
-              )}
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Centro de Costo</label>
-              <ComboInput value={newItem.centroCosto || ""} onChange={v => setNewItem(p => ({ ...p, centroCosto: v }))} options={allCentros} placeholder="Seleccionar o crear..." />
-            </div>
-            <div className="col-span-3">
-              <label className="text-xs font-medium mb-1 block">Descripcion</label>
-              <Input value={newItem.descripcion} onChange={e => setNewItem(p => ({ ...p, descripcion: e.target.value }))} placeholder="Description..." />
-            </div>
-            <div className="col-span-3">
-              <label className="text-xs font-medium mb-1 block">Notas / Observaciones</label>
-              <Input value={newItem.notas} onChange={e => setNewItem(p => ({ ...p, notas: e.target.value }))} placeholder="Notes..." />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Qty</label>
-              <Input type="number" value={newItem.qty} onChange={e => setNewItem(p => ({ ...p, qty: parseFloat(e.target.value) || 0 }))} />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">UoM</label>
-              <Input value={newItem.uom} onChange={e => setNewItem(p => ({ ...p, uom: e.target.value }))} placeholder="PERSONA, UNIDAD..." />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Precio Unitario</label>
-              <Input type="number" step="0.01" value={newItem.precioUnitario} onChange={e => setNewItem(p => ({ ...p, precioUnitario: parseFloat(e.target.value) || 0 }))} />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Tipo de Contratacion</label>
-              <Select value={newItem.porDias} onValueChange={v => setNewItem(p => ({ ...p, porDias: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="SI">Por Dia</SelectItem>
-                  <SelectItem value="NO">One-Time</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Qty Dias</label>
-              <Input type="number" value={newItem.qtyDias} onChange={e => setNewItem(p => ({ ...p, qtyDias: parseFloat(e.target.value) || 1 }))} />
-            </div>
-            <div className="flex items-end gap-4">
-              <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" checked={newItem.agencyFee || false} onChange={e => setNewItem(p => ({ ...p, agencyFee: e.target.checked }))} className="rounded border-border" />
-                Via Aurora 360?
-              </label>
-            </div>
-            {newItem.agencyFee && (
-              <div>
-                <label className="text-xs font-medium mb-1 block">Fee incluido en cotizacion?</label>
-                <Select value={newItem.aplicaFee} onValueChange={v => setNewItem(p => ({ ...p, aplicaFee: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="SI">SI (ya incluido)</SelectItem>
-                    <SelectItem value="NO">NO (se agrega 20%)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div>
-              <label className="text-xs font-medium mb-1 block">Proveedor</label>
-              <Input value={newItem.proveedor} onChange={e => setNewItem(p => ({ ...p, proveedor: e.target.value }))} placeholder="e.g. AURORA 360" />
-            </div>
-            <div className="flex items-end gap-4 flex-wrap">
-              <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" checked={newItem.inKind || false} onChange={e => setNewItem(p => ({ ...p, inKind: e.target.checked }))} className="rounded border-border" />
-                In-Kind?
-              </label>
-              <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" checked={newItem.exentoIva || false} onChange={e => setNewItem(p => ({ ...p, exentoIva: e.target.checked }))} className="rounded border-border" />
-                Exento IVA?
-              </label>
-              <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" checked={newItem.aplicaTurismo || false} onChange={e => setNewItem(p => ({ ...p, aplicaTurismo: e.target.checked }))} className="rounded border-border" />
-                Turismo 5%?
-              </label>
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Cotizacion</label>
-              <Input value={newItem.cotizacion} onChange={e => setNewItem(p => ({ ...p, cotizacion: e.target.value }))} placeholder="A2, PENDING..." />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Imagen de Referencia</label>
-              <Input value={newItem.documento} onChange={e => setNewItem(p => ({ ...p, documento: e.target.value }))} placeholder="URL de imagen..." />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setShowAddModal(false)}>Cancel</Button>
-            <Button onClick={addItem} disabled={!newItem.item}>Add Item</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <BudgetItemDialog
+        mode="add"
+        open={showAddModal}
+        onOpenChange={setShowAddModal}
+        value={newItem}
+        onChange={setNewItem}
+        onSave={addItem}
+        subEvents={subEvents}
+        allZones={allZones}
+        allCentros={allCentros}
+        spaces={spaces}
+        portalUsers={portalUsers}
+        statusOptions={STATUS_COTIZACION_OPTIONS}
+        statusLabels={STATUS_SHORT_LABELS}
+      />
 
-      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Budget Item</DialogTitle>
-            <DialogDescription>Modify the fields below and click Save Changes.</DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-3 gap-3 mt-2 text-sm">
-            <div className="col-span-3">
-              <label className="text-xs font-medium mb-1 block">Item Name *</label>
-              <Input value={editItem.item || ""} onChange={e => setEditItem(p => ({ ...p, item: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Día (Fase del evento)</label>
-              <Select value={editItem.subEventId || "__unassigned__"} onValueChange={v => setEditItem(p => ({ ...p, subEventId: v === "__unassigned__" ? undefined : v }))}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar fase" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__unassigned__">Sin asignar</SelectItem>
-                  {subEvents.map(se => (
-                    <SelectItem key={se.id} value={se.id}>
-                      <span className="inline-flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: se.color }} />
-                        {se.name}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Area / Zona</label>
-              <ComboInput value={editItem.area || ""} onChange={v => setEditItem(p => ({ ...p, area: v }))} options={allZones} placeholder="Seleccionar zona..." />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Espacio asignado</label>
-              {phaseSpaceDay(editItem.subEventId) === "dia-2" ? (
-                <ComboInput value={editItem.espacioDia2 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia2: v }))} options={spaceNamesForItem(spaces, editItem.subEventId, "dia-2")} placeholder="Seleccionar espacio..." />
-              ) : (
-                <ComboInput value={editItem.espacioDia1 || ""} onChange={v => setEditItem(p => ({ ...p, espacioDia1: v }))} options={spaceNamesForItem(spaces, editItem.subEventId, "dia-1")} placeholder="Seleccionar espacio..." />
-              )}
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Centro de Costo</label>
-              <ComboInput value={editItem.centroCosto || ""} onChange={v => setEditItem(p => ({ ...p, centroCosto: v }))} options={allCentros} placeholder="Seleccionar o crear..." />
-            </div>
-            <div className="col-span-3">
-              <label className="text-xs font-medium mb-1 block">Descripcion</label>
-              <Input value={editItem.descripcion || ""} onChange={e => setEditItem(p => ({ ...p, descripcion: e.target.value }))} />
-            </div>
-            <div className="col-span-3">
-              <label className="text-xs font-medium mb-1 block">Notas / Observaciones</label>
-              <Input value={editItem.notas || ""} onChange={e => setEditItem(p => ({ ...p, notas: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Qty</label>
-              <Input type="number" value={editItem.qty ?? 0} onChange={e => setEditItem(p => ({ ...p, qty: parseFloat(e.target.value) || 0 }))} />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">UoM</label>
-              <Input value={editItem.uom || ""} onChange={e => setEditItem(p => ({ ...p, uom: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Precio Unitario</label>
-              <Input type="number" step="0.01" value={editItem.precioUnitario ?? 0} onChange={e => setEditItem(p => ({ ...p, precioUnitario: parseFloat(e.target.value) || 0 }))} />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Tipo de Contratacion</label>
-              <Select value={editItem.porDias || "NO"} onValueChange={v => setEditItem(p => ({ ...p, porDias: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="SI">Por Dia</SelectItem>
-                  <SelectItem value="NO">One-Time</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Qty Dias</label>
-              <Input type="number" value={editItem.qtyDias ?? 1} onChange={e => setEditItem(p => ({ ...p, qtyDias: parseFloat(e.target.value) || 1 }))} />
-            </div>
-            <div className="flex items-end gap-4">
-              <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" checked={editItem.agencyFee || false} onChange={e => setEditItem(p => ({ ...p, agencyFee: e.target.checked }))} className="rounded border-border" />
-                Via Aurora 360?
-              </label>
-            </div>
-            {editItem.agencyFee && (
-              <div>
-                <label className="text-xs font-medium mb-1 block">Fee incluido en cotizacion?</label>
-                <Select value={editItem.aplicaFee || "NO"} onValueChange={v => setEditItem(p => ({ ...p, aplicaFee: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="SI">SI (ya incluido)</SelectItem>
-                    <SelectItem value="NO">NO (se agrega 20%)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div>
-              <label className="text-xs font-medium mb-1 block">Proveedor</label>
-              <Input value={editItem.proveedor || ""} onChange={e => setEditItem(p => ({ ...p, proveedor: e.target.value }))} />
-            </div>
-            <div className="flex items-end gap-4">
-              <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" checked={editItem.inKind || false} onChange={e => setEditItem(p => ({ ...p, inKind: e.target.checked }))} className="rounded border-border" />
-                In-Kind?
-              </label>
-              <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" checked={editItem.exentoIva || false} onChange={e => setEditItem(p => ({ ...p, exentoIva: e.target.checked }))} className="rounded border-border" />
-                Exento IVA?
-              </label>
-              <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" checked={editItem.aplicaTurismo || false} onChange={e => setEditItem(p => ({ ...p, aplicaTurismo: e.target.checked }))} className="rounded border-border" />
-                Aplica Turismo 5%?
-              </label>
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Cotizacion</label>
-              <Input value={editItem.cotizacion || ""} onChange={e => setEditItem(p => ({ ...p, cotizacion: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Link de Cotizacion</label>
-              <Input value={editItem.cotizacionLink || ""} onChange={e => setEditItem(p => ({ ...p, cotizacionLink: e.target.value }))} placeholder="https://..." />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Imagen de Referencia</label>
-              <Input value={editItem.documento || ""} onChange={e => setEditItem(p => ({ ...p, documento: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Status de Cotizacion</label>
-              <Select value={editItem.statusCotizacion || "__none__"} onValueChange={v => setEditItem(p => ({ ...p, statusCotizacion: v === "__none__" ? "" : v }))}>
-                <SelectTrigger><SelectValue placeholder="Status..." /></SelectTrigger>
-                <SelectContent>
-                  {STATUS_COTIZACION_OPTIONS.map(opt => (
-                    <SelectItem key={opt || "__none__"} value={opt || "__none__"}>
-                      {opt ? (STATUS_SHORT_LABELS[opt] || opt) : "Sin status"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-xs font-medium mb-1 block">Asignado a</label>
-              <Select value={editItem.assignedTo || "__none__"} onValueChange={v => setEditItem(p => ({ ...p, assignedTo: v === "__none__" ? "" : v }))}>
-                <SelectTrigger><SelectValue placeholder="Asignar..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Sin asignar</SelectItem>
-                  {portalUsers.map(u => (
-                    <SelectItem key={u.id} value={u.name}>
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="w-4 h-4 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[8px] font-bold">{u.name.charAt(0)}</span>
-                        {u.name}
-                        <span className="text-muted-foreground text-[9px]">{u.organization}</span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="col-span-3 flex flex-wrap items-center gap-4 border-t border-border pt-3 mt-1">
-              <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" checked={editItem.validarCosto || false} onChange={e => setEditItem(p => ({ ...p, validarCosto: e.target.checked }))} className="rounded border-border" />
-                Validar costo
-              </label>
-              <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" checked={editItem.contratarAparte || false} onChange={e => setEditItem(p => ({ ...p, contratarAparte: e.target.checked }))} className="rounded border-border" />
-                Contratar aparte
-              </label>
-              <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" checked={editItem.accionRequerida || false} onChange={e => setEditItem(p => ({ ...p, accionRequerida: e.target.checked }))} className="rounded border-border" />
-                Acción requerida
-              </label>
-              <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" checked={editItem.niceToHave || false} onChange={e => setEditItem(p => ({ ...p, niceToHave: e.target.checked }))} className="rounded border-border" />
-                Nice to have
-              </label>
-              <label className="flex items-center gap-2 text-xs">
-                <input type="checkbox" checked={editItem.soloPresupuestado || false} onChange={e => setEditItem(p => ({ ...p, soloPresupuestado: e.target.checked }))} className="rounded border-border" />
-                Solo presupuestado
-              </label>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setShowEditModal(false)}>Cancel</Button>
-            <Button onClick={saveEditItem} disabled={!editItem.item}>Save Changes</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <BudgetItemDialog
+        mode="edit"
+        open={showEditModal}
+        onOpenChange={setShowEditModal}
+        value={editItem}
+        onChange={setEditItem}
+        onSave={saveEditItem}
+        subEvents={subEvents}
+        allZones={allZones}
+        allCentros={allCentros}
+        spaces={spaces}
+        portalUsers={portalUsers}
+        statusOptions={STATUS_COTIZACION_OPTIONS}
+        statusLabels={STATUS_SHORT_LABELS}
+      />
 
       <BulkActionsBar
         count={selectedIds.size}

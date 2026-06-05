@@ -89,6 +89,34 @@ export function isDiaValue(v: unknown): v is DiaValue {
   return v === "dia-1" || v === "dia-2" || v === "ambos";
 }
 
+/**
+ * Explicit per-item IVA (13%) treatment. Replaces the old single `exentoIva`
+ * boolean so the price entry mode is unambiguous:
+ *  - `raw`      → precio is PRE-IVA; portal adds 13% on top.
+ *  - `incluido` → precio ALREADY includes IVA; portal does NOT re-add it and
+ *                 derives the pre-IVA base (precio / 1.13) for reporting.
+ *  - `exento`   → not subject to IVA; 0.
+ */
+export type IvaMode = "raw" | "incluido" | "exento";
+
+export const IVA_MODE_VALUES: IvaMode[] = ["raw", "incluido", "exento"];
+
+export const IVA_MODE_LABELS: Record<IvaMode, string> = {
+  raw: "Pre-IVA (sumar 13%)",
+  incluido: "IVA incluido en precio",
+  exento: "Exento / No aplica",
+};
+
+export const IVA_MODE_SHORT: Record<IvaMode, string> = {
+  raw: "+IVA",
+  incluido: "INCL",
+  exento: "EXENTO",
+};
+
+export function isIvaMode(v: unknown): v is IvaMode {
+  return v === "raw" || v === "incluido" || v === "exento";
+}
+
 interface DiaSource {
   dia?: DiaValue;
   item?: string;
@@ -100,34 +128,20 @@ interface DiaSource {
 }
 
 /**
- * Single source of truth for the day that a budget item applies to.
- * Consolidates the previously-scattered day signals (explicit `dia`,
- * free-text hints, the qtyDias/porDias multiplier, and subEventId grouping)
- * into one of: "dia-1" | "dia-2" | "ambos".
+ * The display day a budget item applies to: "dia-1" | "dia-2" | "ambos".
+ *
+ * This is a DISPLAY-ONLY label and does NOT drive cost — per-day cost is billed
+ * strictly from the explicit `qtyDias` count in recalcItem. We therefore no
+ * longer infer the day from free-text hints or silently promote per-día items
+ * to "ambos" (which used to double cost). Resolution order:
+ *  1. an explicit `dia` set by the user / split dialogs,
+ *  2. the day-named event phase (subEventId === "dia-1" | "dia-2"),
+ *  3. otherwise "ambos" (unassigned / non-day phase) — purely a visual tag.
  */
 export function deriveDia(item: DiaSource): DiaValue {
   if (isDiaValue(item.dia)) return item.dia;
-  const text = `${item.item || ""} ${item.descripcion || ""} ${item.notas || ""}`.toUpperCase();
-  // Explicit "both days" text hints (e.g. "DIA 1 & 2", "DAY 1 AND 2")
-  if (/(D[IÍ]A|DAY)\s*1\s*(&|Y|AND)\s*2/.test(text)) return "ambos";
-  // Explicit single-day-only text hints (e.g. "DAY 1 ONLY", "SOLO DIA 2")
-  if (/(DAY|D[IÍ]A)\s*1\s*(ONLY|[ÚU]NIC)/.test(text) || /SOLO\s*(DAY|D[IÍ]A)\s*1/.test(text)) return "dia-1";
-  if (/(DAY|D[IÍ]A)\s*2\s*(ONLY|[ÚU]NIC)/.test(text) || /SOLO\s*(DAY|D[IÍ]A)\s*2/.test(text)) return "dia-2";
-  // Recurring cost across more than one day => both days
-  const dias = Number(item.qtyDias) || 1;
-  if (item.porDias === "SI" && dias >= 2) return "ambos";
-  // Fall back to the sub-event grouping for the two day-named sub-events.
   if (item.subEventId === "dia-1") return "dia-1";
   if (item.subEventId === "dia-2") return "dia-2";
-  // No day signal at all (unassigned, or a non-day sub-event like Lanzamiento /
-  // Cena VIP). A per-day item that does NOT recur (qtyDias < 2) must stay on a
-  // single day — returning "ambos" would silently double its cost via
-  // dayCountForDia in recalcItem. Only the explicit multi-day branch above may
-  // promote to "ambos".
-  if (item.porDias === "SI") return "dia-2";
-  // Truly unassigned, non-recurring: spans/unspecified. No cost impact
-  // (dayCount only applies when porDias === "SI"); surfaces visibly as "Ambos"
-  // instead of silently claiming Día 2. The user can still pin an explicit day.
   return "ambos";
 }
 
@@ -197,7 +211,10 @@ export interface BudgetItem {
   proveedor: string;
   validarCosto: boolean;
   contratarAparte: boolean;
+  /** @deprecated kept as a derived mirror of `ivaMode === "exento"` for CSV/legacy reads. */
   exentoIva?: boolean;
+  /** Explicit IVA treatment. Source of truth for the 13% logic in recalcItem. */
+  ivaMode?: IvaMode;
   aplicaTurismo?: boolean;
   turismo?: number;
   feeIncluido?: number;
