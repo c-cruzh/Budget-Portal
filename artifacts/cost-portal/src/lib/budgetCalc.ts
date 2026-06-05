@@ -1,4 +1,4 @@
-import { deriveDia, phaseDayCount, type BudgetItem, type IvaMode, type QuoteOption } from "@/data/budgetData";
+import { deriveDia, phaseDayCount, type BudgetItem, type IvaMode, type QuoteOption, type TransportMode } from "@/data/budgetData";
 
 export const IVA_RATE = 0.13;
 export const FEE_RATE = 0.20;
@@ -200,4 +200,84 @@ export function getCostBreakdown(input: BudgetItem): CostBreakdown {
     rows,
     total,
   };
+}
+
+/** A transport line crediting a covered item with a share of its cost. */
+export interface TransportSource {
+  transportId: string;
+  label: string;
+  mode: TransportMode;
+  /** Allocated share in this credit. 0 for association-mode transports. */
+  amount: number;
+}
+
+/** A covered item serviced by a transport line. */
+export interface CoveredEntry {
+  id: string;
+  label: string;
+  /** Allocated share for this covered item. 0 for association-mode transports. */
+  amount: number;
+}
+
+/**
+ * Display-only traceability index for transport/delivery lines. This NEVER
+ * mutates or re-sums any item total — the grand total stays exactly the sum of
+ * `item.total`. For "allocation" transports it computes an equal split of the
+ * transport's own `total` across its (existing) covered items, purely so the UI
+ * can annotate both directions without double-counting. Association transports
+ * keep their whole cost on their own line, so their allocated shares are 0.
+ */
+export interface TransportAllocationInfo {
+  /** itemId -> total transport $ allocated to it (allocation-mode only). */
+  allocatedToItem: Map<string, number>;
+  /** itemId -> transport lines that deliver/install it (both modes). */
+  sourcesForItem: Map<string, TransportSource[]>;
+  /** transportId -> covered item entries that exist in the array. */
+  coveredByTransport: Map<string, CoveredEntry[]>;
+  /** transportId -> amount distributed away for display (== total in allocation mode, else 0). */
+  distributedByTransport: Map<string, number>;
+}
+
+export function computeTransportAllocations(items: BudgetItem[]): TransportAllocationInfo {
+  const byId = new Map<string, BudgetItem>();
+  for (const it of items) byId.set(it.id, it);
+
+  const info: TransportAllocationInfo = {
+    allocatedToItem: new Map(),
+    sourcesForItem: new Map(),
+    coveredByTransport: new Map(),
+    distributedByTransport: new Map(),
+  };
+
+  for (const t of items) {
+    if (!t.isTransport) continue;
+    const ids = Array.isArray(t.coveredItemIds) ? t.coveredItemIds : [];
+    // Only count covered items that still exist and aren't the transport itself.
+    const covered = ids.filter(id => id !== t.id && byId.has(id));
+    if (covered.length === 0) {
+      info.coveredByTransport.set(t.id, []);
+      info.distributedByTransport.set(t.id, 0);
+      continue;
+    }
+    const mode: TransportMode = t.transportMode === "allocation" ? "allocation" : "association";
+    const share = mode === "allocation" ? (t.total || 0) / covered.length : 0;
+    const tLabel = t.item || t.descripcion || "(transporte)";
+
+    const entries: CoveredEntry[] = [];
+    for (const id of covered) {
+      const target = byId.get(id)!;
+      entries.push({ id, label: target.item || target.descripcion || id, amount: share });
+
+      if (share > 0) {
+        info.allocatedToItem.set(id, (info.allocatedToItem.get(id) || 0) + share);
+      }
+      const srcList = info.sourcesForItem.get(id) || [];
+      srcList.push({ transportId: t.id, label: tLabel, mode, amount: share });
+      info.sourcesForItem.set(id, srcList);
+    }
+    info.coveredByTransport.set(t.id, entries);
+    info.distributedByTransport.set(t.id, mode === "allocation" ? share * covered.length : 0);
+  }
+
+  return info;
 }

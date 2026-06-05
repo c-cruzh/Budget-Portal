@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, Info,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
-  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus, MapPin, Lock, SendHorizontal
+  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus, MapPin, Lock, SendHorizontal, Truck, PackageCheck
 } from "lucide-react";
 import { CreateTaskFromItemDialog } from "@/components/CreateTaskFromItemDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,7 +16,7 @@ import { BudgetHelpGuide } from "@/components/budget/BudgetHelpGuide";
 import { BUDGET_COLUMNS, DEFAULT_VISIBLE } from "@/components/budget/columns";
 import type { LinkedBudgetItem } from "@/data/tasksBoardData";
 import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, STATUS_COLORS, STATUS_SHORT_LABELS, derivePhase, phaseSpaceDay, spaceOptionGroupsForItem, spaceNamesForItem, type BudgetItem, type QuoteOption, type SubEvent, type SpaceDayKey } from "@/data/budgetData";
-import { recalcItem } from "@/lib/budgetCalc";
+import { recalcItem, computeTransportAllocations } from "@/lib/budgetCalc";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useSubEventsApi } from "@/hooks/useSubEventsApi";
 import { useSpacesApi } from "@/hooks/useSpacesApi";
@@ -905,6 +905,9 @@ export default function BudgetPage({
           niceToHave: editItem.niceToHave ?? i.niceToHave ?? false,
           soloPresupuestado: editItem.soloPresupuestado ?? i.soloPresupuestado ?? false,
           statusCotizacion: editItem.statusCotizacion ?? i.statusCotizacion ?? "",
+          isTransport: editItem.isTransport ?? i.isTransport ?? false,
+          transportMode: editItem.transportMode ?? i.transportMode,
+          coveredItemIds: editItem.coveredItemIds ?? i.coveredItemIds,
         };
         return recalcItem(updated);
       });
@@ -951,6 +954,9 @@ export default function BudgetPage({
       accionRequerida: newItem.accionRequerida || false,
       niceToHave: newItem.niceToHave || false,
       statusCotizacion: newItem.statusCotizacion || "",
+      isTransport: newItem.isTransport || false,
+      transportMode: newItem.transportMode,
+      coveredItemIds: newItem.coveredItemIds,
     };
     setItems(prev => {
       const next = [...prev, recalc(base)];
@@ -968,7 +974,7 @@ export default function BudgetPage({
       return nextSet;
     });
     setShowAddModal(false);
-    setNewItem({ evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, ivaMode: "raw", aplicaTurismo: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "" });
+    setNewItem({ evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, ivaMode: "raw", aplicaTurismo: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "", isTransport: false, transportMode: undefined, coveredItemIds: [] });
   }, [newItem, setItems, saveFull]);
 
   const updateComment = useCallback((id: string, field: "notas" | "descripcion", value: string) => {
@@ -1084,6 +1090,12 @@ export default function BudgetPage({
     a.href = url; a.download = "Budget_Selection.csv"; a.click();
     URL.revokeObjectURL(url);
   }, [items, selectedIds]);
+
+  // Display-only transport traceability. Computed over ALL items (not just the
+  // filtered view) so links resolve even when the covered item is filtered out.
+  // This never feeds into totalBudget — the grand total stays the plain sum of
+  // i.total, so transport cost is counted exactly once regardless of mode.
+  const transportInfo = useMemo(() => computeTransportAllocations(items), [items]);
 
   const totalBudget = useMemo(() => filtered.reduce((s, i) => s + i.total, 0), [filtered]);
   const cashSinFee = useMemo(() => filtered.filter(i => !i.inKind && i.total > 0).reduce((s, i) => s + i.subtotal + i.iva + (i.turismo || 0), 0), [filtered]);
@@ -1706,6 +1718,75 @@ export default function BudgetPage({
                           )}
                         </div>
                         <EditableCell value={item.item} onSave={v => updateItem(item.id, "item", v)} className="font-medium text-foreground text-xs" disabled={!canEdit} />
+                        {(() => {
+                          const covers = item.isTransport ? (transportInfo.coveredByTransport.get(item.id) || []) : [];
+                          const sources = transportInfo.sourcesForItem.get(item.id) || [];
+                          if (covers.length === 0 && sources.length === 0) return null;
+                          const allocated = transportInfo.allocatedToItem.get(item.id) || 0;
+                          const distributed = transportInfo.distributedByTransport.get(item.id) || 0;
+                          return (
+                            <div className="flex flex-wrap gap-1 mt-0.5">
+                              {item.isTransport && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300">
+                                      <Truck className="w-2.5 h-2.5" />
+                                      Entrega {covers.length}
+                                      {distributed > 0 && <span className="font-mono opacity-80">· reparte {formatUSD(distributed)}</span>}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="bottom" className="max-w-[320px] text-xs p-3 space-y-1">
+                                    <div className="font-semibold text-foreground">
+                                      {item.transportMode === "allocation" ? "Reparte su costo (visual) entre:" : "Entrega / instala:"}
+                                    </div>
+                                    {covers.length === 0 ? (
+                                      <div className="text-muted-foreground italic">Sin ítems vinculados.</div>
+                                    ) : (
+                                      <ul className="space-y-0.5">
+                                        {covers.map(c => (
+                                          <li key={c.id} className="flex justify-between gap-3">
+                                            <span className="truncate">{c.label}</span>
+                                            {c.amount > 0 && <span className="font-mono text-muted-foreground">{formatUSD(c.amount)}</span>}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                    {item.transportMode === "allocation" && (
+                                      <div className="text-[10px] text-muted-foreground pt-1">El total general no cambia; el reparto es solo visual.</div>
+                                    )}
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                              {sources.length > 0 && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                                      <PackageCheck className="w-2.5 h-2.5" />
+                                      {sources.length === 1 ? "Entregado" : `Entregado ×${sources.length}`}
+                                      {allocated > 0 && <span className="font-mono opacity-80">+{formatUSD(allocated)}</span>}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="bottom" className="max-w-[320px] text-xs p-3 space-y-1">
+                                    <div className="font-semibold text-foreground">Entregado / instalado por:</div>
+                                    <ul className="space-y-0.5">
+                                      {sources.map(s => (
+                                        <li key={s.transportId} className="flex justify-between gap-3">
+                                          <span className="truncate">{s.label}</span>
+                                          <span className="font-mono text-muted-foreground">
+                                            {s.mode === "allocation" ? `+${formatUSD(s.amount)}` : "asociado"}
+                                          </span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                    {allocated > 0 && (
+                                      <div className="text-[10px] text-muted-foreground pt-1">Costo de transporte asignado (visual): {formatUSD(allocated)}. No se suma al total general.</div>
+                                    )}
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                            </div>
+                          );
+                        })()}
                         {(item.descripcion || item.notas) && (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -2292,6 +2373,7 @@ export default function BudgetPage({
         portalUsers={portalUsers}
         statusOptions={STATUS_COTIZACION_OPTIONS}
         statusLabels={STATUS_SHORT_LABELS}
+        allItems={items}
       />
 
       <BudgetItemDialog
@@ -2308,6 +2390,7 @@ export default function BudgetPage({
         portalUsers={portalUsers}
         statusOptions={STATUS_COTIZACION_OPTIONS}
         statusLabels={STATUS_SHORT_LABELS}
+        allItems={items}
       />
 
       <BulkActionsBar

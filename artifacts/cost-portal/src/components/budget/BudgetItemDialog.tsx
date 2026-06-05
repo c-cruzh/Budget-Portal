@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,14 +9,18 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ComboInput } from "@/components/ComboInput";
 import { CostBreakdown } from "@/components/budget/CostBreakdown";
-import { cn } from "@/lib/utils";
+import { cn, formatUSD } from "@/lib/utils";
+import { Truck, X, Search, Check } from "lucide-react";
 import {
   phaseSpaceDay,
   spaceNamesForItem,
   IVA_MODE_VALUES,
   IVA_MODE_LABELS,
+  TRANSPORT_MODE_VALUES,
+  TRANSPORT_MODE_LABELS,
   type BudgetItem,
   type SubEvent,
   type SpacesCatalog,
@@ -45,6 +49,8 @@ interface BudgetItemDialogProps {
   portalUsers: PortalUserLite[];
   statusOptions: string[];
   statusLabels: Record<string, string>;
+  /** All budget items, used to pick which items a transport line covers. */
+  allItems: BudgetItem[];
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
@@ -65,9 +71,13 @@ export function BudgetItemDialog({
   portalUsers,
   statusOptions,
   statusLabels,
+  allItems,
 }: BudgetItemDialogProps) {
   const byDias = value.porDias === "SI";
   const ivaMode = value.ivaMode ?? (value.exentoIva ? "exento" : "raw");
+  const isTransport = value.isTransport || false;
+  const transportMode = value.transportMode === "allocation" ? "allocation" : "association";
+  const coveredIds = useMemo(() => value.coveredItemIds ?? [], [value.coveredItemIds]);
 
   const errors = useMemo(() => {
     const e: Record<string, string> = {};
@@ -386,6 +396,56 @@ export function BudgetItemDialog({
             </Select>
           </div>
 
+          {/* Transporte / entrega */}
+          <div className="col-span-3 border-t border-border pt-3 mt-1">
+            <label className="flex items-center gap-2 text-xs font-semibold">
+              <input
+                type="checkbox"
+                checked={isTransport}
+                onChange={e => {
+                  const on = e.target.checked;
+                  onChange(p => ({
+                    ...p,
+                    isTransport: on,
+                    transportMode: on ? (p.transportMode === "allocation" ? "allocation" : "association") : p.transportMode,
+                  }));
+                }}
+                className="rounded border-border"
+              />
+              <Truck className="w-3.5 h-3.5 text-sky-500" />
+              ES TRANSPORTE / ENTREGA (MONTAJE)
+            </label>
+            {isTransport && (
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
+                <div className="sm:col-span-2">
+                  <FieldLabel>Modo de costo del transporte</FieldLabel>
+                  <Select value={transportMode} onValueChange={v => set("transportMode", v as BudgetItem["transportMode"])}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {TRANSPORT_MODE_VALUES.map(m => (
+                        <SelectItem key={m} value={m}>{TRANSPORT_MODE_LABELS[m]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {transportMode === "allocation"
+                      ? "El costo de este transporte se reparte (en partes iguales) entre los ítems vinculados, solo de forma visual. El total general no cambia."
+                      : "El costo queda completo en esta línea de transporte; los ítems vinculados solo muestran quién los entrega/instala."}
+                  </p>
+                </div>
+                <div className="sm:col-span-2">
+                  <FieldLabel>Ítems que entrega / instala</FieldLabel>
+                  <TransportLinksField
+                    allItems={allItems}
+                    currentId={value.id}
+                    selectedIds={coveredIds}
+                    onChange={(ids) => set("coveredItemIds", ids)}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Flags */}
           <div className="col-span-3 flex flex-wrap items-center gap-4 border-t border-border pt-3 mt-1">
             <label className="flex items-center gap-2 text-xs">
@@ -424,5 +484,134 @@ export function BudgetItemDialog({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface TransportLinksFieldProps {
+  allItems: BudgetItem[];
+  /** Current item id, excluded from the selectable list. */
+  currentId?: string;
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+}
+
+/** Searchable multi-select of budget items a transport line delivers/installs. */
+function TransportLinksField({ allItems, currentId, selectedIds, onChange }: TransportLinksFieldProps) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  // Selectable targets: every other item that is not itself a transport line.
+  const selectable = useMemo(
+    () => allItems.filter(i => i.id !== currentId && !i.isTransport),
+    [allItems, currentId]
+  );
+
+  const byId = useMemo(() => {
+    const m = new Map<string, BudgetItem>();
+    for (const i of allItems) m.set(i.id, i);
+    return m;
+  }, [allItems]);
+
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const base = q
+      ? selectable.filter(i =>
+          (i.item || "").toLowerCase().includes(q) ||
+          (i.area || "").toLowerCase().includes(q) ||
+          (i.centroCosto || "").toLowerCase().includes(q) ||
+          (i.proveedor || "").toLowerCase().includes(q)
+        )
+      : selectable;
+    return base.slice(0, 100);
+  }, [selectable, query]);
+
+  const toggle = (id: string) => {
+    if (selectedSet.has(id)) onChange(selectedIds.filter(x => x !== id));
+    else onChange([...selectedIds, id]);
+  };
+
+  // Keep displayed chips for ids that still resolve to existing items.
+  const chips = selectedIds.filter(id => byId.has(id));
+
+  return (
+    <div>
+      {chips.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2">
+          {chips.map(id => {
+            const it = byId.get(id)!;
+            return (
+              <span
+                key={id}
+                className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+              >
+                <span className="truncate max-w-[160px]">{it.item || it.descripcion || id}</span>
+                <button type="button" onClick={() => toggle(id)} className="hover:text-destructive">
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="outline" size="sm" className="w-full justify-between font-normal">
+            <span className="text-muted-foreground">
+              {chips.length === 0 ? "Vincular ítems..." : `${chips.length} ítem${chips.length === 1 ? "" : "s"} vinculado${chips.length === 1 ? "" : "s"}`}
+            </span>
+            <Search className="w-3.5 h-3.5 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+          <div className="p-2 border-b border-border">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Buscar ítem, área, proveedor..."
+                className="pl-7 h-8 text-xs"
+              />
+            </div>
+          </div>
+          <div className="max-h-[260px] overflow-auto p-1">
+            {filtered.length === 0 ? (
+              <div className="text-xs text-muted-foreground px-2 py-3 text-center">Sin resultados</div>
+            ) : (
+              filtered.map(i => {
+                const checked = selectedSet.has(i.id);
+                return (
+                  <button
+                    key={i.id}
+                    type="button"
+                    onClick={() => toggle(i.id)}
+                    className={cn(
+                      "w-full flex items-start gap-2 px-2 py-1.5 rounded text-left text-xs hover:bg-muted transition-colors",
+                      checked && "bg-sky-500/10"
+                    )}
+                  >
+                    <span className={cn(
+                      "mt-0.5 w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0",
+                      checked ? "bg-sky-500 border-sky-500 text-white" : "border-border"
+                    )}>
+                      {checked && <Check className="w-2.5 h-2.5" />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium text-foreground truncate">{i.item || "(sin nombre)"}</span>
+                      <span className="block text-[10px] text-muted-foreground truncate">
+                        {[i.area, i.centroCosto].filter(Boolean).join(" › ")}
+                        {i.total > 0 ? ` · ${formatUSD(i.total)}` : ""}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 }

@@ -117,6 +117,32 @@ export function isIvaMode(v: unknown): v is IvaMode {
   return v === "raw" || v === "incluido" || v === "exento";
 }
 
+/**
+ * How a transport/delivery (montaje) budget line is treated for display:
+ *  - "association": traceability only — the cost stays whole on the transport
+ *    line; covered items just show who delivers/installs them.
+ *  - "allocation": the transport cost is split (equally) across the covered
+ *    items for display only. The grand total never changes and nothing is
+ *    added to any stored item total — the split is purely informational.
+ */
+export type TransportMode = "association" | "allocation";
+
+export const TRANSPORT_MODE_VALUES: TransportMode[] = ["association", "allocation"];
+
+export const TRANSPORT_MODE_LABELS: Record<TransportMode, string> = {
+  association: "Solo asociación (costo queda en el transporte)",
+  allocation: "Repartir costo entre ítems (solo visual)",
+};
+
+export const TRANSPORT_MODE_SHORT: Record<TransportMode, string> = {
+  association: "Asociación",
+  allocation: "Reparto",
+};
+
+export function isTransportMode(v: unknown): v is TransportMode {
+  return v === "association" || v === "allocation";
+}
+
 interface DiaSource {
   dia?: DiaValue;
   item?: string;
@@ -230,6 +256,12 @@ export interface BudgetItem {
   espacioDia2?: string;
   quotes?: QuoteOption[];
   approvedQuoteId?: string;
+  /** Marks this line as a transport/delivery/montaje cost that services other items. */
+  isTransport?: boolean;
+  /** How this transport's cost is treated for display. Defaults to "association". */
+  transportMode?: TransportMode;
+  /** IDs of the budget items this transport delivers/installs (one transport → many items). */
+  coveredItemIds?: string[];
 }
 
 export type SpaceDayKey = "dia-1" | "dia-2";
