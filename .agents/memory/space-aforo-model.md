@@ -1,14 +1,16 @@
 ---
-name: Space aforo (capacity) model
-description: How per-space capacity/over-capacity warning is modeled in the cost portal Budget view.
+name: Space aforo (capacity) + room-reference model
+description: How rooms are referenced by budget items and how capacity/over-capacity is modeled in the cost portal Budget view.
 ---
 
-# Space aforo (capacity) model
+# Space aforo (capacity) + room-reference model
 
-Capacity (aforo) is a property of the **space**, stored as `capacities: Record<spaceName, number>` on the spaces catalog, **shared across both days** (not per-day). Keyed by exact space name.
+A budget item references **exactly one** room by **stable id** (`espacioId`). The legacy `espacioDia1`/`espacioDia2` name fields are `@deprecated` read-only fallbacks kept only for migration; never write to them (writers clear them to "").
 
-"Load" for over-capacity comparison = sum of budget item `qty` (Number(i.qty)||0) for items whose `espacioDia1`/`espacioDia2` matches the space, computed per day. A space is over capacity on a day when `capacity != null && dayLoad > capacity`.
+Capacity (aforo) is a property of the **room**, exposed as `capacitiesById: Record<roomId, number>` on the spaces catalog (derived server-side in `catalogFromEntries` and client-side via `deriveCapacitiesById`). The old name-keyed `capacities` map is kept as a derived mirror only. ESEN rooms have **distinct ids per day** (`sp-d1-N` / `sp-d2-N`), so a "room" on Día 1 vs Día 2 is two ids — day-by-day stays intact without per-day fields on the item. Day-independent venues use `venue-*` ids.
 
-**Why:** A room's physical aforo doesn't change between event days, so one capacity value covers both. Mixing units (people vs item quantities) in the load sum is a known imperfection accepted because items carry only `qty`.
+"Load" = sum of item `qty` grouped by `espacioId`. A room is over capacity when `capacity != null && load > capacity`; capacity falls back to the entry's own `aforo` if no override. Orphans (legacy name with no matching catalog room) keep `espacioId=""`, are NOT counted in any load, and never mutate the catalog.
 
-**How to apply:** The Budget banner and the "Aforo" toolbar button badge both derive from the same `spaceLoadInfo`/`overCapacity` memos in `BudgetPage.tsx`, so they always agree — if you change one's over-capacity logic, it flows to both. A missing warning is almost always because no item is actually assigned to the space (load 0), not a render bug. Capacity persistence and item-space assignment persistence are **independent** (spaces catalog vs budget-items JSONB); a capacity can persist while an assignment doesn't.
+**Why:** Names were ambiguous and split across two day fields, tangling places/spaces/phases. Stable ids collapse to one reference, survive renames, and let aforo key off the physical room. The Phase axis is fully independent of room choice.
+
+**How to apply:** `migrateItems(items, catalog)` (in `budgetData.ts`) is the idempotent, **monetary-neutral** migrator — it only sets `espacioId` from a resolvable legacy name, never touches recalcItem fields. It runs once client-side in a ref-guarded effect gated on BOTH budget+spaces loaded, persisting via `saveFull` only when `canEdit`; server also normalizes. `itemSpaceName(catalog, item)` is the sole effective-name resolver (id first, legacy fallback) — use it for display, filters, CSV. Over-capacity banner + badge share `spaceLoadInfo`/`overCapacity`/`overSpaceIds` memos keyed by id. New seed capacities reach prod only via republish. Do NOT merge ESEN day rooms into generic places.

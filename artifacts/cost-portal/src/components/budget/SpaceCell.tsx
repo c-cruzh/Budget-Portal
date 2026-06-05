@@ -8,16 +8,19 @@ import type { SpaceDayKey, SpaceOptionGroup } from "@/data/budgetData";
 interface DayPickerProps {
   day: SpaceDayKey;
   dayLabel: string;
+  /** Display name of the currently-assigned room ("" when unassigned). */
   value?: string;
+  /** Stable id of the currently-assigned room ("" when unassigned/orphan). */
+  valueId?: string;
   optionGroups: SpaceOptionGroup[];
   canEdit: boolean;
   over?: boolean;
-  onAssign: (day: SpaceDayKey, value: string) => void;
+  onAssign: (day: SpaceDayKey, id: string) => void;
   onAddSpace: (day: SpaceDayKey, name: string) => void;
   showDayPrefix?: boolean;
 }
 
-function DaySpacePicker({ day, dayLabel, value, optionGroups, canEdit, over, onAssign, onAddSpace, showDayPrefix }: DayPickerProps) {
+function DaySpacePicker({ day, dayLabel, value, valueId, optionGroups, canEdit, over, onAssign, onAddSpace, showDayPrefix }: DayPickerProps) {
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -83,17 +86,17 @@ function DaySpacePicker({ day, dayLabel, value, optionGroups, canEdit, over, onA
                 {group.lugar}
                 <span className="ml-1 font-normal normal-case text-muted-foreground">· {group.zone}</span>
               </div>
-              {group.names.map(opt => (
+              {group.options.map(opt => (
                 <button
-                  key={`${gi}-${opt}`}
-                  onClick={() => { onAssign(day, opt); setOpen(false); }}
+                  key={opt.id}
+                  onClick={() => { onAssign(day, opt.id); setOpen(false); }}
                   className={cn(
                     "w-full flex items-center justify-between px-2 py-1.5 rounded text-xs hover:bg-muted",
-                    opt === value && "bg-primary/10 text-primary"
+                    opt.id === valueId && "bg-primary/10 text-primary"
                   )}
                 >
-                  <span className="truncate text-left">{opt}</span>
-                  {opt === value && <Check className="w-3 h-3 shrink-0" />}
+                  <span className="truncate text-left">{opt.name}</span>
+                  {opt.id === valueId && <Check className="w-3 h-3 shrink-0" />}
                 </button>
               ))}
             </div>
@@ -136,18 +139,21 @@ function DaySpacePicker({ day, dayLabel, value, optionGroups, canEdit, over, onA
 interface SpaceCellProps {
   // Each item maps to exactly one space-catalog day, derived from its phase.
   day: SpaceDayKey;
+  /** Display name of the assigned room. */
   value?: string;
+  /** Stable id of the assigned room. */
+  valueId?: string;
   options: SpaceOptionGroup[];
   canEdit: boolean;
   over?: boolean;
-  onAssign: (day: SpaceDayKey, value: string) => void;
+  onAssign: (day: SpaceDayKey, id: string) => void;
   onAddSpace: (day: SpaceDayKey, name: string) => void;
 }
 
-export function SpaceCell({ day, value, options, canEdit, over, onAssign, onAddSpace }: SpaceCellProps) {
+export function SpaceCell({ day, value, valueId, options, canEdit, over, onAssign, onAddSpace }: SpaceCellProps) {
   return (
     <DaySpacePicker
-      day={day} dayLabel={day === "dia-2" ? "D2" : "D1"} value={value} optionGroups={options}
+      day={day} dayLabel={day === "dia-2" ? "D2" : "D1"} value={value} valueId={valueId} optionGroups={options}
       canEdit={canEdit} over={over} onAssign={onAssign} onAddSpace={onAddSpace}
     />
   );

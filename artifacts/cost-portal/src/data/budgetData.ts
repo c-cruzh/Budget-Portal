@@ -252,7 +252,15 @@ export interface BudgetItem {
   mitigable?: boolean;
   mitigNote?: string;
   niceToHave?: boolean;
+  /**
+   * Stable reference to exactly ONE catalog room (SpaceEntry.id), across ESEN
+   * Día 1 / Día 2 and every Lugar/Sede venue. Source of truth for the assigned
+   * space; replaces the day-split name fields below.
+   */
+  espacioId?: string;
+  /** @deprecated legacy name-based space (Día 1). Read-only migration source / orphan fallback. */
   espacioDia1?: string;
+  /** @deprecated legacy name-based space (Día 2). Read-only migration source / orphan fallback. */
   espacioDia2?: string;
   quotes?: QuoteOption[];
   approvedQuoteId?: string;
@@ -308,14 +316,32 @@ export interface Venue {
   subEventIds?: string[];
 }
 
-/** A grouped option for the Budget space picker: Lugar › Zona/Área › names. */
+/** A single pickable room option: stable id + display name. */
+export interface SpaceOption {
+  id: string;
+  name: string;
+}
+
+/** A grouped option for the Budget space picker: Lugar › Zona/Área › rooms. */
 export interface SpaceOptionGroup {
   /** Lugar/Sede label, e.g. "ESEN", "Hotel". */
   lugar: string;
   /** Área/Zona heading. */
   zone: string;
-  /** Espacio names under this zone (deduped, first-appearance order). */
-  names: string[];
+  /** Rooms under this zone (deduped by name, first-appearance order). */
+  options: SpaceOption[];
+}
+
+/** A fully-resolved room reference: stable id + display + place/day context. */
+export interface ResolvedSpace {
+  id: string;
+  name: string;
+  zone: string;
+  aforo?: number;
+  /** Human label of the owning place, e.g. "ESEN — Día 1" or "Hotel". */
+  placeLabel: string;
+  /** ESEN day for ESEN rooms; undefined for day-independent venue rooms. */
+  dayKey?: SpaceDayKey;
 }
 
 export interface SpacesCatalog {
@@ -329,6 +355,13 @@ export interface SpacesCatalog {
    * is shared across both days.
    */
   capacities?: Record<string, number>;
+  /**
+   * Aforo/capacity keyed by stable room id (SpaceEntry.id), across ESEN days
+   * and venues. This is the source of truth for over-capacity checks — unlike
+   * the name-keyed `capacities` map it never collides between rooms that share
+   * a name (e.g. the same aula on Día 1 and Día 2, or two venue rooms).
+   */
+  capacitiesById?: Record<string, number>;
   /**
    * Structured source of truth for the ESEN venue (Área/Zona + aforo, per day).
    * The legacy `dia-1`/`dia-2` name arrays and `capacities` map above are
@@ -350,6 +383,7 @@ export const EMPTY_SPACES_CATALOG: SpacesCatalog = {
   "dia-1": [],
   "dia-2": [],
   capacities: {},
+  capacitiesById: {},
   entries: { "dia-1": [], "dia-2": [] },
   venues: [],
 };
@@ -395,6 +429,25 @@ export function deriveVenueCapacities(venues: Venue[]): Record<string, number> {
   return out;
 }
 
+/** Derives the id→aforo map from ESEN day entries + venues (positive ints only). */
+export function deriveCapacitiesById(
+  entriesD1: SpaceEntry[],
+  entriesD2: SpaceEntry[],
+  venues: Venue[] = [],
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  const add = (e: SpaceEntry) => {
+    const id = (e.id || "").trim();
+    if (!id) return;
+    const a = Number(e.aforo);
+    if (Number.isFinite(a) && a > 0) out[id] = Math.floor(a);
+  };
+  for (const e of entriesD1) add(e);
+  for (const e of entriesD2) add(e);
+  for (const v of venues) for (const e of v.entries) add(e);
+  return out;
+}
+
 /** Builds a full catalog (legacy derived fields + entries + venues) from parts. */
 export function buildSpacesCatalog(
   entriesD1: SpaceEntry[],
@@ -410,9 +463,50 @@ export function buildSpacesCatalog(
       ...deriveCapacities(entriesD1),
       ...deriveCapacities(entriesD2),
     },
+    capacitiesById: deriveCapacitiesById(entriesD1, entriesD2, venues),
     entries: { "dia-1": entriesD1, "dia-2": entriesD2 },
     venues,
   };
+}
+
+/**
+ * Flat, ordered list of every room in the catalog with its stable id and
+ * place/day context. ESEN Día 1 / Día 2 rooms come first (distinct ids per
+ * day), then each Lugar/Sede's named rooms (zone-only venue placeholders are
+ * skipped). This is the single source for id↔name resolution.
+ */
+export function allSpaceRefs(catalog: SpacesCatalog): ResolvedSpace[] {
+  const out: ResolvedSpace[] = [];
+  const pushEntry = (e: SpaceEntry, placeLabel: string, dayKey?: SpaceDayKey, requireName = false) => {
+    const id = (e.id || "").trim();
+    const name = (e.name || "").trim();
+    if (!id) return;
+    if (requireName && !name) return;
+    const ref: ResolvedSpace = { id, name, zone: (e.zone || "").trim(), placeLabel };
+    if (e.aforo != null && Number.isFinite(Number(e.aforo)) && Number(e.aforo) > 0) ref.aforo = Math.floor(Number(e.aforo));
+    if (dayKey) ref.dayKey = dayKey;
+    out.push(ref);
+  };
+  for (const e of catalog.entries?.["dia-1"] ?? []) pushEntry(e, "ESEN — Día 1", "dia-1");
+  for (const e of catalog.entries?.["dia-2"] ?? []) pushEntry(e, "ESEN — Día 2", "dia-2");
+  for (const v of catalog.venues ?? []) {
+    for (const e of v.entries) pushEntry(e, v.name || "Sin lugar", undefined, true);
+  }
+  return out;
+}
+
+/** id → ResolvedSpace map for the whole catalog. */
+export function spaceRefsById(catalog: SpacesCatalog): Map<string, ResolvedSpace> {
+  const map = new Map<string, ResolvedSpace>();
+  for (const r of allSpaceRefs(catalog)) if (!map.has(r.id)) map.set(r.id, r);
+  return map;
+}
+
+/** Resolves a stable room id to its display name; "" when not found. */
+export function resolveSpaceName(catalog: SpacesCatalog, id: string | undefined): string {
+  const key = (id || "").trim();
+  if (!key) return "";
+  return spaceRefsById(catalog).get(key)?.name ?? "";
 }
 
 /** Whether a venue is offered for an item in the given sub-event. */
@@ -435,20 +529,21 @@ export function groupSpacesByZone(entries: SpaceEntry[]): [string, SpaceEntry[]]
   return order.map(z => [z, map.get(z)!]);
 }
 
-/** Pushes zone-grouped, deduped, named entries of one Lugar into `out`. */
+/** Pushes zone-grouped, deduped, named entries (id+name) of one Lugar into `out`. */
 function pushOptionGroups(out: SpaceOptionGroup[], lugar: string, entries: SpaceEntry[]): void {
   for (const [zone, zoneEntries] of groupSpacesByZone(entries)) {
-    const names: string[] = [];
+    const options: SpaceOption[] = [];
     const seen = new Set<string>();
     for (const e of zoneEntries) {
       const n = (e.name || "").trim();
-      if (!n) continue;
+      const id = (e.id || "").trim();
+      if (!n || !id) continue;
       const k = n.toLowerCase();
       if (seen.has(k)) continue;
       seen.add(k);
-      names.push(n);
+      options.push({ id, name: n });
     }
-    if (names.length) out.push({ lugar, zone, names });
+    if (options.length) out.push({ lugar, zone, options });
   }
 }
 
@@ -481,14 +576,117 @@ export function spaceNamesForItem(
   const seen = new Set<string>();
   const out: string[] = [];
   for (const g of spaceOptionGroupsForItem(catalog, subEventId, day)) {
-    for (const n of g.names) {
-      const k = n.toLowerCase();
+    for (const o of g.options) {
+      const k = o.name.toLowerCase();
       if (seen.has(k)) continue;
       seen.add(k);
-      out.push(n);
+      out.push(o.name);
     }
   }
   return out.sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Flat list of pickable room options (id + display label) for an item on its
+ * day, deduped by id and carrying place/zone context for disambiguation.
+ */
+export function spaceOptionsForItem(
+  catalog: SpacesCatalog,
+  subEventId: string | undefined,
+  day: SpaceDayKey,
+): { id: string; name: string; zone: string; lugar: string }[] {
+  const out: { id: string; name: string; zone: string; lugar: string }[] = [];
+  const seen = new Set<string>();
+  for (const g of spaceOptionGroupsForItem(catalog, subEventId, day)) {
+    for (const o of g.options) {
+      if (seen.has(o.id)) continue;
+      seen.add(o.id);
+      out.push({ id: o.id, name: o.name, zone: g.zone, lugar: g.lugar });
+    }
+  }
+  return out;
+}
+
+/**
+ * The legacy (name-based) space assigned to an item, collapsed to one value:
+ * the field for the item's phase day, falling back to the other day. Used only
+ * as a migration source and orphan-display fallback.
+ */
+export function itemLegacySpaceName(item: BudgetItem): string {
+  const day = phaseSpaceDay(derivePhase(item));
+  const primary = (day === "dia-2" ? item.espacioDia2 : item.espacioDia1) || "";
+  const other = (day === "dia-2" ? item.espacioDia1 : item.espacioDia2) || "";
+  return primary.trim() || other.trim();
+}
+
+/**
+ * Resolves a legacy free-typed space name to a stable catalog room id for the
+ * given item. Prefers the ESEN day matching the item's phase, then the other
+ * ESEN day, then any venue room associated with the item's sub-event, then any
+ * venue room. Returns "" when the name matches no catalog room (orphan).
+ */
+export function resolveItemSpaceNameToId(
+  catalog: SpacesCatalog,
+  item: BudgetItem,
+  name: string,
+): string {
+  const target = name.trim().toLowerCase();
+  if (!target) return "";
+  const phase = derivePhase(item);
+  const day = phaseSpaceDay(phase);
+  const findIn = (entries: SpaceEntry[] | undefined): string => {
+    for (const e of entries ?? []) {
+      if ((e.name || "").trim().toLowerCase() === target && (e.id || "").trim()) return e.id;
+    }
+    return "";
+  };
+  const primaryDay = catalog.entries?.[day];
+  const otherDay = catalog.entries?.[day === "dia-2" ? "dia-1" : "dia-2"];
+  let hit = findIn(primaryDay) || findIn(otherDay);
+  if (hit) return hit;
+  // Venues associated with the item's sub-event first, then the rest.
+  const venues = catalog.venues ?? [];
+  for (const v of venues) {
+    if (!venueMatchesSubEvent(v, phase)) continue;
+    hit = findIn(v.entries);
+    if (hit) return hit;
+  }
+  for (const v of venues) {
+    hit = findIn(v.entries);
+    if (hit) return hit;
+  }
+  return "";
+}
+
+/** Effective display name of an item's assigned space (id first, legacy fallback). */
+export function itemSpaceName(catalog: SpacesCatalog, item: BudgetItem): string {
+  const id = (item.espacioId || "").trim();
+  if (id) return resolveSpaceName(catalog, id) || itemLegacySpaceName(item);
+  return itemLegacySpaceName(item);
+}
+
+/**
+ * Idempotent migration of legacy name-based space assignments to stable
+ * `espacioId` references. Items that already carry an `espacioId`, or whose
+ * legacy name matches no catalog room (orphans), are left untouched. Never
+ * changes any monetary field. Returns the (possibly new) array and whether
+ * anything changed.
+ */
+export function migrateItems(
+  items: BudgetItem[],
+  catalog: SpacesCatalog,
+): { next: BudgetItem[]; changed: boolean } {
+  let changed = false;
+  const next = items.map(it => {
+    if ((it.espacioId || "").trim()) return it;
+    const name = itemLegacySpaceName(it);
+    if (!name) return it;
+    const id = resolveItemSpaceNameToId(catalog, it, name);
+    if (!id) return it;
+    changed = true;
+    return { ...it, espacioId: id };
+  });
+  return { next, changed };
 }
 
 export const INITIAL_BUDGET_ITEMS: BudgetItem[] = [

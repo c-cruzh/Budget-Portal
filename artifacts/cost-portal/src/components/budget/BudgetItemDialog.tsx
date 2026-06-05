@@ -16,7 +16,7 @@ import { cn, formatUSD } from "@/lib/utils";
 import { Truck, X, Search, Check } from "lucide-react";
 import {
   phaseSpaceDay,
-  spaceNamesForItem,
+  spaceOptionsForItem,
   IVA_MODE_VALUES,
   IVA_MODE_LABELS,
   TRANSPORT_MODE_VALUES,
@@ -108,7 +108,10 @@ export function BudgetItemDialog({
     onChange(p => ({ ...p, [field]: v }));
 
   const spaceDay = phaseSpaceDay(value.subEventId);
-  const spaceOptions = spaceNamesForItem(spaces, value.subEventId, spaceDay);
+  const spaceOptions = useMemo(
+    () => spaceOptionsForItem(spaces, value.subEventId, spaceDay),
+    [spaces, value.subEventId, spaceDay],
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -167,11 +170,26 @@ export function BudgetItemDialog({
           {/* Espacio */}
           <div>
             <FieldLabel>Espacio Asignado</FieldLabel>
-            {spaceDay === "dia-2" ? (
-              <ComboInput value={value.espacioDia2 || ""} onChange={v => set("espacioDia2", v)} options={spaceOptions} placeholder="SELECCIONAR ESPACIO..." />
-            ) : (
-              <ComboInput value={value.espacioDia1 || ""} onChange={v => set("espacioDia1", v)} options={spaceOptions} placeholder="SELECCIONAR ESPACIO..." />
-            )}
+            <Select
+              value={(value.espacioId || "").trim() || NA}
+              onValueChange={v => {
+                set("espacioId", v === NA ? "" : v);
+                // Collapse to the single id reference; clear legacy day fields.
+                set("espacioDia1", "");
+                set("espacioDia2", "");
+              }}
+            >
+              <SelectTrigger><SelectValue placeholder="SELECCIONAR ESPACIO..." /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NA}>Sin asignar</SelectItem>
+                {spaceOptions.map(o => (
+                  <SelectItem key={o.id} value={o.id}>
+                    {o.name}
+                    {o.zone ? <span className="ml-1 text-muted-foreground">· {o.zone}</span> : null}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Centro de costo */}

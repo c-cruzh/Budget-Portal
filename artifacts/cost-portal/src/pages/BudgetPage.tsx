@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, Info,
@@ -15,7 +15,7 @@ import { BulkActionsBar } from "@/components/budget/BulkActionsBar";
 import { BudgetHelpGuide } from "@/components/budget/BudgetHelpGuide";
 import { BUDGET_COLUMNS, DEFAULT_VISIBLE } from "@/components/budget/columns";
 import type { LinkedBudgetItem } from "@/data/tasksBoardData";
-import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, STATUS_COLORS, STATUS_SHORT_LABELS, derivePhase, phaseSpaceDay, spaceOptionGroupsForItem, spaceNamesForItem, type BudgetItem, type QuoteOption, type SubEvent, type SpaceDayKey } from "@/data/budgetData";
+import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, STATUS_COLORS, STATUS_SHORT_LABELS, derivePhase, phaseSpaceDay, spaceOptionGroupsForItem, allSpaceRefs, itemSpaceName, migrateItems, type BudgetItem, type QuoteOption, type SubEvent, type SpaceDayKey } from "@/data/budgetData";
 import { recalcItem, computeTransportAllocations } from "@/lib/budgetCalc";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useSubEventsApi } from "@/hooks/useSubEventsApi";
@@ -236,7 +236,7 @@ export default function BudgetPage({
 }: BudgetPageProps = {}) {
   const { items, setItems, loading, error, meta, saveCommentOnly, patchItem, saveFull } = useBudgetApi(seedItems, recalcItem, { apiUrl, syncSeed });
   const { subEvents, setSubEvents } = useSubEventsApi();
-  const { spaces, addSpace, setCapacity, renameSpace, removeSpace } = useSpacesApi();
+  const { spaces, loading: spacesLoading, addSpace, setCapacityById, renameSpaceById, removeSpaceById } = useSpacesApi();
   const { permissions, user } = useAuth();
   const canEdit = permissions.canEdit;
   const canComment = permissions.canComment;
@@ -356,72 +356,59 @@ export default function BudgetPage({
     return ["ALL", ...Array.from(new Set(src.map(i => i.centroCosto).filter(v => v && v.trim())))];
   }, [subEventFilteredItems, filterArea]);
 
+  // All resolvable rooms across ESEN days + day-independent venues (by stable id).
+  const spaceRefs = useMemo(() => allSpaceRefs(spaces), [spaces]);
+
+  // Effective display name set for the filter dropdown: every catalog room name
+  // plus any orphan legacy name still carried by an item.
   const allSpaces = useMemo(() => {
     const set = new Set<string>();
-    for (const s of spaces["dia-1"]) set.add(s);
-    for (const s of spaces["dia-2"]) set.add(s);
-    for (const v of spaces.venues || []) {
-      for (const e of v.entries) {
-        const n = (e.name || "").trim();
-        if (n) set.add(n);
-      }
-    }
+    for (const r of spaceRefs) if (r.name) set.add(r.name);
     for (const i of items) {
-      if ((i.espacioDia1 || "").trim()) set.add(i.espacioDia1!.trim());
-      if ((i.espacioDia2 || "").trim()) set.add(i.espacioDia2!.trim());
+      const n = itemSpaceName(spaces, i).trim();
+      if (n) set.add(n);
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [spaces, items]);
+  }, [spaceRefs, spaces, items]);
 
-  // Aforo/capacity: assigned load per space per day (sum of item quantities).
+  // Aforo/capacity: assigned load per room id (sum of item quantities).
   const spaceLoadInfo = useMemo<SpaceLoadInfo[]>(() => {
-    const caps = spaces.capacities || {};
-    const loads = new Map<string, { d1: number; d2: number }>();
-    const ensure = (name: string) => {
-      let v = loads.get(name);
-      if (!v) { v = { d1: 0, d2: 0 }; loads.set(name, v); }
-      return v;
-    };
-    for (const name of allSpaces) ensure(name);
+    const caps = spaces.capacitiesById || {};
+    const load = new Map<string, number>();
+    const count = new Map<string, number>();
     for (const i of items) {
-      const qty = Number(i.qty) || 0;
-      const e1 = (i.espacioDia1 || "").trim();
-      const e2 = (i.espacioDia2 || "").trim();
-      if (e1) ensure(e1).d1 += qty;
-      if (e2) ensure(e2).d2 += qty;
+      const id = (i.espacioId || "").trim();
+      if (!id) continue;
+      load.set(id, (load.get(id) || 0) + (Number(i.qty) || 0));
+      count.set(id, (count.get(id) || 0) + 1);
     }
-    return Array.from(loads.entries())
-      .map(([name, l]) => {
-        const capacity = caps[name];
+    return spaceRefs
+      .map(r => {
+        const capacity = caps[r.id] ?? r.aforo;
+        const l = load.get(r.id) || 0;
         return {
-          name,
+          id: r.id,
+          name: r.name,
+          placeLabel: r.placeLabel,
+          dayKey: r.dayKey,
           capacity,
-          loadDia1: l.d1,
-          loadDia2: l.d2,
-          overDia1: capacity != null && l.d1 > capacity,
-          overDia2: capacity != null && l.d2 > capacity,
+          load: l,
+          over: capacity != null && l > capacity,
+          itemCount: count.get(r.id) || 0,
         };
       })
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [allSpaces, items, spaces.capacities]);
+      .sort((a, b) => a.placeLabel.localeCompare(b.placeLabel) || a.name.localeCompare(b.name));
+  }, [spaceRefs, items, spaces.capacitiesById]);
 
-  const overCapacity = useMemo(() => {
-    const out: { name: string; day: "Día 1" | "Día 2"; load: number; capacity: number }[] = [];
-    for (const s of spaceLoadInfo) {
-      if (s.overDia1 && s.capacity != null) out.push({ name: s.name, day: "Día 1", load: s.loadDia1, capacity: s.capacity });
-      if (s.overDia2 && s.capacity != null) out.push({ name: s.name, day: "Día 2", load: s.loadDia2, capacity: s.capacity });
-    }
-    return out;
-  }, [spaceLoadInfo]);
+  const overCapacity = useMemo(
+    () => spaceLoadInfo.filter(s => s.over && s.capacity != null),
+    [spaceLoadInfo],
+  );
 
-  const overSpacesByDay = useMemo(() => {
-    const d1 = new Set<string>();
-    const d2 = new Set<string>();
-    for (const s of spaceLoadInfo) {
-      if (s.overDia1) d1.add(s.name);
-      if (s.overDia2) d2.add(s.name);
-    }
-    return { "dia-1": d1, "dia-2": d2 };
+  const overSpaceIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of spaceLoadInfo) if (s.over) set.add(s.id);
+    return set;
   }, [spaceLoadInfo]);
 
   const allAreas = useMemo(() => Array.from(new Set(items.map(i => i.area).filter(v => v && v.trim()))).sort(), [items]);
@@ -488,8 +475,8 @@ export default function BudgetPage({
     let out = items;
     if (filterSubEvents.size > 0) out = out.filter(i => filterSubEvents.has(derivePhase(i)));
     if (filterArea !== "ALL") out = out.filter(i => i.area === filterArea);
-    if (filterEspacio === "(Sin asignar)") out = out.filter(i => !(i.espacioDia1 || "").trim() && !(i.espacioDia2 || "").trim());
-    else if (filterEspacio !== "ALL") out = out.filter(i => i.espacioDia1 === filterEspacio || i.espacioDia2 === filterEspacio);
+    if (filterEspacio === "(Sin asignar)") out = out.filter(i => !itemSpaceName(spaces, i).trim());
+    else if (filterEspacio !== "ALL") out = out.filter(i => itemSpaceName(spaces, i) === filterEspacio);
     if (filterCentro !== "ALL") out = out.filter(i => i.centroCosto === filterCentro);
     if (filterProveedor === "(Sin proveedor)") out = out.filter(i => !(i.proveedor || "").trim());
     else if (filterProveedor !== "ALL") out = out.filter(i => (i.proveedor || "").trim() === filterProveedor);
@@ -528,7 +515,7 @@ export default function BudgetPage({
       );
     }
     return out;
-  }, [items, filterSubEvents, filterArea, filterEspacio, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterQtyDias, filterPhase, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
+  }, [items, spaces, filterSubEvents, filterArea, filterEspacio, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterQtyDias, filterPhase, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
 
   const sorted = useMemo(() => {
     if (!sortKey) return filtered;
@@ -878,8 +865,9 @@ export default function BudgetPage({
           subEventId: editItem.subEventId,
           area: editItem.area ?? i.area,
           dia: editItem.dia ?? i.dia,
-          espacioDia1: editItem.espacioDia1 ?? i.espacioDia1,
-          espacioDia2: editItem.espacioDia2 ?? i.espacioDia2,
+          espacioId: editItem.espacioId ?? i.espacioId,
+          espacioDia1: "",
+          espacioDia2: "",
           centroCosto: editItem.centroCosto ?? i.centroCosto,
           item: editItem.item || i.item,
           descripcion: editItem.descripcion ?? i.descripcion,
@@ -926,8 +914,9 @@ export default function BudgetPage({
       // always a real phase; the fallback only guards a never-touched default.
       subEventId: newItem.subEventId || DEFAULT_SUB_EVENT_ID,
       area: newItem.area || "",
-      espacioDia1: newItem.espacioDia1 || "",
-      espacioDia2: newItem.espacioDia2 || "",
+      espacioId: newItem.espacioId || "",
+      espacioDia1: "",
+      espacioDia2: "",
       centroCosto: newItem.centroCosto || "",
       item: newItem.item || "",
       descripcion: newItem.descripcion || "",
@@ -985,40 +974,57 @@ export default function BudgetPage({
     patchItem(id, field, value, true);
   }, [setItems, patchItem]);
 
-  const handleRenameSpace = useCallback((day: SpaceDayKey, oldName: string, newName: string) => {
-    const canonical = renameSpace(day, oldName, newName);
-    if (!canonical) return;
-    const field = day === "dia-1" ? "espacioDia1" : "espacioDia2";
+  // Assigns a room to an item by stable id (clearing legacy day fields). Pass an
+  // empty id to unassign. Never touches monetary fields.
+  const assignSpace = useCallback((itemId: string, spaceId: string) => {
+    const id = (spaceId || "").trim();
     setItems(prev => {
       let changed = false;
       const next = prev.map(it => {
-        if ((it[field] || "").trim().toLowerCase() === oldName.toLowerCase()) {
-          changed = true;
-          return { ...it, [field]: canonical };
-        }
-        return it;
+        if (it.id !== itemId) return it;
+        if ((it.espacioId || "") === id && !(it.espacioDia1 || "") && !(it.espacioDia2 || "")) return it;
+        changed = true;
+        return { ...it, espacioId: id, espacioDia1: "", espacioDia2: "" };
       });
       if (changed) saveFull(next);
       return next;
     });
-  }, [renameSpace, setItems, saveFull]);
+  }, [setItems, saveFull]);
 
-  const handleDeleteSpace = useCallback((day: SpaceDayKey, name: string) => {
-    removeSpace(day, name);
-    const field = day === "dia-1" ? "espacioDia1" : "espacioDia2";
+  const handleRenameSpace = useCallback((id: string, newName: string) => {
+    // Catalog rename only — items reference the room by stable id, so no item edits.
+    renameSpaceById(id, newName);
+  }, [renameSpaceById]);
+
+  const handleDeleteSpace = useCallback((id: string) => {
+    removeSpaceById(id);
     setItems(prev => {
       let changed = false;
       const next = prev.map(it => {
-        if ((it[field] || "").trim().toLowerCase() === name.toLowerCase()) {
+        if ((it.espacioId || "").trim() === id) {
           changed = true;
-          return { ...it, [field]: "" };
+          return { ...it, espacioId: "" };
         }
         return it;
       });
       if (changed) saveFull(next);
       return next;
     });
-  }, [removeSpace, setItems, saveFull]);
+  }, [removeSpaceById, setItems, saveFull]);
+
+  // One-shot migration: collapse legacy name-based space assignments to stable
+  // `espacioId` references once both items and the spaces catalog have loaded.
+  // Idempotent and monetary-neutral; persists only when the user can edit.
+  const migratedRef = useRef(false);
+  useEffect(() => {
+    if (migratedRef.current) return;
+    if (loading || spacesLoading) return;
+    const { next, changed } = migrateItems(items, spaces);
+    migratedRef.current = true;
+    if (!changed) return;
+    setItems(next);
+    if (canEdit) saveFull(next);
+  }, [loading, spacesLoading, items, spaces, canEdit, setItems, saveFull]);
 
   const toggleArea = (key: string) => {
     setExpandedAreas(prev => {
@@ -1125,7 +1131,8 @@ export default function BudgetPage({
       return [
         subEventName(derivePhase(i)), i.evento, i.area, i.centroCosto, i.item, i.descripcion, i.notas,
         i.inKind ? "SI" : "NO", i.agencyFee ? "SI" : "NO", i.qty, i.uom, subEventName(derivePhase(i)),
-        i.espacioDia1 || "", i.espacioDia2 || "",
+        phaseSpaceDay(derivePhase(i)) === "dia-2" ? "" : itemSpaceName(spaces, i),
+        phaseSpaceDay(derivePhase(i)) === "dia-2" ? itemSpaceName(spaces, i) : "",
         i.porDias, i.qtyDias, redact ? "" : i.precioUnitario, redact ? "" : i.subtotal, i.agencyFee ? "SI" : "NO",
         i.aplicaFee, redact ? "" : i.fee, redact ? "" : i.subtotalConFee, redact ? "" : i.iva, redact ? "" : i.total, i.cotizacion, i.soloPresupuestado ? "SI" : "NO", i.documento,
         i.proveedor || "", i.reviewedBy || "", i.validarCosto ? "SI" : "NO", i.contratarAparte ? "SI" : "NO",
@@ -1278,14 +1285,14 @@ export default function BudgetPage({
               : `${overCapacity.length} espacios superan su aforo`}
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {overCapacity.map((o, idx) => (
+            {overCapacity.map((o) => (
               <span
-                key={`${o.name}-${o.day}-${idx}`}
+                key={o.id}
                 className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border border-destructive/30 bg-card text-destructive"
-                title={`${o.name} — ${o.day}: ${o.load} asignado, aforo ${o.capacity}`}
+                title={`${o.name} — ${o.placeLabel}: ${o.load} asignado, aforo ${o.capacity}`}
               >
                 <span className="font-medium">{o.name}</span>
-                <span className="opacity-70">· {o.day}</span>
+                <span className="opacity-70">· {o.placeLabel}</span>
                 <span className="font-mono font-semibold tabular-nums">{o.load}/{o.capacity}</span>
               </span>
             ))}
@@ -1843,18 +1850,19 @@ export default function BudgetPage({
                       <td data-col="espacio" className="px-1 py-1.5 align-top">
                         {(() => {
                           const spaceDay = phaseSpaceDay(itemPhaseId);
-                          const spaceVal = spaceDay === "dia-2" ? item.espacioDia2 : item.espacioDia1;
+                          const spaceId = (item.espacioId || "").trim();
                           return (
                             <SpaceCell
                               day={spaceDay}
-                              value={spaceVal}
+                              value={itemSpaceName(spaces, item)}
+                              valueId={spaceId}
                               options={spaceOptionGroupsForItem(spaces, itemPhaseId, spaceDay)}
                               canEdit={canEdit}
-                              over={!!(spaceVal && overSpacesByDay[spaceDay].has(spaceVal.trim()))}
-                              onAssign={(day, value) => updateItem(item.id, day === "dia-1" ? "espacioDia1" : "espacioDia2", value)}
+                              over={!!(spaceId && overSpaceIds.has(spaceId))}
+                              onAssign={(_day, id) => assignSpace(item.id, id)}
                               onAddSpace={(day, name) => {
-                                const canonical = addSpace(day, name);
-                                if (canonical) updateItem(item.id, day === "dia-1" ? "espacioDia1" : "espacioDia2", canonical);
+                                const newId = addSpace(day, name);
+                                if (newId) assignSpace(item.id, newId);
                               }}
                             />
                           );
@@ -2455,14 +2463,13 @@ export default function BudgetPage({
         open={showSpacesSheet}
         onOpenChange={setShowSpacesSheet}
         spaces={spaces}
-        items={items}
         loadInfo={spaceLoadInfo}
         overCount={overCapacity.length}
         canEdit={canEdit}
         onAddSpace={addSpace}
         onRename={handleRenameSpace}
         onDelete={handleDeleteSpace}
-        onSetCapacity={setCapacity}
+        onSetCapacity={setCapacityById}
       />
 
       <SplitByDayDialog

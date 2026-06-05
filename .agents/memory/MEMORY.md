@@ -2,7 +2,7 @@
 - [IVA mode model](iva-mode-model.md) — explicit 3-state ivaMode (raw/incluido/exento) replaces exentoIva bool; recalcItem-only math; legacy migration is byte-identical; exentoIva kept as derived mirror.
 - [app_state route auth convention](api-route-auth-convention.md) — GET catalog routes are public (do seeding here); only writes are org-permission gated. curl can't exercise authed endpoints.
 - [Ground Transport IVA](ground-transport-iva.md) — /travel/ground stores base vehicle prices (Hiace 65/Sedan 40/Traverse 95); cards show IVA-inclusive, KPI "subtotal antes de IVA" is pre-IVA base.
-- [Space aforo model](space-aforo-model.md) — capacity is per-space (shared across days); over-capacity = dayLoad(sum item qty) > capacity; banner+badge share one memo.
+- [Space aforo + room-ref model](space-aforo-model.md) — items reference ONE room by stable espacioId (legacy day-name fields deprecated); aforo keyed by roomId (capacitiesById); ESEN ids distinct per day; migrateItems is idempotent & money-neutral.
 - [Volunteer roles extraction](volunteer-roles-extraction.md) — unpaid PERSONA staffing slots live in Voluntarios roster, not budget; $0 predicate keeps totals stable; strip in 3 places.
 - [Dual budget tabs](dual-budget-storage.md) — Final (/budget-final, empty, all orgs) & legacy (/budget, seed, C2-only) share one component/hook/route factory via per-instance config; separate app_state keys.
 - [Spaces catalog structured](spaces-catalog-structured.md) — Espacios tab stores structured entries (zone+aforo) as source of truth; legacy picker arrays derived; reseed when empty OR legacy (no `entries` key); curated non-empty entries preserved. New seed reaches prod only via republish.

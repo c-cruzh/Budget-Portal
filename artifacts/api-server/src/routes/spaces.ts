@@ -14,6 +14,12 @@ export interface SpacesCatalog {
   "dia-1": string[];
   "dia-2": string[];
   capacities?: Record<string, number>;
+  /**
+   * Aforo/capacity keyed by stable room id (SpaceEntry.id), across ESEN days
+   * and venues. Source of truth for over-capacity checks — never collides
+   * between rooms that share a name.
+   */
+  capacitiesById?: Record<string, number>;
   entries?: {
     "dia-1": SpaceEntry[];
     "dia-2": SpaceEntry[];
@@ -190,6 +196,25 @@ function deriveVenueCapacities(venues: Venue[]): Record<string, number> {
   return out;
 }
 
+/** id→aforo map derived from ESEN day entries + venues (positive ints only). */
+function deriveCapacitiesById(
+  entriesD1: SpaceEntry[],
+  entriesD2: SpaceEntry[],
+  venues: Venue[] = [],
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  const add = (e: SpaceEntry) => {
+    const id = (e.id || "").trim();
+    if (!id) return;
+    const a = Math.floor(Number(e.aforo));
+    if (Number.isFinite(a) && a > 0) out[id] = a;
+  };
+  for (const e of entriesD1) add(e);
+  for (const e of entriesD2) add(e);
+  for (const v of venues) for (const e of v.entries) add(e);
+  return out;
+}
+
 function catalogFromEntries(
   entriesD1: SpaceEntry[],
   entriesD2: SpaceEntry[],
@@ -204,6 +229,7 @@ function catalogFromEntries(
       ...deriveCapacities(entriesD1),
       ...deriveCapacities(entriesD2),
     },
+    capacitiesById: deriveCapacitiesById(entriesD1, entriesD2, venues),
     entries: { "dia-1": entriesD1, "dia-2": entriesD2 },
     venues,
   };

@@ -385,59 +385,94 @@ export function useSpacesApi() {
     }));
   }, [mutateEntries]);
 
-  // ---- Legacy name-based operations kept for the Budget space picker / SpacesSheet ----
+  // ---- Id-based operations used by the Budget space picker / SpacesSheet ----
 
-  // Adds a space (zone-less) to a day if no entry with that name exists
-  // (case-insensitive). Returns the canonical stored name to assign to the item.
+  /**
+   * Applies a transform to a single SpaceEntry located anywhere in the catalog
+   * (ESEN Día 1 / Día 2 or any venue) by its stable id, then rebuilds + persists.
+   * `mapEntry` returns the replacement entry, or `null` to delete it.
+   */
+  const mutateEntryById = useCallback(
+    (id: string, mapEntry: (e: SpaceEntry) => SpaceEntry | null) => {
+      const key = (id || "").trim();
+      if (!key) return;
+      initialLoadDone.current = true;
+      setSpacesState(prev => {
+        const cur = prev.entries || { "dia-1": [], "dia-2": [] };
+        const applyDay = (arr: SpaceEntry[]): SpaceEntry[] => {
+          const out: SpaceEntry[] = [];
+          for (const en of arr) {
+            if (en.id !== key) { out.push(en); continue; }
+            const r = mapEntry(en);
+            if (r) out.push(r);
+          }
+          return out;
+        };
+        const d1 = applyDay(cur["dia-1"]);
+        const d2 = applyDay(cur["dia-2"]);
+        const venues = (prev.venues || []).map(v => ({
+          ...v,
+          entries: (() => {
+            const out: SpaceEntry[] = [];
+            for (const en of v.entries) {
+              if (en.id !== key) { out.push(en); continue; }
+              const r = mapEntry(en);
+              if (r) out.push(r);
+            }
+            return out;
+          })(),
+        }));
+        const next = buildSpacesCatalog(d1, d2, venues);
+        persist(next);
+        return next;
+      });
+    },
+    [persist],
+  );
+
+  // Adds a space (zone-less) to an ESEN day if no entry with that name exists
+  // (case-insensitive). Returns the stable id of the new or existing entry.
   const addSpace = useCallback((day: SpaceDayKey, name: string): string => {
     const trimmed = name.trim();
     if (!trimmed) return "";
-    let canonical = trimmed;
+    let resultId = "";
     mutateEntries(e => {
       const existing = e[day].find(en => en.name.toLowerCase() === trimmed.toLowerCase());
-      if (existing) { canonical = existing.name; return e; }
-      return { ...e, [day]: [...e[day], { id: newEntryId(), zone: "", name: trimmed }] };
+      if (existing) { resultId = existing.id; return e; }
+      resultId = newEntryId();
+      return { ...e, [day]: [...e[day], { id: resultId, zone: "", name: trimmed }] };
     });
-    return canonical;
+    return resultId;
   }, [mutateEntries]);
 
-  // Sets (or clears, when value is null/<=0) the aforo for every entry sharing
-  // this name on either day (capacity is a property of the physical space).
-  const setCapacity = useCallback((name: string, value: number | null) => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
+  // Sets (or clears, when value is null/<=0) the aforo of one room by id.
+  const setCapacityById = useCallback((id: string, value: number | null) => {
     const num = value == null ? NaN : Math.floor(Number(value));
     const valid = Number.isFinite(num) && num > 0;
-    const apply = (en: SpaceEntry): SpaceEntry => {
-      if (en.name.toLowerCase() !== trimmed.toLowerCase()) return en;
+    mutateEntryById(id, en => {
       const next: SpaceEntry = { ...en };
       if (valid) next.aforo = num; else delete next.aforo;
       return next;
-    };
-    mutateEntries(e => ({ "dia-1": e["dia-1"].map(apply), "dia-2": e["dia-2"].map(apply) }));
-  }, [mutateEntries]);
+    });
+  }, [mutateEntryById]);
 
-  // Renames every entry matching oldName on a day. Returns the new name.
-  const renameSpace = useCallback((day: SpaceDayKey, oldName: string, newName: string): string => {
+  // Renames one room by id. No-op when the new name is blank.
+  const renameSpaceById = useCallback((id: string, newName: string) => {
     const trimmed = newName.trim();
-    if (!trimmed) return "";
-    mutateEntries(e => ({
-      ...e,
-      [day]: e[day].map(en => (en.name.toLowerCase() === oldName.toLowerCase() ? { ...en, name: trimmed } : en)),
-    }));
-    return trimmed;
-  }, [mutateEntries]);
+    if (!trimmed) return;
+    mutateEntryById(id, en => ({ ...en, name: trimmed }));
+  }, [mutateEntryById]);
 
-  // Removes every entry matching name on a day.
-  const removeSpace = useCallback((day: SpaceDayKey, name: string) => {
-    mutateEntries(e => ({ ...e, [day]: e[day].filter(en => en.name.toLowerCase() !== name.toLowerCase()) }));
-  }, [mutateEntries]);
+  // Removes one room by id.
+  const removeSpaceById = useCallback((id: string) => {
+    mutateEntryById(id, () => null);
+  }, [mutateEntryById]);
 
   return {
     spaces, loading, saving, error, meta,
     addEntry, updateEntry, removeEntry, renameZone, removeZone,
     addVenue, updateVenue, removeVenue,
     addVenueEntry, updateVenueEntry, removeVenueEntry, renameVenueZone, removeVenueZone,
-    addSpace, setCapacity, renameSpace, removeSpace,
+    addSpace, setCapacityById, renameSpaceById, removeSpaceById,
   };
 }
