@@ -6,11 +6,13 @@ import { motion } from "framer-motion";
 import {
   LayoutDashboard, TableProperties, Plane, Bus, Menu, X, ChevronRight,
   Wine, Coffee, Sandwich, LogOut, Info, Eye, MessageSquare, Pencil,
-  HandCoins, History, Calendar, BedDouble, ListChecks, Truck, HandHelping, MapPin
+  HandCoins, History, Calendar, BedDouble, ListChecks, Truck, HandHelping, MapPin,
+  BookOpen
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { DocumentationDialog } from "@/components/DocumentationDialog";
 import DashboardPage from "@/pages/DashboardPage";
 import BudgetPage from "@/pages/BudgetPage";
 import GroundTransportPage from "@/pages/GroundTransportPage";
@@ -189,6 +191,7 @@ function RolesInfoCard({ currentOrg }: { currentOrg: string }) {
 
 function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => void }) {
   const { user, permissions, logout } = useAuth();
+  const [docsOpen, setDocsOpen] = useState(false);
 
   return (
     <>
@@ -230,7 +233,17 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
             .map(item => (
               <NavLink key={item.path} item={item} />
             ))}
+
+          <button
+            onClick={() => setDocsOpen(true)}
+            className="flex items-center gap-2.5 px-3 py-2 w-full rounded-lg text-sm font-medium transition-all duration-150 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+          >
+            <BookOpen className="w-4 h-4 flex-shrink-0" />
+            <span className="flex-1 text-left">Documentación / Ayuda</span>
+          </button>
         </nav>
+
+        <DocumentationDialog open={docsOpen} onOpenChange={setDocsOpen} />
 
         {user && <RolesInfoCard currentOrg={user.organization} />}
 
