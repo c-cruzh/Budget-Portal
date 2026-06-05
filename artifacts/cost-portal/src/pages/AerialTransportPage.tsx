@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   Plane, Users, Handshake, Cloud, CloudOff, Loader2, ExternalLink,
   TrendingDown, TrendingUp, CheckCircle2, ListChecks, MapPin, Calendar,
-  UserPlus, Trash2, ChevronDown, ChevronRight, AlertTriangle,
+  UserPlus, Trash2, ChevronDown, ChevronRight, AlertTriangle, Download,
 } from "lucide-react";
 import { useFlightsApi } from "@/hooks/useFlightsApi";
 import { useAuth } from "@/hooks/useAuth";
@@ -119,6 +119,133 @@ function deriveLogistics(routes: FlightRouteGroup[]): { arrivals: ArrivalRow[]; 
   return { arrivals, departures };
 }
 
+// ---- Final flight order export (client-side CSV) ----
+
+interface FlightOrderRow {
+  grupo: string;
+  ruta: string;
+  pax: number;
+  aerolinea: string;
+  claseTarifaria: string;
+  numerosVuelo: string;
+  itinerarioIda: string;
+  itinerarioVuelta: string;
+  escalas: string;
+  duracion: string;
+  incluye: string;
+  tarifaPorPax: number;
+  subtotal: number;
+  tarifaOriginalPorPax: number;
+  ahorroVsOriginal: number;
+}
+
+// Maps each route's currently selected option into a flat order row.
+function buildFlightOrderRows(routes: FlightRouteGroup[]): FlightOrderRow[] {
+  return routes.map(r => {
+    const sel = getSelectedOption(r);
+    const pax = effectivePax(r);
+    const perPax = sel?.pricePerPax ?? 0;
+    const subtotal = perPax * pax;
+    const originalTotal = r.originalPerPax * pax;
+    return {
+      grupo: r.label,
+      ruta: `${r.origin} → ${r.destination}`,
+      pax,
+      aerolinea: sel?.airline ?? "",
+      claseTarifaria: sel?.fareClass ?? "",
+      numerosVuelo: sel?.flightNumbers ?? "",
+      itinerarioIda: sel?.scheduleIda ?? "",
+      itinerarioVuelta: sel?.scheduleVuelta ?? "",
+      escalas: sel?.stops ?? "",
+      duracion: sel?.duration ?? "",
+      incluye: sel?.includes ?? "",
+      tarifaPorPax: perPax,
+      subtotal,
+      tarifaOriginalPorPax: r.originalPerPax,
+      ahorroVsOriginal: originalTotal - subtotal,
+    };
+  });
+}
+
+function csvCell(v: string | number): string {
+  const s = String(v ?? "");
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function csvRow(cells: (string | number)[]): string {
+  return cells.map(csvCell).join(",");
+}
+
+function downloadFlightOrderCsv(
+  routes: FlightRouteGroup[],
+  totals: { totalSelected: number; totalOriginal: number; totalPax: number },
+  arrivals: ArrivalRow[],
+  departures: DepartureRow[],
+  nextSteps: string[],
+) {
+  const rows = buildFlightOrderRows(routes);
+  const savings = totals.totalOriginal - totals.totalSelected;
+  const lines: string[] = [];
+
+  lines.push("EmTech Digital El Salvador 2026 — Orden Final de Vuelos");
+  lines.push(`Generado: ${new Date().toLocaleString()}`);
+  lines.push("");
+
+  lines.push("ORDEN DE VUELOS (opción seleccionada por ruta)");
+  lines.push(csvRow([
+    "Grupo", "Ruta", "PAX", "Aerolínea", "Clase tarifaria", "Números de vuelo",
+    "Itinerario ida", "Itinerario vuelta", "Escalas", "Duración", "Incluye",
+    "Tarifa por pax", "Subtotal", "Tarifa original por pax", "Ahorro vs original",
+  ]));
+  for (const r of rows) {
+    lines.push(csvRow([
+      r.grupo, r.ruta, r.pax, r.aerolinea, r.claseTarifaria, r.numerosVuelo,
+      r.itinerarioIda, r.itinerarioVuelta, r.escalas, r.duracion, r.incluye,
+      r.tarifaPorPax, r.subtotal, r.tarifaOriginalPorPax, r.ahorroVsOriginal,
+    ]));
+  }
+  lines.push(csvRow([
+    "TOTAL", "", totals.totalPax, "", "", "", "", "", "", "", "",
+    "", totals.totalSelected, totals.totalOriginal, savings,
+  ]));
+  lines.push("");
+
+  lines.push("RESUMEN DE TOTALES");
+  lines.push(csvRow(["Total PAX", totals.totalPax]));
+  lines.push(csvRow(["Total seleccionado", totals.totalSelected]));
+  lines.push(csvRow(["Total original", totals.totalOriginal]));
+  lines.push(csvRow(["Ahorro total", savings]));
+  lines.push("");
+
+  lines.push("LLEGADAS (ARRIBOS A SAL)");
+  lines.push(csvRow(["Fecha", "Hora llegada", "Origen", "Grupo", "PAX", "Vuelo", "Hora salida"]));
+  for (const a of arrivals) {
+    lines.push(csvRow([a.date, a.time, a.origin, a.group, a.pax, a.flight, a.depTime]));
+  }
+  lines.push("");
+
+  lines.push("SALIDAS (REGRESOS DESDE SAL)");
+  lines.push(csvRow(["Fecha", "Hora salida", "Destino", "Grupo", "PAX", "Vuelo", "Hora llegada"]));
+  for (const d of departures) {
+    lines.push(csvRow([d.date, d.time, d.destination, d.group, d.pax, d.flight, d.arrTime]));
+  }
+  lines.push("");
+
+  lines.push("PRÓXIMOS PASOS");
+  nextSteps.forEach((s, i) => lines.push(csvRow([i + 1, s])));
+
+  const csv = "\uFEFF" + lines.join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `orden-vuelos-emtech-2026-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function SyncIndicator({ saving, lastSaved, error }: { saving: boolean; lastSaved: Date | null; error: string | null }) {
   if (error) {
     return (
@@ -210,7 +337,24 @@ export default function AerialTransportPage() {
               Living document · 16/17 nov → 20 nov 2026 · {summary.totalPax} pasajeros · 5 grupos · 14 opciones válidas (regla escalas ≤5h)
             </p>
           </div>
-          <SyncIndicator saving={saving} lastSaved={lastSaved} error={error} />
+          <div className="flex flex-col items-end gap-2">
+            <SyncIndicator saving={saving} lastSaved={lastSaved} error={error} />
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => downloadFlightOrderCsv(
+                state.routes,
+                { totalSelected: summary.totalSelected, totalOriginal: summary.totalOriginal, totalPax: summary.totalPax },
+                derivedLogistics.arrivals,
+                derivedLogistics.departures,
+                state.nextSteps,
+              )}
+            >
+              <Download className="w-4 h-4" />
+              Exportar orden de vuelos
+            </Button>
+          </div>
         </div>
         {meta && (
           <p className="text-[11px] text-muted-foreground mt-2">
