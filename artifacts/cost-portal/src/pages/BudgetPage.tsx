@@ -367,8 +367,10 @@ export default function BudgetPage({
   const centros = useMemo(() => {
     let src = subEventFilteredItems;
     if (filterArea !== "ALL") src = src.filter(i => i.area === filterArea);
-    return ["ALL", ...Array.from(new Set(src.map(i => i.centroCosto).filter(v => v && v.trim())))];
-  }, [subEventFilteredItems, filterArea]);
+    const fromItems = src.map(i => i.centroCosto).filter((v): v is string => !!v && !!v.trim());
+    const merged = Array.from(new Set([...fromItems, ...catalogCentros])).sort();
+    return ["ALL", ...merged];
+  }, [subEventFilteredItems, filterArea, catalogCentros]);
 
   // All resolvable rooms across ESEN days + day-independent venues (by stable id).
   const spaceRefs = useMemo(() => allSpaceRefs(spaces), [spaces]);
@@ -474,9 +476,10 @@ export default function BudgetPage({
   const proveedores = useMemo(() => {
     const hasBlank = items.some(i => !(i.proveedor || "").trim());
     const set = new Set(items.map(i => (i.proveedor || "").trim()).filter(v => v.length > 0));
+    for (const p of catalogProveedores) if (p && p.trim()) set.add(p.trim());
     const sorted = Array.from(set).sort();
     return hasBlank ? ["ALL", "(Sin proveedor)", ...sorted] : ["ALL", ...sorted];
-  }, [items]);
+  }, [items, catalogProveedores]);
 
   const cotizaciones = useMemo(() => {
     const hasBlank = items.some(i => !(i.cotizacion || "").trim());
