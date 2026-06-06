@@ -15,7 +15,7 @@ import { BulkActionsBar } from "@/components/budget/BulkActionsBar";
 import { BudgetHelpGuide } from "@/components/budget/BudgetHelpGuide";
 import { BUDGET_COLUMNS, DEFAULT_VISIBLE } from "@/components/budget/columns";
 import type { LinkedBudgetItem } from "@/data/tasksBoardData";
-import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, STATUS_COLORS, STATUS_SHORT_LABELS, derivePhase, phaseSpaceDay, spaceOptionGroupsForItem, allSpaceRefs, itemSpaceName, migrateItems, type BudgetItem, type QuoteOption, type SubEvent, type SpaceDayKey } from "@/data/budgetData";
+import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, STATUS_COLORS, STATUS_SHORT_LABELS, derivePhase, phaseSpaceDay, spaceOptionGroupsForItem, allSpaceRefs, itemSpaceName, itemLugar, allLugares, migrateItems, type BudgetItem, type QuoteOption, type SubEvent, type SpaceDayKey } from "@/data/budgetData";
 import { recalcItem, computeTransportAllocations, getItemDataIssues } from "@/lib/budgetCalc";
 import { DataIssueBadges } from "@/components/budget/DataIssueBadges";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
@@ -293,6 +293,7 @@ export default function BudgetPage({
     })();
   }, []);
   const [filterArea, setFilterArea] = useState("ALL");
+  const [filterLugar, setFilterLugar] = useState("ALL");
   const [filterEspacio, setFilterEspacio] = useState("ALL");
   const [filterCentro, setFilterCentro] = useState("ALL");
   const [filterProveedor, setFilterProveedor] = useState("ALL");
@@ -380,6 +381,9 @@ export default function BudgetPage({
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [spaceRefs, spaces, items]);
+
+  // Distinct Lugares/Sedes (ESEN + venues) for the Lugar/Sede filter dropdown.
+  const lugares = useMemo(() => allLugares(spaces), [spaces]);
 
   // Aforo/capacity: assigned load per room id (sum of item quantities).
   const spaceLoadInfo = useMemo<SpaceLoadInfo[]>(() => {
@@ -502,6 +506,8 @@ export default function BudgetPage({
     let out = items;
     if (filterSubEvents.size > 0) out = out.filter(i => filterSubEvents.has(derivePhase(i)));
     if (filterArea !== "ALL") out = out.filter(i => i.area === filterArea);
+    if (filterLugar === "(Sin asignar)") out = out.filter(i => !itemLugar(spaces, i));
+    else if (filterLugar !== "ALL") out = out.filter(i => itemLugar(spaces, i) === filterLugar);
     if (filterEspacio === "(Sin asignar)") out = out.filter(i => !itemSpaceName(spaces, i).trim());
     else if (filterEspacio !== "ALL") out = out.filter(i => itemSpaceName(spaces, i) === filterEspacio);
     if (filterCentro !== "ALL") out = out.filter(i => i.centroCosto === filterCentro);
@@ -546,7 +552,7 @@ export default function BudgetPage({
       );
     }
     return out;
-  }, [items, spaces, issuesByItem, filterSubEvents, filterArea, filterEspacio, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterIssue, filterQtyDias, filterPhase, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
+  }, [items, spaces, issuesByItem, filterSubEvents, filterArea, filterLugar, filterEspacio, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterIssue, filterQtyDias, filterPhase, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
 
   const sorted = useMemo(() => {
     if (!sortKey) return filtered;
@@ -1374,6 +1380,7 @@ export default function BudgetPage({
             }
             if (filterQtyDias.size > 0) chips.push({ key: "qd", label: `Días: ${Array.from(filterQtyDias).sort().join(",")}`, onClear: () => setFilterQtyDias(new Set()) });
             if (filterPhase !== "ALL") chips.push({ key: "dia", label: `Día: ${subEventName(filterPhase)}`, onClear: () => setFilterPhase("ALL") });
+            if (filterLugar !== "ALL") chips.push({ key: "lug", label: `Lugar: ${filterLugar}`, onClear: () => setFilterLugar("ALL") });
             if (filterEspacio !== "ALL") chips.push({ key: "esp", label: `Espacio: ${filterEspacio}`, onClear: () => setFilterEspacio("ALL") });
             if (filterPending) chips.push({ key: "pn", label: "Pending Quotes", onClear: () => setFilterPending(false) });
             if (filterAccionReq) chips.push({ key: "ar", label: "Acción Req.", onClear: () => setFilterAccionReq(false) });
@@ -1382,7 +1389,7 @@ export default function BudgetPage({
             if (filterNiceToHave) chips.push({ key: "nh", label: "Nice to Have", onClear: () => setFilterNiceToHave(false) });
             return chips;
           })()}
-          onClearAll={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterIssue("ALL"); setFilterQtyDias(new Set()); setFilterPhase("ALL"); setFilterEspacio("ALL"); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
+          onClearAll={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterIssue("ALL"); setFilterQtyDias(new Set()); setFilterPhase("ALL"); setFilterLugar("ALL"); setFilterEspacio("ALL"); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
         >
           <div className="flex flex-wrap gap-3 items-center">
           <Select value={filterProveedor} onValueChange={setFilterProveedor}>
@@ -1455,6 +1462,14 @@ export default function BudgetPage({
                   </span>
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+          <Select value={filterLugar} onValueChange={setFilterLugar}>
+            <SelectTrigger className="w-[180px] bg-card border-card-border text-xs"><SelectValue placeholder="Lugar / Sede" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Lugar / Sede: Todos</SelectItem>
+              <SelectItem value="(Sin asignar)">(Sin asignar)</SelectItem>
+              {lugares.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filterEspacio} onValueChange={setFilterEspacio}>

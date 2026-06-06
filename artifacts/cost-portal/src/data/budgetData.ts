@@ -666,6 +666,34 @@ export function itemSpaceName(catalog: SpacesCatalog, item: BudgetItem): string 
 }
 
 /**
+ * The Lugar/Sede label of a resolved room: "ESEN" for ESEN day rooms (collapsing
+ * both days under the single venue), the venue name otherwise.
+ */
+export function lugarOfSpace(ref: ResolvedSpace): string {
+  return ref.dayKey ? "ESEN" : ref.placeLabel;
+}
+
+/** Effective Lugar/Sede of an item's assigned space; "" when unassigned/orphan. */
+export function itemLugar(catalog: SpacesCatalog, item: BudgetItem): string {
+  const id = (item.espacioId || "").trim();
+  if (!id) return "";
+  const ref = spaceRefsById(catalog).get(id);
+  return ref ? lugarOfSpace(ref) : "";
+}
+
+/** Distinct Lugares/Sedes present in the catalog, ESEN first, then venues sorted. */
+export function allLugares(catalog: SpacesCatalog): string[] {
+  const set = new Set<string>();
+  for (const r of allSpaceRefs(catalog)) {
+    const l = lugarOfSpace(r);
+    if (l) set.add(l);
+  }
+  return Array.from(set).sort((a, b) =>
+    a === "ESEN" ? -1 : b === "ESEN" ? 1 : a.localeCompare(b),
+  );
+}
+
+/**
  * Idempotent migration of legacy name-based space assignments to stable
  * `espacioId` references. Items that already carry an `espacioId`, or whose
  * legacy name matches no catalog room (orphans), are left untouched. Never
