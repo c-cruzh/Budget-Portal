@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trash2, X, Download, Tag, ShieldAlert, AlertTriangle, MoveRight, ChevronDown, Columns2, SendHorizontal, CheckCircle2, Percent, CalendarDays, Zap, FileText, Copy, ListPlus } from "lucide-react";
+import { Trash2, X, Download, Tag, ShieldAlert, AlertTriangle, MoveRight, ChevronDown, Columns2, SendHorizontal, CheckCircle2, Percent, CalendarDays, Zap, FileText, Copy, ListPlus, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -32,6 +32,10 @@ export interface BulkActionsProps {
   onToggleFlag: (flag: BulkFlag, on: boolean) => void;
   onMoveArea: (area: string) => void;
   onMoveCentro: (centro: string) => void;
+  onSetCotizacion: (cotizacion: string) => void;
+  onSetCotizacionLink: (link: string) => void;
+  onSetAssignedTo: (assignedTo: string) => void;
+  onLinkToTransport: (transportId: string) => void;
   onSplitByDay: () => void;
   onDuplicate: () => void;
   onCreateTasks: () => void;
@@ -40,6 +44,9 @@ export interface BulkActionsProps {
   proveedorOptions: string[];
   areaOptions: string[];
   centroOptions: string[];
+  cotizacionOptions: string[];
+  assignedToOptions: string[];
+  transportOptions: { id: string; label: string }[];
 }
 
 export function BulkActionsBar(props: BulkActionsProps) {
@@ -47,6 +54,9 @@ export function BulkActionsBar(props: BulkActionsProps) {
   const [proveedorDraft, setProveedorDraft] = useState("");
   const [areaDraft, setAreaDraft] = useState("");
   const [centroDraft, setCentroDraft] = useState("");
+  const [cotizacionDraft, setCotizacionDraft] = useState("");
+  const [cotizacionLinkDraft, setCotizacionLinkDraft] = useState("");
+  const [assignedToDraft, setAssignedToDraft] = useState("");
 
   return (
     <>
@@ -97,6 +107,39 @@ export function BulkActionsBar(props: BulkActionsProps) {
                 customDraft={centroDraft}
                 setCustomDraft={setCentroDraft}
                 icon={<MoveRight className="w-3 h-3" />}
+              />
+
+              <SimplePicker
+                label="Cotización"
+                options={props.cotizacionOptions}
+                onPick={props.onSetCotizacion}
+                allowCustom
+                customDraft={cotizacionDraft}
+                setCustomDraft={setCotizacionDraft}
+              />
+
+              <SimplePicker
+                label="Link cotización"
+                options={[]}
+                onPick={props.onSetCotizacionLink}
+                allowCustom
+                customDraft={cotizacionLinkDraft}
+                setCustomDraft={setCotizacionLinkDraft}
+                customPlaceholder="https://..."
+              />
+
+              <SimplePicker
+                label="Asignado a"
+                options={props.assignedToOptions}
+                onPick={props.onSetAssignedTo}
+                allowCustom
+                customDraft={assignedToDraft}
+                setCustomDraft={setAssignedToDraft}
+              />
+
+              <TransportPicker
+                options={props.transportOptions}
+                onPick={props.onLinkToTransport}
               />
 
               <FlagPicker onToggle={props.onToggleFlag} />
@@ -200,6 +243,7 @@ function SimplePicker({
   allowCustom,
   customDraft,
   setCustomDraft,
+  customPlaceholder,
   icon,
 }: {
   label: string;
@@ -208,6 +252,7 @@ function SimplePicker({
   allowCustom?: boolean;
   customDraft?: string;
   setCustomDraft?: (v: string) => void;
+  customPlaceholder?: string;
   icon?: React.ReactNode;
 }) {
   return (
@@ -238,7 +283,7 @@ function SimplePicker({
               <input
                 value={customDraft || ""}
                 onChange={e => setCustomDraft(e.target.value)}
-                placeholder="Otro valor..."
+                placeholder={customPlaceholder || "Otro valor..."}
                 className="flex-1 text-xs px-2 py-1 rounded border border-border bg-background outline-none focus:ring-1 focus:ring-primary"
               />
               <button
@@ -252,6 +297,42 @@ function SimplePicker({
               >OK</button>
             </div>
           )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function TransportPicker({
+  options,
+  onPick,
+}: {
+  options: { id: string; label: string }[];
+  onPick: (id: string) => void;
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button size="sm" variant="outline" className="h-8 gap-1 text-xs">
+          <Truck className="w-3 h-3" />
+          Vincular a transporte
+          <ChevronDown className="w-3 h-3" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-1" align="start">
+        <div className="max-h-64 overflow-y-auto">
+          {options.length === 0 && (
+            <div className="text-xs text-muted-foreground px-2 py-1.5">No hay items de transporte</div>
+          )}
+          {options.map(opt => (
+            <button
+              key={opt.id}
+              onClick={() => onPick(opt.id)}
+              className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted"
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
       </PopoverContent>
     </Popover>

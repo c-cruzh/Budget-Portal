@@ -1165,6 +1165,25 @@ export default function BudgetPage({
     setTaskForItem({ links });
   }, [items, selectedIds]);
 
+  const bulkLinkToTransport = useCallback((transportId: string) => {
+    const transport = items.find(i => i.id === transportId && i.isTransport);
+    if (!transport) return;
+    const ids = Array.from(selectedIds).filter(id => id !== transportId);
+    if (ids.length === 0) return;
+    const existing = (Array.isArray(transport.coveredItemIds) ? transport.coveredItemIds : []).filter(id => id !== transportId);
+    const merged = Array.from(new Set([...existing, ...ids]));
+    const added = merged.length - existing.length;
+    setItems(prev => {
+      const next = prev.map(it =>
+        it.id === transportId ? recalcItem({ ...it, coveredItemIds: merged }) : it
+      );
+      saveFull(next);
+      return next;
+    });
+    setSelectedIds(new Set());
+    toast({ title: "Items vinculados a transporte", description: `${added} item${added === 1 ? "" : "s"} → ${transport.item || "transporte"}` });
+  }, [selectedIds, setItems, saveFull, items]);
+
   const bulkExportCsv = useCallback(() => {
     const rows = items.filter(i => selectedIds.has(i.id));
     const headers = ["item", "evento", "area", "centroCosto", "qty", "precioUnitario", "total", "proveedor", "statusCotizacion"];
@@ -2569,6 +2588,10 @@ export default function BudgetPage({
         }}
         onMoveArea={(a) => bulkUpdate(it => ({ ...it, area: a }))}
         onMoveCentro={(c) => bulkUpdate(it => ({ ...it, centroCosto: c }))}
+        onSetCotizacion={(v) => bulkUpdate(it => ({ ...it, cotizacion: v }))}
+        onSetCotizacionLink={(v) => bulkUpdate(it => ({ ...it, cotizacionLink: v }))}
+        onSetAssignedTo={(v) => bulkUpdate(it => ({ ...it, assignedTo: v }))}
+        onLinkToTransport={bulkLinkToTransport}
         onSplitByDay={() => setBulkSplitOpen(true)}
         onDuplicate={bulkDuplicate}
         onCreateTasks={bulkCreateTasks}
@@ -2580,6 +2603,9 @@ export default function BudgetPage({
         proveedorOptions={proveedores.filter(p => p !== "ALL")}
         areaOptions={areas.filter(a => a !== "ALL")}
         centroOptions={Array.from(new Set(items.map(i => i.centroCosto).filter(Boolean))).sort()}
+        cotizacionOptions={Array.from(new Set(items.map(i => i.cotizacion).filter((v): v is string => !!v))).sort()}
+        assignedToOptions={Array.from(new Set(items.map(i => i.assignedTo).filter((v): v is string => !!v))).sort()}
+        transportOptions={items.filter(i => i.isTransport).map(i => ({ id: i.id, label: i.item || i.descripcion || "(transporte)" }))}
       />
 
       <SubEventsManagerDialog
