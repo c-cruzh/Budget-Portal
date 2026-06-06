@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +30,8 @@ import {
 
 /** Sentinel used by Selects to represent the explicit "NO APLICA" / unset choice. */
 const NA = "__na__";
+/** Sentinel for the Lugar filter meaning "all places / no filter". */
+const LUGAR_ALL = "__all__";
 
 interface PortalUserLite {
   id: number;
@@ -94,12 +96,70 @@ export function BudgetItemDialog({
     () => spaceOptionGroupsForItem(spaces, value.subEventId, spaceDay),
     [spaces, value.subEventId, spaceDay],
   );
-  // Flat id → zone lookup so picking a space can keep Área/Zona consistent.
-  const spaceZoneById = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const o of spaceOptionsForItem(spaces, value.subEventId, spaceDay)) m.set(o.id, o.zone);
-    return m;
+  // Flat id → zone / lugar lookups so picking a space can keep things consistent.
+  const { spaceZoneById, spaceLugarById } = useMemo(() => {
+    const zoneM = new Map<string, string>();
+    const lugarM = new Map<string, string>();
+    for (const o of spaceOptionsForItem(spaces, value.subEventId, spaceDay)) {
+      zoneM.set(o.id, o.zone);
+      lugarM.set(o.id, o.lugar);
+    }
+    return { spaceZoneById: zoneM, spaceLugarById: lugarM };
   }, [spaces, value.subEventId, spaceDay]);
+
+  // Distinct Lugares/Sedes available for this item, in first-appearance order.
+  const lugarOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const g of spaceGroups) {
+      if (seen.has(g.lugar)) continue;
+      seen.add(g.lugar);
+      out.push(g.lugar);
+    }
+    return out;
+  }, [spaceGroups]);
+
+  // UI-only filter: the selected Lugar/Sede. Derived from the item's space (not stored).
+  const [lugarFilter, setLugarFilter] = useState<string>(LUGAR_ALL);
+
+  // Preselect / keep the Lugar in sync with the item's currently assigned space.
+  useEffect(() => {
+    const id = (value.espacioId || "").trim();
+    if (!id) return;
+    const lugar = spaceLugarById.get(id);
+    if (lugar) setLugarFilter(lugar);
+  }, [value.espacioId, spaceLugarById]);
+
+  // Espacio groups limited to the selected Lugar (all when no filter).
+  const filteredSpaceGroups = useMemo(
+    () => (lugarFilter === LUGAR_ALL ? spaceGroups : spaceGroups.filter(g => g.lugar === lugarFilter)),
+    [spaceGroups, lugarFilter],
+  );
+
+  // Área/Zona suggestions limited to the selected Lugar (all zones when no filter).
+  const zoneOptions = useMemo(() => {
+    if (lugarFilter === LUGAR_ALL) return allZones;
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const g of filteredSpaceGroups) {
+      const z = (g.zone || "").trim();
+      if (!z || seen.has(z)) continue;
+      seen.add(z);
+      out.push(z);
+    }
+    return out;
+  }, [lugarFilter, allZones, filteredSpaceGroups]);
+
+  // Changing the Lugar clears a space that no longer belongs to the new selection.
+  const onLugarChange = (v: string) => {
+    setLugarFilter(v);
+    const id = (value.espacioId || "").trim();
+    if (!id) return;
+    const belongs = v === LUGAR_ALL || spaceLugarById.get(id) === v;
+    if (!belongs) {
+      onChange(p => ({ ...p, espacioId: "", espacioDia1: "", espacioDia2: "" }));
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -151,8 +211,25 @@ export function BudgetItemDialog({
           {/* Area / zona */}
           <div>
             <FieldLabel>Área / Zona *</FieldLabel>
-            <ComboInput value={value.area || ""} onChange={v => set("area", v)} options={allZones} placeholder="SELECCIONAR ZONA..." className={cn(errors.area && "border-destructive")} />
+            <ComboInput value={value.area || ""} onChange={v => set("area", v)} options={zoneOptions} placeholder="SELECCIONAR ZONA..." className={cn(errors.area && "border-destructive")} />
             {errors.area && <p className="text-[10px] text-destructive mt-1">{errors.area}</p>}
+          </div>
+
+          {/* Lugar / Sede — filters the Espacio and Zona options below */}
+          <div>
+            <FieldLabel>Lugar / Sede</FieldLabel>
+            <Select value={lugarFilter} onValueChange={onLugarChange}>
+              <SelectTrigger><SelectValue placeholder="TODOS LOS LUGARES" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={LUGAR_ALL}>Todos los lugares</SelectItem>
+                {lugarOptions.length === 0 && (
+                  <div className="px-2 py-1.5 text-[11px] text-muted-foreground">Sin lugares disponibles</div>
+                )}
+                {lugarOptions.map(l => (
+                  <SelectItem key={l} value={l}>{l}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Espacio — grouped Lugar › Zona/Área › Espacio, like the table's space button */}
@@ -180,10 +257,10 @@ export function BudgetItemDialog({
               <SelectTrigger><SelectValue placeholder="SELECCIONAR ESPACIO..." /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={NA}>Sin asignar</SelectItem>
-                {spaceGroups.length === 0 && (
+                {filteredSpaceGroups.length === 0 && (
                   <div className="px-2 py-1.5 text-[11px] text-muted-foreground">Sin espacios disponibles</div>
                 )}
-                {spaceGroups.map((group, gi) => (
+                {filteredSpaceGroups.map((group, gi) => (
                   <SelectGroup key={`${group.lugar}-${group.zone}-${gi}`}>
                     <SelectLabel className="text-[10px] uppercase tracking-wide">
                       {group.lugar}
