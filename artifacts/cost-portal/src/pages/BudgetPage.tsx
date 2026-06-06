@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, Info,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
-  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus, MapPin, Lock, SendHorizontal, Truck, PackageCheck, PackageX
+  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus, MapPin, Lock, SendHorizontal, Truck, PackageCheck, PackageX, Copy
 } from "lucide-react";
 import { CreateTaskFromItemDialog } from "@/components/CreateTaskFromItemDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -828,6 +828,20 @@ export default function BudgetPage({
   const deleteItem = useCallback((id: string) => {
     setItems(prev => {
       const next = prev.filter(i => i.id !== id);
+      saveFull(next);
+      return next;
+    });
+  }, [setItems, saveFull]);
+
+  const duplicateItem = useCallback((id: string) => {
+    const newId = (typeof crypto !== "undefined" && crypto.randomUUID)
+      ? `custom-${crypto.randomUUID()}`
+      : `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setItems(prev => {
+      const idx = prev.findIndex(i => i.id === id);
+      if (idx === -1) return prev;
+      const copy = recalc({ ...prev[idx], id: newId });
+      const next = [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)];
       saveFull(next);
       return next;
     });
@@ -2355,6 +2369,14 @@ export default function BudgetPage({
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>Edit item</TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-primary" onClick={() => duplicateItem(item.id)}>
+                                  <Copy className="w-3 h-3" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Duplicar item</TooltipContent>
                             </Tooltip>
                             <Tooltip>
                               <TooltipTrigger asChild>
