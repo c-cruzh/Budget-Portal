@@ -37,6 +37,7 @@ export interface BulkActionsProps {
   onSetCotizacionLink: (link: string) => void;
   onSetAssignedTo: (assignedTo: string) => void;
   onLinkToTransport: (transportId: string) => void;
+  onCreateTransport: () => void;
   onSplitByDay: () => void;
   onDuplicate: () => void;
   onCreateTasks: () => void;
@@ -134,6 +135,15 @@ export function BulkActionsBar(props: BulkActionsProps) {
                 options={props.transportOptions}
                 onPick={props.onLinkToTransport}
               />
+
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 text-xs"
+                onClick={props.onCreateTransport}
+              >
+                <Truck className="w-3.5 h-3.5" /> Crear transporte
+              </Button>
 
               <FlagPicker onToggle={props.onToggleFlag} />
 
