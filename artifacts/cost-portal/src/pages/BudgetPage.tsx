@@ -1213,6 +1213,64 @@ export default function BudgetPage({
     toast({ title: "Items vinculados a transporte", description: `${added} item${added === 1 ? "" : "s"} → ${transport.item || "transporte"}` });
   }, [selectedIds, setItems, saveFull, items]);
 
+  const bulkCreateTransport = useCallback(() => {
+    const covered = items.filter(i => selectedIds.has(i.id) && !i.isTransport);
+    if (covered.length === 0) return;
+    const first = covered[0];
+    const newTransport: BudgetItem = recalc({
+      id: `custom-${Date.now()}`,
+      evento: first.evento || "MAIN EVENT",
+      subEventId: derivePhase(first),
+      area: first.area || "",
+      espacioId: first.espacioId || "",
+      espacioDia1: "",
+      espacioDia2: "",
+      centroCosto: first.centroCosto || "",
+      item: "Transporte",
+      descripcion: "",
+      notas: "",
+      inKind: false,
+      agencyFee: false,
+      qty: 1,
+      uom: "",
+      porDias: "NO",
+      qtyDias: 1,
+      precioUnitario: 0,
+      subtotal: 0,
+      aplicaFee: "NO",
+      fee: 0, subtotalConFee: 0, iva: 0, total: 0,
+      cotizacion: "",
+      cotizacionLink: "",
+      documento: "",
+      proveedor: "",
+      assignedTo: "",
+      validarCosto: false,
+      contratarAparte: false,
+      ivaMode: "raw",
+      aplicaTurismo: false,
+      soloPresupuestado: false,
+      accionRequerida: false,
+      niceToHave: false,
+      costoEnOtroItem: false,
+      statusCotizacion: "",
+      isTransport: true,
+      transportMode: "association",
+      coveredItemIds: covered.map(i => i.id),
+      transporteNoAplica: false,
+    });
+    setItems(prev => {
+      const next = [...prev, newTransport];
+      saveFull(next);
+      return next;
+    });
+    const groupKey = `${derivePhase(newTransport)}__${newTransport.area}__${newTransport.centroCosto || "(Sin centro)"}`;
+    setExpandedAreas(prev => new Set(prev).add(groupKey));
+    setSelectedIds(new Set());
+    // Open the new transport so the user can name it and set its cost right away.
+    openEditModal(newTransport);
+    toast({ title: "Transporte creado", description: `Cubre ${covered.length} item${covered.length === 1 ? "" : "s"}. Ponle nombre y costo.` });
+  }, [items, selectedIds, recalc, setItems, saveFull, openEditModal]);
+
   const bulkExportCsv = useCallback(() => {
     const rows = items.filter(i => selectedIds.has(i.id));
     const headers = ["item", "evento", "area", "centroCosto", "qty", "precioUnitario", "total", "proveedor", "statusCotizacion"];
@@ -2696,6 +2754,7 @@ export default function BudgetPage({
         onSetCotizacionLink={(v) => bulkUpdate(it => ({ ...it, cotizacionLink: v }))}
         onSetAssignedTo={(v) => bulkUpdate(it => ({ ...it, assignedTo: v }))}
         onLinkToTransport={bulkLinkToTransport}
+        onCreateTransport={bulkCreateTransport}
         onSplitByDay={() => setBulkSplitOpen(true)}
         onDuplicate={bulkDuplicate}
         onCreateTasks={bulkCreateTasks}
