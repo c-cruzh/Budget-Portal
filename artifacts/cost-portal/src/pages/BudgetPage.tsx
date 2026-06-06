@@ -303,6 +303,7 @@ export default function BudgetPage({
   const [filterAsignado, setFilterAsignado] = useState("ALL");
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [filterInKind, setFilterInKind] = useState("ALL");
+  const [filterReviewed, setFilterReviewed] = useState("ALL");
   const [filterPrecio, setFilterPrecio] = useState("ALL");
   // Data-quality issue filter: ALL | ANY | INCOMPLETE | ZERO | NOTRANSPORT
   const [filterIssue, setFilterIssue] = useState("ALL");
@@ -525,6 +526,8 @@ export default function BudgetPage({
     else if (filterStatus !== "ALL") out = out.filter(i => (i.statusCotizacion || "").trim() === filterStatus);
     if (filterInKind === "SI") out = out.filter(i => i.inKind);
     else if (filterInKind === "NO") out = out.filter(i => !i.inKind);
+    if (filterReviewed === "SI") out = out.filter(i => !!(i.reviewedBy || "").trim());
+    else if (filterReviewed === "NO") out = out.filter(i => !(i.reviewedBy || "").trim());
     if (filterPrecio === "ZERO") out = out.filter(i => (Number(i.precioUnitario) || 0) === 0 && !i.inKind);
     else if (filterPrecio === "NONZERO") out = out.filter(i => (Number(i.precioUnitario) || 0) > 0);
     if (filterIssue === "ANY") out = out.filter(i => issuesByItem.has(i.id));
@@ -552,7 +555,7 @@ export default function BudgetPage({
       );
     }
     return out;
-  }, [items, spaces, issuesByItem, filterSubEvents, filterArea, filterLugar, filterEspacio, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterIssue, filterQtyDias, filterPhase, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
+  }, [items, spaces, issuesByItem, filterSubEvents, filterArea, filterLugar, filterEspacio, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterReviewed, filterPrecio, filterIssue, filterQtyDias, filterPhase, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
 
   const sorted = useMemo(() => {
     if (!sortKey) return filtered;
@@ -1434,6 +1437,7 @@ export default function BudgetPage({
             if (filterAsignado !== "ALL") chips.push({ key: "asg", label: `Asig: ${filterAsignado}`, onClear: () => setFilterAsignado("ALL") });
             if (filterStatus !== "ALL") chips.push({ key: "st", label: `Status: ${filterStatus}`, onClear: () => setFilterStatus("ALL") });
             if (filterInKind !== "ALL") chips.push({ key: "ik", label: `In-Kind: ${filterInKind}`, onClear: () => setFilterInKind("ALL") });
+            if (filterReviewed !== "ALL") chips.push({ key: "rv", label: `Reviewed: ${filterReviewed}`, onClear: () => setFilterReviewed("ALL") });
             if (filterPrecio !== "ALL") chips.push({ key: "pr", label: `Precio: ${filterPrecio}`, onClear: () => setFilterPrecio("ALL") });
             if (filterIssue !== "ALL") {
               const issueLabel = filterIssue === "ANY" ? "Con alerta" : filterIssue === "INCOMPLETE" ? "Incompletos" : filterIssue === "ZERO" ? "Costo $0" : "Sin transporte";
@@ -1450,7 +1454,7 @@ export default function BudgetPage({
             if (filterNiceToHave) chips.push({ key: "nh", label: "Nice to Have", onClear: () => setFilterNiceToHave(false) });
             return chips;
           })()}
-          onClearAll={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterIssue("ALL"); setFilterQtyDias(new Set()); setFilterPhase("ALL"); setFilterLugar("ALL"); setFilterEspacio("ALL"); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
+          onClearAll={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterReviewed("ALL"); setFilterPrecio("ALL"); setFilterIssue("ALL"); setFilterQtyDias(new Set()); setFilterPhase("ALL"); setFilterLugar("ALL"); setFilterEspacio("ALL"); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
         >
           <div className="flex flex-wrap gap-3 items-center">
           <Select value={filterProveedor} onValueChange={setFilterProveedor}>
@@ -1491,6 +1495,14 @@ export default function BudgetPage({
               <SelectItem value="ALL">In-Kind: Todos</SelectItem>
               <SelectItem value="SI">Solo In-Kind</SelectItem>
               <SelectItem value="NO">Sin In-Kind</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterReviewed} onValueChange={setFilterReviewed}>
+            <SelectTrigger className="w-[160px] bg-card border-card-border text-xs"><SelectValue placeholder="Reviewed" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Reviewed: Todos</SelectItem>
+              <SelectItem value="SI">Solo Reviewed</SelectItem>
+              <SelectItem value="NO">Sin Reviewed</SelectItem>
             </SelectContent>
           </Select>
           <Select value={filterPrecio} onValueChange={setFilterPrecio}>
