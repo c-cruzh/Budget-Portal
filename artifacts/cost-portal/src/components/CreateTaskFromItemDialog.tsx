@@ -12,10 +12,12 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   linkedItem: LinkedBudgetItem | null;
+  /** When provided with 2+ items, the dialog creates one task per item (bulk mode). */
+  linkedItems?: LinkedBudgetItem[];
   defaultNotes?: string;
 }
 
-export function CreateTaskFromItemDialog({ open, onOpenChange, linkedItem, defaultNotes }: Props) {
+export function CreateTaskFromItemDialog({ open, onOpenChange, linkedItem, linkedItems, defaultNotes }: Props) {
   const { addTask, loading } = useTasksBoardApi();
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
@@ -25,9 +27,12 @@ export function CreateTaskFromItemDialog({ open, onOpenChange, linkedItem, defau
   const [dueDate, setDueDate] = useState("");
   const [createdOK, setCreatedOK] = useState(false);
 
+  const bulk = (linkedItems?.length ?? 0) >= 1;
+  const bulkSig = (linkedItems ?? []).map(i => i.id).join(",");
+
   useEffect(() => {
-    if (open && linkedItem) {
-      setTitle(linkedItem.label || "");
+    if (open && (linkedItem || bulk)) {
+      setTitle(bulk ? "" : (linkedItem?.label || ""));
       setNotes(defaultNotes || "");
       setPriority("med");
       setStatus("todo");
@@ -35,9 +40,17 @@ export function CreateTaskFromItemDialog({ open, onOpenChange, linkedItem, defau
       setDueDate("");
       setCreatedOK(false);
     }
-  }, [open, linkedItem, defaultNotes]);
+  }, [open, linkedItem, defaultNotes, bulk, bulkSig]);
 
   const handleCreate = () => {
+    if (bulk) {
+      for (const it of linkedItems!) {
+        addTask({ title: it.label || "(sin nombre)", notes, priority, status, assignee, dueDate, linkedBudgetItem: it });
+      }
+      setCreatedOK(true);
+      setTimeout(() => onOpenChange(false), 600);
+      return;
+    }
     if (!linkedItem || !title.trim()) return;
     addTask({ title: title.trim(), notes, priority, status, assignee, dueDate, linkedBudgetItem: linkedItem });
     setCreatedOK(true);
@@ -49,11 +62,16 @@ export function CreateTaskFromItemDialog({ open, onOpenChange, linkedItem, defau
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Link2 className="w-4 h-4 text-primary" /> Crear tarea desde Budget
+            <Link2 className="w-4 h-4 text-primary" /> {bulk ? "Crear tareas desde Budget" : "Crear tarea desde Budget"}
           </DialogTitle>
         </DialogHeader>
 
-        {linkedItem && (
+        {bulk ? (
+          <div className="rounded-md border border-card-border bg-muted/40 p-2.5 text-xs">
+            <div className="font-medium text-foreground">{linkedItems!.length} item{linkedItems!.length === 1 ? "" : "s"} seleccionado{linkedItems!.length === 1 ? "" : "s"}</div>
+            <div className="text-muted-foreground text-[11px]">Se creará una tarea por item (el título de cada tarea será el nombre del item).</div>
+          </div>
+        ) : linkedItem && (
           <div className="rounded-md border border-card-border bg-muted/40 p-2.5 text-xs space-y-0.5">
             <div className="font-medium text-foreground">{linkedItem.label}</div>
             <div className="text-muted-foreground text-[11px]">
@@ -69,9 +87,11 @@ export function CreateTaskFromItemDialog({ open, onOpenChange, linkedItem, defau
           </div>
         ) : (
           <div className="space-y-3">
-            <Field label="Título">
-              <Input value={title} onChange={e => setTitle(e.target.value)} autoFocus />
-            </Field>
+            {!bulk && (
+              <Field label="Título">
+                <Input value={title} onChange={e => setTitle(e.target.value)} autoFocus />
+              </Field>
+            )}
             <Field label="Notas / descripción de la tarea">
               <Textarea rows={4} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Ej. Pedir cotización a 3 proveedores antes del viernes." />
             </Field>
@@ -108,8 +128,8 @@ export function CreateTaskFromItemDialog({ open, onOpenChange, linkedItem, defau
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={handleCreate} disabled={loading || !title.trim() || createdOK}>
-            {createdOK ? "✓ Creada" : "Crear tarea"}
+          <Button onClick={handleCreate} disabled={loading || (!bulk && !title.trim()) || createdOK}>
+            {createdOK ? "✓ Creada" : bulk ? `Crear ${linkedItems!.length} tarea${linkedItems!.length === 1 ? "" : "s"}` : "Crear tarea"}
           </Button>
         </DialogFooter>
       </DialogContent>

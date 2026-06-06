@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trash2, X, Download, Tag, ShieldAlert, AlertTriangle, MoveRight, ChevronDown, Columns2, SendHorizontal, CheckCircle2, Percent, CalendarDays, Zap, FileText } from "lucide-react";
+import { Trash2, X, Download, Tag, ShieldAlert, AlertTriangle, MoveRight, ChevronDown, Columns2, SendHorizontal, CheckCircle2, Percent, CalendarDays, Zap, FileText, Copy, ListPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -33,6 +33,8 @@ export interface BulkActionsProps {
   onMoveArea: (area: string) => void;
   onMoveCentro: (centro: string) => void;
   onSplitByDay: () => void;
+  onDuplicate: () => void;
+  onCreateTasks: () => void;
   onSendToFinal?: () => void;
   statusOptions: string[];
   proveedorOptions: string[];
@@ -106,6 +108,24 @@ export function BulkActionsBar(props: BulkActionsProps) {
                 onClick={props.onSplitByDay}
               >
                 <Columns2 className="w-3.5 h-3.5" /> Split por día
+              </Button>
+
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 text-xs"
+                onClick={props.onDuplicate}
+              >
+                <Copy className="w-3.5 h-3.5" /> Duplicar
+              </Button>
+
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 text-xs"
+                onClick={props.onCreateTasks}
+              >
+                <ListPlus className="w-3.5 h-3.5" /> Crear tareas
               </Button>
 
               {props.onSendToFinal && (

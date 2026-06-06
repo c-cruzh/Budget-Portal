@@ -339,7 +339,7 @@ export default function BudgetPage({
   const [editItem, setEditItem] = useState<Partial<BudgetItem>>({});
   const [splitItem, setSplitItem] = useState<BudgetItem | null>(null);
   const [bulkSplitOpen, setBulkSplitOpen] = useState(false);
-  const [taskForItem, setTaskForItem] = useState<{ link: LinkedBudgetItem; notes: string } | null>(null);
+  const [taskForItem, setTaskForItem] = useState<{ link?: LinkedBudgetItem; links?: LinkedBudgetItem[]; notes?: string } | null>(null);
   const [newItem, setNewItem] = useState<Partial<BudgetItem>>({
     evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "",
     inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1,
@@ -1138,6 +1138,32 @@ export default function BudgetPage({
     setSelectedIds(new Set());
     toast({ title: "Items borrados", description: `${selectedIds.size} items eliminados` });
   }, [setItems, saveFull, selectedIds]);
+
+  const bulkDuplicate = useCallback(() => {
+    const genId = () => (typeof crypto !== "undefined" && crypto.randomUUID)
+      ? `custom-${crypto.randomUUID()}`
+      : `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const count = selectedIds.size;
+    setItems(prev => {
+      const next: BudgetItem[] = [];
+      for (const it of prev) {
+        next.push(it);
+        if (selectedIds.has(it.id)) next.push(recalc({ ...it, id: genId() }));
+      }
+      saveFull(next);
+      return next;
+    });
+    setSelectedIds(new Set());
+    toast({ title: "Items duplicados", description: `${count} item${count === 1 ? "" : "s"} duplicado${count === 1 ? "" : "s"}` });
+  }, [setItems, saveFull, selectedIds]);
+
+  const bulkCreateTasks = useCallback(() => {
+    const links = items
+      .filter(i => selectedIds.has(i.id))
+      .map(it => ({ id: it.id, label: it.item || "(sin nombre)", evento: it.evento, area: it.area, centroCosto: it.centroCosto }));
+    if (links.length === 0) return;
+    setTaskForItem({ links });
+  }, [items, selectedIds]);
 
   const bulkExportCsv = useCallback(() => {
     const rows = items.filter(i => selectedIds.has(i.id));
@@ -2544,6 +2570,8 @@ export default function BudgetPage({
         onMoveArea={(a) => bulkUpdate(it => ({ ...it, area: a }))}
         onMoveCentro={(c) => bulkUpdate(it => ({ ...it, centroCosto: c }))}
         onSplitByDay={() => setBulkSplitOpen(true)}
+        onDuplicate={bulkDuplicate}
+        onCreateTasks={bulkCreateTasks}
         onSendToFinal={deprecated ? () => {
           sendToFinal(items.filter(i => selectedIds.has(i.id)));
           setSelectedIds(new Set());
@@ -2621,6 +2649,7 @@ export default function BudgetPage({
         open={!!taskForItem}
         onOpenChange={(o) => { if (!o) setTaskForItem(null); }}
         linkedItem={taskForItem?.link || null}
+        linkedItems={taskForItem?.links}
         defaultNotes={taskForItem?.notes}
       />
     </div>
