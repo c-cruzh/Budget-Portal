@@ -238,6 +238,113 @@ export interface TransportAllocationInfo {
   distributedByTransport: Map<string, number>;
 }
 
+/**
+ * The required text fields a complete budget line must carry. Single source of
+ * truth shared by the create/edit dialog validation and the row-level data
+ * quality alerts so the two can never drift.
+ */
+interface RequiredFieldDef {
+  field: keyof BudgetItem;
+  /** Short label for the row alert tooltip. */
+  label: string;
+  /** Full message for the dialog field error. */
+  msg: string;
+}
+
+const REQUIRED_TEXT_FIELDS: RequiredFieldDef[] = [
+  { field: "item", label: "Nombre", msg: "El nombre del item es obligatorio." },
+  { field: "subEventId", label: "Fase", msg: "Selecciona la fase del evento." },
+  { field: "area", label: "Área/Zona", msg: "Asigna un área/zona (o NO APLICA)." },
+  { field: "centroCosto", label: "Centro de costo", msg: "Asigna un centro de costo." },
+  { field: "proveedor", label: "Proveedor", msg: "Indica el proveedor (o NO APLICA)." },
+  { field: "descripcion", label: "Descripción", msg: "Agrega una descripción." },
+  { field: "uom", label: "Unidad (UoM)", msg: "Indica la unidad (UoM)." },
+  { field: "cotizacion", label: "Cotización", msg: "Indica la cotización (o N/A)." },
+];
+
+const isBlank = (v: unknown) => v === undefined || v === null || String(v).trim() === "";
+const qtyInvalid = (v: unknown) => v === undefined || v === null || Number.isNaN(Number(v)) || Number(v) < 0;
+
+/**
+ * Field → error message map for a budget item. Drives the create/edit dialog's
+ * inline validation. An empty object means every required field is present.
+ */
+export function requiredFieldErrors(item: Partial<BudgetItem>): Record<string, string> {
+  const e: Record<string, string> = {};
+  for (const r of REQUIRED_TEXT_FIELDS) {
+    if (isBlank(item[r.field])) e[r.field as string] = r.msg;
+  }
+  if (qtyInvalid(item.qty)) e.qty = "Cantidad inválida.";
+  if (qtyInvalid(item.precioUnitario)) e.precioUnitario = "Precio inválido (≥ 0).";
+  if (item.porDias === "SI" && (Number(item.qtyDias) || 0) < 1) e.qtyDias = "Indica al menos 1 día.";
+  return e;
+}
+
+/** Short labels of the required fields an item is missing (for row tooltips). */
+export function missingRequiredLabels(item: Partial<BudgetItem>): string[] {
+  const labels: string[] = [];
+  for (const r of REQUIRED_TEXT_FIELDS) {
+    if (isBlank(item[r.field])) labels.push(r.label);
+  }
+  if (qtyInvalid(item.qty)) labels.push("Cantidad");
+  if (qtyInvalid(item.precioUnitario)) labels.push("Precio");
+  if (item.porDias === "SI" && (Number(item.qtyDias) || 0) < 1) labels.push("Días");
+  return labels;
+}
+
+/** The kinds of data-quality problems surfaced as row alerts. */
+export type DataIssueKey = "incomplete" | "zerocost" | "notransport";
+
+export interface DataIssue {
+  key: DataIssueKey;
+  /** Short headline for the alert. */
+  label: string;
+  /** Explanation of what is missing / wrong. */
+  detail: string;
+}
+
+/**
+ * Detects the data-quality issues for a single budget line, reusing the shared
+ * field validation and the transport allocation index so the row alerts match
+ * the dialog and the transport traceability exactly:
+ *  - incomplete : one or more required fields are empty/invalid.
+ *  - zerocost   : unit price is $0 and the line is not in-kind (donated).
+ *  - notransport: the line is neither a transport itself nor delivered/installed
+ *                 by any transport line (no included nor associated transport).
+ */
+export function getItemDataIssues(item: BudgetItem, info: TransportAllocationInfo): DataIssue[] {
+  const issues: DataIssue[] = [];
+
+  const missing = missingRequiredLabels(item);
+  if (missing.length > 0) {
+    issues.push({
+      key: "incomplete",
+      label: "Campos incompletos",
+      detail: `Faltan: ${missing.join(" · ")}`,
+    });
+  }
+
+  if ((Number(item.precioUnitario) || 0) === 0 && !item.inKind) {
+    issues.push({
+      key: "zerocost",
+      label: "Costo en $0",
+      detail: "El precio unitario es $0 y no está marcado como In-Kind. Confirma el costo o márcalo In-Kind.",
+    });
+  }
+
+  const isTransport = !!item.isTransport;
+  const sources = info.sourcesForItem.get(item.id) || [];
+  if (!isTransport && sources.length === 0) {
+    issues.push({
+      key: "notransport",
+      label: "Sin transporte",
+      detail: "No tiene transporte/entrega incluido ni asociado. Vincúlalo a una línea de transporte o márcala como transporte.",
+    });
+  }
+
+  return issues;
+}
+
 export function computeTransportAllocations(items: BudgetItem[]): TransportAllocationInfo {
   const byId = new Map<string, BudgetItem>();
   for (const it of items) byId.set(it.id, it);

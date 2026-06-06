@@ -16,7 +16,8 @@ import { BudgetHelpGuide } from "@/components/budget/BudgetHelpGuide";
 import { BUDGET_COLUMNS, DEFAULT_VISIBLE } from "@/components/budget/columns";
 import type { LinkedBudgetItem } from "@/data/tasksBoardData";
 import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, STATUS_COLORS, STATUS_SHORT_LABELS, derivePhase, phaseSpaceDay, spaceOptionGroupsForItem, allSpaceRefs, itemSpaceName, migrateItems, type BudgetItem, type QuoteOption, type SubEvent, type SpaceDayKey } from "@/data/budgetData";
-import { recalcItem, computeTransportAllocations } from "@/lib/budgetCalc";
+import { recalcItem, computeTransportAllocations, getItemDataIssues } from "@/lib/budgetCalc";
+import { DataIssueBadges } from "@/components/budget/DataIssueBadges";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useSubEventsApi } from "@/hooks/useSubEventsApi";
 import { useSpacesApi } from "@/hooks/useSpacesApi";
@@ -302,6 +303,8 @@ export default function BudgetPage({
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [filterInKind, setFilterInKind] = useState("ALL");
   const [filterPrecio, setFilterPrecio] = useState("ALL");
+  // Data-quality issue filter: ALL | ANY | INCOMPLETE | ZERO | NOTRANSPORT
+  const [filterIssue, setFilterIssue] = useState("ALL");
   const [filterQtyDias, setFilterQtyDias] = useState<Set<number>>(new Set());
   const [filterPhase, setFilterPhase] = useState<string>("ALL");
   const [filterPending, setFilterPending] = useState(false);
@@ -471,6 +474,23 @@ export default function BudgetPage({
     return hasBlank ? ["ALL", "(Sin status)", ...sorted] : ["ALL", ...sorted];
   }, [items]);
 
+  // Display-only transport traceability. Computed over ALL items (not just the
+  // filtered view) so links resolve even when the covered item is filtered out.
+  // This never feeds into totalBudget — the grand total stays the plain sum of
+  // i.total, so transport cost is counted exactly once regardless of mode.
+  const transportInfo = useMemo(() => computeTransportAllocations(items), [items]);
+
+  // Per-item data-quality issues, indexed by id, reused by both the row badges
+  // and the issue filter so the chip count and the visible badges always agree.
+  const issuesByItem = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof getItemDataIssues>>();
+    for (const i of items) {
+      const iss = getItemDataIssues(i, transportInfo);
+      if (iss.length > 0) m.set(i.id, iss);
+    }
+    return m;
+  }, [items, transportInfo]);
+
   const filtered = useMemo(() => {
     let out = items;
     if (filterSubEvents.size > 0) out = out.filter(i => filterSubEvents.has(derivePhase(i)));
@@ -494,6 +514,10 @@ export default function BudgetPage({
     else if (filterInKind === "NO") out = out.filter(i => !i.inKind);
     if (filterPrecio === "ZERO") out = out.filter(i => (Number(i.precioUnitario) || 0) === 0 && !i.inKind);
     else if (filterPrecio === "NONZERO") out = out.filter(i => (Number(i.precioUnitario) || 0) > 0);
+    if (filterIssue === "ANY") out = out.filter(i => issuesByItem.has(i.id));
+    else if (filterIssue === "INCOMPLETE") out = out.filter(i => (issuesByItem.get(i.id) || []).some(x => x.key === "incomplete"));
+    else if (filterIssue === "ZERO") out = out.filter(i => (issuesByItem.get(i.id) || []).some(x => x.key === "zerocost"));
+    else if (filterIssue === "NOTRANSPORT") out = out.filter(i => (issuesByItem.get(i.id) || []).some(x => x.key === "notransport"));
     if (filterQtyDias.size > 0) out = out.filter(i => filterQtyDias.has(Number(i.qtyDias)));
     if (filterPhase !== "ALL") out = out.filter(i => derivePhase(i) === filterPhase);
     if (filterPending) out = out.filter(i => i.cotizacion === "PENDING");
@@ -515,7 +539,7 @@ export default function BudgetPage({
       );
     }
     return out;
-  }, [items, spaces, filterSubEvents, filterArea, filterEspacio, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterQtyDias, filterPhase, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
+  }, [items, spaces, issuesByItem, filterSubEvents, filterArea, filterEspacio, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterPrecio, filterIssue, filterQtyDias, filterPhase, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
 
   const sorted = useMemo(() => {
     if (!sortKey) return filtered;
@@ -1097,12 +1121,6 @@ export default function BudgetPage({
     URL.revokeObjectURL(url);
   }, [items, selectedIds]);
 
-  // Display-only transport traceability. Computed over ALL items (not just the
-  // filtered view) so links resolve even when the covered item is filtered out.
-  // This never feeds into totalBudget — the grand total stays the plain sum of
-  // i.total, so transport cost is counted exactly once regardless of mode.
-  const transportInfo = useMemo(() => computeTransportAllocations(items), [items]);
-
   const totalBudget = useMemo(() => filtered.reduce((s, i) => s + i.total, 0), [filtered]);
   const cashSinFee = useMemo(() => filtered.filter(i => !i.inKind && i.total > 0).reduce((s, i) => s + i.subtotal + i.iva + (i.turismo || 0), 0), [filtered]);
   const totalInKindCount = useMemo(() => filtered.filter(i => i.inKind).length, [filtered]);
@@ -1343,6 +1361,10 @@ export default function BudgetPage({
             if (filterStatus !== "ALL") chips.push({ key: "st", label: `Status: ${filterStatus}`, onClear: () => setFilterStatus("ALL") });
             if (filterInKind !== "ALL") chips.push({ key: "ik", label: `In-Kind: ${filterInKind}`, onClear: () => setFilterInKind("ALL") });
             if (filterPrecio !== "ALL") chips.push({ key: "pr", label: `Precio: ${filterPrecio}`, onClear: () => setFilterPrecio("ALL") });
+            if (filterIssue !== "ALL") {
+              const issueLabel = filterIssue === "ANY" ? "Con alerta" : filterIssue === "INCOMPLETE" ? "Incompletos" : filterIssue === "ZERO" ? "Costo $0" : "Sin transporte";
+              chips.push({ key: "is", label: `Alerta: ${issueLabel}`, onClear: () => setFilterIssue("ALL") });
+            }
             if (filterQtyDias.size > 0) chips.push({ key: "qd", label: `Días: ${Array.from(filterQtyDias).sort().join(",")}`, onClear: () => setFilterQtyDias(new Set()) });
             if (filterPhase !== "ALL") chips.push({ key: "dia", label: `Día: ${subEventName(filterPhase)}`, onClear: () => setFilterPhase("ALL") });
             if (filterEspacio !== "ALL") chips.push({ key: "esp", label: `Espacio: ${filterEspacio}`, onClear: () => setFilterEspacio("ALL") });
@@ -1353,7 +1375,7 @@ export default function BudgetPage({
             if (filterNiceToHave) chips.push({ key: "nh", label: "Nice to Have", onClear: () => setFilterNiceToHave(false) });
             return chips;
           })()}
-          onClearAll={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterQtyDias(new Set()); setFilterPhase("ALL"); setFilterEspacio("ALL"); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
+          onClearAll={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterPrecio("ALL"); setFilterIssue("ALL"); setFilterQtyDias(new Set()); setFilterPhase("ALL"); setFilterEspacio("ALL"); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
         >
           <div className="flex flex-wrap gap-3 items-center">
           <Select value={filterProveedor} onValueChange={setFilterProveedor}>
@@ -1402,6 +1424,16 @@ export default function BudgetPage({
               <SelectItem value="ALL">Precio: Todos</SelectItem>
               <SelectItem value="ZERO">Precio en $0</SelectItem>
               <SelectItem value="NONZERO">Con precio</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterIssue} onValueChange={setFilterIssue}>
+            <SelectTrigger className="w-[190px] bg-card border-card-border text-xs"><SelectValue placeholder="Alertas" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Alertas: Todas</SelectItem>
+              <SelectItem value="ANY">Con alguna alerta</SelectItem>
+              <SelectItem value="INCOMPLETE">Campos incompletos</SelectItem>
+              <SelectItem value="ZERO">Costo en $0</SelectItem>
+              <SelectItem value="NOTRANSPORT">Sin transporte</SelectItem>
             </SelectContent>
           </Select>
           <Select value={filterPhase} onValueChange={setFilterPhase}>
@@ -1692,12 +1724,21 @@ export default function BudgetPage({
                                 <button
                                   className="text-[9px] font-semibold px-1.5 py-0.5 rounded text-white hover:opacity-80 transition-opacity"
                                   style={{ backgroundColor: subEventColor(itemPhaseId) }}
-                                  title="Cambiar sub-evento"
+                                  title="Editar ítem o cambiar fase"
                                 >
                                   {subEventName(itemPhaseId)}
                                 </button>
                               </PopoverTrigger>
-                              <PopoverContent className="w-48 p-1" align="start">
+                              <PopoverContent className="w-52 p-1" align="start">
+                                <button
+                                  onClick={() => openEditModal(item)}
+                                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-[11px] text-left text-primary hover:bg-primary/10 font-semibold transition-colors"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                  <span>Editar ítem completo…</span>
+                                </button>
+                                <div className="border-t border-border my-1" />
+                                <div className="px-2 pt-0.5 pb-1 text-[9px] uppercase tracking-wide text-muted-foreground/70">Cambio rápido de fase</div>
                                 <div className="flex flex-col gap-0.5">
                                   {subEvents.map(s => (
                                     <button
@@ -1725,6 +1766,7 @@ export default function BudgetPage({
                           )}
                         </div>
                         <EditableCell value={item.item} onSave={v => updateItem(item.id, "item", v)} className="font-medium text-foreground text-xs" disabled={!canEdit} />
+                        <DataIssueBadges issues={issuesByItem.get(item.id) || []} />
                         {(() => {
                           const covers = item.isTransport ? (transportInfo.coveredByTransport.get(item.id) || []) : [];
                           const sources = transportInfo.sourcesForItem.get(item.id) || [];

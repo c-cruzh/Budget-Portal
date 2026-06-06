@@ -6,7 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -14,9 +14,11 @@ import { ComboInput } from "@/components/ComboInput";
 import { CostBreakdown } from "@/components/budget/CostBreakdown";
 import { cn, formatUSD } from "@/lib/utils";
 import { Truck, X, Search, Check } from "lucide-react";
+import { requiredFieldErrors } from "@/lib/budgetCalc";
 import {
   phaseSpaceDay,
   spaceOptionsForItem,
+  spaceOptionGroupsForItem,
   IVA_MODE_VALUES,
   IVA_MODE_LABELS,
   TRANSPORT_MODE_VALUES,
@@ -79,28 +81,7 @@ export function BudgetItemDialog({
   const transportMode = value.transportMode === "allocation" ? "allocation" : "association";
   const coveredIds = useMemo(() => value.coveredItemIds ?? [], [value.coveredItemIds]);
 
-  const errors = useMemo(() => {
-    const e: Record<string, string> = {};
-    const reqText = (field: keyof BudgetItem, msg: string) => {
-      const v = value[field];
-      if (v === undefined || v === null || String(v).trim() === "") e[field as string] = msg;
-    };
-    reqText("item", "El nombre del item es obligatorio.");
-    reqText("subEventId", "Selecciona la fase del evento.");
-    reqText("area", "Asigna un área/zona (o NO APLICA).");
-    reqText("centroCosto", "Asigna un centro de costo.");
-    reqText("proveedor", "Indica el proveedor (o NO APLICA).");
-    reqText("descripcion", "Agrega una descripción.");
-    reqText("uom", "Indica la unidad (UoM).");
-    reqText("cotizacion", "Indica la cotización (o N/A).");
-    if (value.qty === undefined || value.qty === null || Number.isNaN(Number(value.qty)) || Number(value.qty) < 0)
-      e.qty = "Cantidad inválida.";
-    if (value.precioUnitario === undefined || value.precioUnitario === null || Number.isNaN(Number(value.precioUnitario)) || Number(value.precioUnitario) < 0)
-      e.precioUnitario = "Precio inválido (≥ 0).";
-    if (byDias && (Number(value.qtyDias) || 0) < 1)
-      e.qtyDias = "Indica al menos 1 día.";
-    return e;
-  }, [value, byDias]);
+  const errors = useMemo(() => requiredFieldErrors(value), [value]);
 
   const isValid = Object.keys(errors).length === 0;
 
@@ -108,10 +89,17 @@ export function BudgetItemDialog({
     onChange(p => ({ ...p, [field]: v }));
 
   const spaceDay = phaseSpaceDay(value.subEventId);
-  const spaceOptions = useMemo(
-    () => spaceOptionsForItem(spaces, value.subEventId, spaceDay),
+  // Grouped picker (Lugar › Zona/Área › Espacio), mirroring the table's space button.
+  const spaceGroups = useMemo(
+    () => spaceOptionGroupsForItem(spaces, value.subEventId, spaceDay),
     [spaces, value.subEventId, spaceDay],
   );
+  // Flat id → zone lookup so picking a space can keep Área/Zona consistent.
+  const spaceZoneById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const o of spaceOptionsForItem(spaces, value.subEventId, spaceDay)) m.set(o.id, o.zone);
+    return m;
+  }, [spaces, value.subEventId, spaceDay]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -167,26 +155,46 @@ export function BudgetItemDialog({
             {errors.area && <p className="text-[10px] text-destructive mt-1">{errors.area}</p>}
           </div>
 
-          {/* Espacio */}
+          {/* Espacio — grouped Lugar › Zona/Área › Espacio, like the table's space button */}
           <div>
             <FieldLabel>Espacio Asignado</FieldLabel>
             <Select
               value={(value.espacioId || "").trim() || NA}
               onValueChange={v => {
-                set("espacioId", v === NA ? "" : v);
-                // Collapse to the single id reference; clear legacy day fields.
-                set("espacioDia1", "");
-                set("espacioDia2", "");
+                const id = v === NA ? "" : v;
+                onChange(p => {
+                  const next: Partial<BudgetItem> = {
+                    ...p,
+                    espacioId: id,
+                    // Collapse to the single id reference; clear legacy day fields.
+                    espacioDia1: "",
+                    espacioDia2: "",
+                  };
+                  // Keep Área/Zona consistent with the chosen space's zone.
+                  const zone = id ? (spaceZoneById.get(id) || "").trim() : "";
+                  if (zone) next.area = zone;
+                  return next;
+                });
               }}
             >
               <SelectTrigger><SelectValue placeholder="SELECCIONAR ESPACIO..." /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={NA}>Sin asignar</SelectItem>
-                {spaceOptions.map(o => (
-                  <SelectItem key={o.id} value={o.id}>
-                    {o.name}
-                    {o.zone ? <span className="ml-1 text-muted-foreground">· {o.zone}</span> : null}
-                  </SelectItem>
+                {spaceGroups.length === 0 && (
+                  <div className="px-2 py-1.5 text-[11px] text-muted-foreground">Sin espacios disponibles</div>
+                )}
+                {spaceGroups.map((group, gi) => (
+                  <SelectGroup key={`${group.lugar}-${group.zone}-${gi}`}>
+                    <SelectLabel className="text-[10px] uppercase tracking-wide">
+                      {group.lugar}
+                      <span className="ml-1 font-normal normal-case text-muted-foreground">· {group.zone}</span>
+                    </SelectLabel>
+                    {group.options.map(o => (
+                      <SelectItem key={o.id} value={o.id} className="pl-6">
+                        {o.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 ))}
               </SelectContent>
             </Select>
