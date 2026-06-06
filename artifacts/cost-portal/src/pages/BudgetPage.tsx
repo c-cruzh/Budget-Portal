@@ -305,7 +305,7 @@ export default function BudgetPage({
   const [filterLugar, setFilterLugar] = useState("ALL");
   const [filterEspacio, setFilterEspacio] = useState("ALL");
   const [filterCentro, setFilterCentro] = useState("ALL");
-  const [filterProveedor, setFilterProveedor] = useState("ALL");
+  const [filterProveedor, setFilterProveedor] = useState<Set<string>>(new Set());
   const [filterProductora, setFilterProductora] = useState("ALL");
   const [filterFeeEnCotiz, setFilterFeeEnCotiz] = useState("ALL");
   const [filterCotizacion, setFilterCotizacion] = useState("ALL");
@@ -534,8 +534,10 @@ export default function BudgetPage({
     if (filterEspacio === "(Sin asignar)") out = out.filter(i => !itemSpaceName(spaces, i).trim());
     else if (filterEspacio !== "ALL") out = out.filter(i => itemSpaceName(spaces, i) === filterEspacio);
     if (filterCentro !== "ALL") out = out.filter(i => i.centroCosto === filterCentro);
-    if (filterProveedor === "(Sin proveedor)") out = out.filter(i => !(i.proveedor || "").trim());
-    else if (filterProveedor !== "ALL") out = out.filter(i => (i.proveedor || "").trim() === filterProveedor);
+    if (filterProveedor.size > 0) out = out.filter(i => {
+      const p = (i.proveedor || "").trim();
+      return p ? filterProveedor.has(p) : filterProveedor.has("(Sin proveedor)");
+    });
     if (filterProductora === "SI") out = out.filter(i => i.agencyFee);
     else if (filterProductora === "NO") out = out.filter(i => !i.agencyFee);
     if (filterFeeEnCotiz === "SI") out = out.filter(i => i.aplicaFee === "SI");
@@ -1458,7 +1460,7 @@ export default function BudgetPage({
         <FiltersPopover
           active={(() => {
             const chips: ActiveFilterChip[] = [];
-            if (filterProveedor !== "ALL") chips.push({ key: "prov", label: `Prov: ${filterProveedor}`, onClear: () => setFilterProveedor("ALL") });
+            if (filterProveedor.size > 0) chips.push({ key: "prov", label: `Prov: ${Array.from(filterProveedor).join(", ")}`, onClear: () => setFilterProveedor(new Set()) });
             if (filterProductora !== "ALL") chips.push({ key: "via", label: `Via Productora: ${filterProductora}`, onClear: () => setFilterProductora("ALL") });
             if (filterFeeEnCotiz !== "ALL") chips.push({ key: "fee", label: `Fee Cotiz: ${filterFeeEnCotiz}`, onClear: () => setFilterFeeEnCotiz("ALL") });
             if (filterCotizacion !== "ALL") chips.push({ key: "cot", label: `Cot: ${filterCotizacion}`, onClear: () => setFilterCotizacion("ALL") });
@@ -1482,13 +1484,64 @@ export default function BudgetPage({
             if (filterNiceToHave) chips.push({ key: "nh", label: "Nice to Have", onClear: () => setFilterNiceToHave(false) });
             return chips;
           })()}
-          onClearAll={() => { setFilterProveedor("ALL"); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterReviewed("ALL"); setFilterPrecio("ALL"); setFilterIssue("ALL"); setFilterQtyDias(new Set()); setFilterPhase("ALL"); setFilterLugar("ALL"); setFilterEspacio("ALL"); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
+          onClearAll={() => { setFilterProveedor(new Set()); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterReviewed("ALL"); setFilterPrecio("ALL"); setFilterIssue("ALL"); setFilterQtyDias(new Set()); setFilterPhase("ALL"); setFilterLugar("ALL"); setFilterEspacio("ALL"); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
         >
           <div className="flex flex-wrap gap-3 items-center">
-          <Select value={filterProveedor} onValueChange={setFilterProveedor}>
-            <SelectTrigger className="w-[200px] bg-card border-card-border text-xs"><SelectValue placeholder="Provider" /></SelectTrigger>
-            <SelectContent>{proveedores.map(p => <SelectItem key={p} value={p}>{p === "ALL" ? "All Providers" : p}</SelectItem>)}</SelectContent>
-          </Select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                className={cn(
+                  "h-9 px-3 rounded-md border text-xs flex items-center gap-1.5 transition-colors w-[200px] justify-between",
+                  filterProveedor.size > 0
+                    ? "bg-primary/10 text-primary border-primary/30"
+                    : "bg-card border-card-border text-foreground hover:border-border"
+                )}
+              >
+                <span className="truncate">
+                  {filterProveedor.size === 0
+                    ? "All Providers"
+                    : filterProveedor.size === 1
+                      ? Array.from(filterProveedor)[0]
+                      : `${filterProveedor.size} proveedores`}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 shrink-0 opacity-50" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[240px] p-1 max-h-[320px] overflow-y-auto" align="start">
+              {proveedores.filter(p => p !== "ALL").length === 0 ? (
+                <div className="text-xs text-muted-foreground px-2 py-1.5">Sin valores</div>
+              ) : (
+                proveedores.filter(p => p !== "ALL").map(p => {
+                  const checked = filterProveedor.has(p);
+                  return (
+                    <button
+                      key={p}
+                      onClick={() => {
+                        setFilterProveedor(prev => {
+                          const next = new Set(prev);
+                          if (next.has(p)) next.delete(p); else next.add(p);
+                          return next;
+                        });
+                      }}
+                      className={cn(
+                        "w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs hover:bg-muted text-left",
+                        checked && "bg-primary/10 text-primary"
+                      )}
+                    >
+                      <span className="truncate">{p}</span>
+                      {checked && <span className="text-[10px] shrink-0">✓</span>}
+                    </button>
+                  );
+                })
+              )}
+              {filterProveedor.size > 0 && (
+                <button
+                  onClick={() => setFilterProveedor(new Set())}
+                  className="w-full text-left px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted rounded border-t border-border mt-1"
+                >Limpiar</button>
+              )}
+            </PopoverContent>
+          </Popover>
           <Select value={filterProductora} onValueChange={setFilterProductora}>
             <SelectTrigger className="w-[180px] bg-card border-card-border text-xs"><SelectValue placeholder="Via Productora" /></SelectTrigger>
             <SelectContent>
@@ -1949,12 +2002,12 @@ export default function BudgetPage({
                                   <TooltipTrigger asChild>
                                     <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
                                       <PackageCheck className="w-2.5 h-2.5" />
-                                      {sources.length === 1 ? "Entregado" : `Entregado ×${sources.length}`}
+                                      {sources.length === 1 ? "Cubierto" : `Cubierto ×${sources.length}`}
                                       {allocated > 0 && <span className="font-mono opacity-80">+{formatUSD(allocated)}</span>}
                                     </span>
                                   </TooltipTrigger>
                                   <TooltipContent side="bottom" className="max-w-[320px] text-xs p-3 space-y-1">
-                                    <div className="font-semibold text-foreground">Entregado / instalado por:</div>
+                                    <div className="font-semibold text-foreground">Cubierto / contemplado por:</div>
                                     <ul className="space-y-0.5">
                                       {sources.map(s => (
                                         <li key={s.transportId} className="flex justify-between gap-3">

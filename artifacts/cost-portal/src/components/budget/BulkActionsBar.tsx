@@ -66,9 +66,9 @@ export function BulkActionsBar(props: BulkActionsProps) {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50"
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-max max-w-[calc(100vw-2rem)]"
           >
-            <div className="flex items-center gap-2 rounded-lg border border-border bg-card shadow-lg px-3 py-2">
+            <div className="flex flex-wrap items-center justify-center gap-2 rounded-lg border border-border bg-card shadow-lg px-3 py-2">
               <span className="text-xs font-semibold text-foreground px-2">
                 {props.count} seleccionado{props.count === 1 ? "" : "s"}
               </span>
