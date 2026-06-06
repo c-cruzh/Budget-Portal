@@ -1,8 +1,8 @@
-import { AlertTriangle, ShieldAlert, Flag, Star, Tag } from "lucide-react";
+import { AlertTriangle, ShieldAlert, Flag, Star, Tag, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-export type FlagKey = "inKind" | "validarCosto" | "contratarAparte" | "accionRequerida" | "niceToHave";
+export type FlagKey = "inKind" | "validarCosto" | "contratarAparte" | "accionRequerida" | "niceToHave" | "costoEnOtroItem";
 
 interface ItemFlags {
   inKind?: boolean;
@@ -10,6 +10,7 @@ interface ItemFlags {
   contratarAparte?: boolean;
   accionRequerida?: boolean;
   niceToHave?: boolean;
+  costoEnOtroItem?: boolean;
 }
 
 const FLAG_DEFS: { key: FlagKey; label: string; Icon: typeof Tag; activeCls: string }[] = [
@@ -18,6 +19,7 @@ const FLAG_DEFS: { key: FlagKey; label: string; Icon: typeof Tag; activeCls: str
   { key: "contratarAparte", label: "Contratar aparte (evitar fee 20%)", Icon: ShieldAlert, activeCls: "bg-amber-500/15 text-amber-600 border-amber-500/30" },
   { key: "accionRequerida", label: "Acción requerida", Icon: Flag, activeCls: "bg-orange-500/15 text-orange-500 border-orange-500/30" },
   { key: "niceToHave", label: "Nice to Have", Icon: Star, activeCls: "bg-purple-500/15 text-purple-500 border-purple-500/30" },
+  { key: "costoEnOtroItem", label: "Costo $0 — ya contemplado en otro item", Icon: Link2, activeCls: "bg-sky-500/15 text-sky-600 border-sky-500/30" },
 ];
 
 export function FlagsChips({

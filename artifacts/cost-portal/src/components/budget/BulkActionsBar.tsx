@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trash2, X, Download, Tag, ShieldAlert, AlertTriangle, MoveRight, ChevronDown, Columns2, SendHorizontal, CheckCircle2, Percent, CalendarDays, Zap, FileText, Copy, ListPlus, Truck } from "lucide-react";
+import { Trash2, X, Download, Tag, ShieldAlert, AlertTriangle, MoveRight, ChevronDown, Columns2, SendHorizontal, CheckCircle2, Percent, CalendarDays, Zap, FileText, Copy, ListPlus, Truck, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -20,7 +20,8 @@ export type BulkFlag =
   | "aplicaFee"
   | "porDias"
   | "accionRequerida"
-  | "soloPresupuestado";
+  | "soloPresupuestado"
+  | "costoEnOtroItem";
 
 export interface BulkActionsProps {
   count: number;
@@ -363,6 +364,7 @@ function FlagPicker({
           { key: "porDias", label: "Por Días", Icon: CalendarDays },
           { key: "accionRequerida", label: "Acción Requerida", Icon: Zap },
           { key: "soloPresupuestado", label: "Solo Presupuestado", Icon: FileText },
+          { key: "costoEnOtroItem", label: "Costo en otro item", Icon: Link2 },
         ] as const).map(({ key, label, Icon }) => (
           <div key={key} className="flex items-center justify-between px-2 py-1 text-xs">
             <span className="flex items-center gap-1.5">

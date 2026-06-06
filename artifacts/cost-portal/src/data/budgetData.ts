@@ -252,6 +252,8 @@ export interface BudgetItem {
   mitigable?: boolean;
   mitigNote?: string;
   niceToHave?: boolean;
+  /** Marks this line as cost $0 because its economic cost is already contemplated in another item. */
+  costoEnOtroItem?: boolean;
   /**
    * Stable reference to exactly ONE catalog room (SpaceEntry.id), across ESEN
    * Día 1 / Día 2 and every Lugar/Sede venue. Source of truth for the assigned

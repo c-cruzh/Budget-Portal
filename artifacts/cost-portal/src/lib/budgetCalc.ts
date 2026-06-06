@@ -328,11 +328,11 @@ export function getItemDataIssues(item: BudgetItem, info: TransportAllocationInf
     });
   }
 
-  if ((Number(item.precioUnitario) || 0) === 0 && !item.inKind) {
+  if ((Number(item.precioUnitario) || 0) === 0 && !item.inKind && !item.costoEnOtroItem) {
     issues.push({
       key: "zerocost",
       label: "Costo en $0",
-      detail: "El precio unitario es $0 y no está marcado como In-Kind. Confirma el costo o márcalo In-Kind.",
+      detail: "El precio unitario es $0 y no está marcado como In-Kind. Confirma el costo, márcalo In-Kind o marca que ya está contemplado en otro item.",
     });
   }
 

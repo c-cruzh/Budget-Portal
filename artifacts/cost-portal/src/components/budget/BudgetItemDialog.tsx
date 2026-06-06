@@ -594,6 +594,10 @@ export function BudgetItemDialog({
               <input type="checkbox" checked={value.soloPresupuestado || false} onChange={e => set("soloPresupuestado", e.target.checked)} className="rounded border-border" />
               SOLO PRESUPUESTADO
             </label>
+            <label className="flex items-center gap-2 text-xs">
+              <input type="checkbox" checked={value.costoEnOtroItem || false} onChange={e => set("costoEnOtroItem", e.target.checked)} className="rounded border-border" />
+              COSTO EN OTRO ITEM
+            </label>
           </div>
         </div>
 

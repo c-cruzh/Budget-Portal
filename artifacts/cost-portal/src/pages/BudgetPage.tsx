@@ -707,7 +707,7 @@ export default function BudgetPage({
     });
   }, [setItems, patchItem]);
 
-  const toggleField = useCallback((id: string, field: "inKind" | "agencyFee" | "validarCosto" | "contratarAparte" | "soloPresupuestado" | "accionRequerida" | "niceToHave") => {
+  const toggleField = useCallback((id: string, field: "inKind" | "agencyFee" | "validarCosto" | "contratarAparte" | "soloPresupuestado" | "accionRequerida" | "niceToHave" | "costoEnOtroItem") => {
     setItems(prev => {
       const next = prev.map(item => {
         if (item.id !== id) return item;
@@ -945,6 +945,7 @@ export default function BudgetPage({
           contratarAparte: editItem.contratarAparte ?? i.contratarAparte ?? false,
           accionRequerida: editItem.accionRequerida ?? i.accionRequerida ?? false,
           niceToHave: editItem.niceToHave ?? i.niceToHave ?? false,
+          costoEnOtroItem: editItem.costoEnOtroItem ?? i.costoEnOtroItem ?? false,
           soloPresupuestado: editItem.soloPresupuestado ?? i.soloPresupuestado ?? false,
           statusCotizacion: editItem.statusCotizacion ?? i.statusCotizacion ?? "",
           isTransport: editItem.isTransport ?? i.isTransport ?? false,
@@ -997,6 +998,7 @@ export default function BudgetPage({
       soloPresupuestado: newItem.soloPresupuestado || false,
       accionRequerida: newItem.accionRequerida || false,
       niceToHave: newItem.niceToHave || false,
+      costoEnOtroItem: newItem.costoEnOtroItem || false,
       statusCotizacion: newItem.statusCotizacion || "",
       isTransport: newItem.isTransport || false,
       transportMode: newItem.transportMode,
@@ -1219,7 +1221,7 @@ export default function BudgetPage({
       "IN-KIND?", "AURORA 360?", "QTY", "UoM", "DIA APLICABLE", "ESPACIO DIA 1", "ESPACIO DIA 2", "CONTRATACION POR DIAS?", "QTY DIAS",
       "PRECIO UNITARIO", "SUBTOTAL", "VIA PRODUCTORA (AURORA 360)?", "FEE INCL. EN COTIZACION?",
       "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "SOLO PRESUPUESTADO?", "IMAGEN DE REFERENCIA", "PROVEEDOR",
-      "REVIEWED BY", "VALIDAR COSTO?", "CONTRATAR APARTE?", "ACCIÓN REQUERIDA?", "NICE TO HAVE?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO", "STATUS COTIZACION"
+      "REVIEWED BY", "VALIDAR COSTO?", "CONTRATAR APARTE?", "ACCIÓN REQUERIDA?", "NICE TO HAVE?", "COSTO EN OTRO ITEM?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO", "STATUS COTIZACION"
     ];
     const rows = filtered.map(i => {
       const redact = redactMode && !isAuroraOwned(i);
@@ -1231,7 +1233,7 @@ export default function BudgetPage({
         i.porDias, i.qtyDias, redact ? "" : i.precioUnitario, redact ? "" : i.subtotal, i.agencyFee ? "SI" : "NO",
         i.aplicaFee, redact ? "" : i.fee, redact ? "" : i.subtotalConFee, redact ? "" : i.iva, redact ? "" : i.total, i.cotizacion, i.soloPresupuestado ? "SI" : "NO", i.documento,
         i.proveedor || "", i.reviewedBy || "", i.validarCosto ? "SI" : "NO", i.contratarAparte ? "SI" : "NO",
-        i.accionRequerida ? "SI" : "NO", i.niceToHave ? "SI" : "NO", i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || "", i.statusCotizacion || "",
+        i.accionRequerida ? "SI" : "NO", i.niceToHave ? "SI" : "NO", i.costoEnOtroItem ? "SI" : "NO", i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || "", i.statusCotizacion || "",
         i.aplicaTurismo ? "SI" : "NO", redact ? "" : (i.turismo || 0), redact ? "" : (i.feeIncluido || 0)
       ];
     });
@@ -2592,6 +2594,7 @@ export default function BudgetPage({
             porDias: "Por Días",
             accionRequerida: "Acción Requerida",
             soloPresupuestado: "Solo Presupuestado",
+            costoEnOtroItem: "Costo en otro item",
           };
           toast({
             title: on ? `${labels[flag]} marcado` : `${labels[flag]} quitado`,
