@@ -52,9 +52,7 @@ export interface BulkActionsProps {
 
 export function BulkActionsBar(props: BulkActionsProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [proveedorDraft, setProveedorDraft] = useState("");
   const [areaDraft, setAreaDraft] = useState("");
-  const [centroDraft, setCentroDraft] = useState("");
   const [cotizacionDraft, setCotizacionDraft] = useState("");
   const [cotizacionLinkDraft, setCotizacionLinkDraft] = useState("");
   const [assignedToDraft, setAssignedToDraft] = useState("");
@@ -85,9 +83,6 @@ export function BulkActionsBar(props: BulkActionsProps) {
                 label="Proveedor"
                 options={props.proveedorOptions}
                 onPick={props.onSetProveedor}
-                allowCustom
-                customDraft={proveedorDraft}
-                setCustomDraft={setProveedorDraft}
               />
 
               <SimplePicker
@@ -104,9 +99,6 @@ export function BulkActionsBar(props: BulkActionsProps) {
                 label="Centro Costo"
                 options={props.centroOptions}
                 onPick={props.onMoveCentro}
-                allowCustom
-                customDraft={centroDraft}
-                setCustomDraft={setCentroDraft}
                 icon={<MoveRight className="w-3 h-3" />}
               />
 

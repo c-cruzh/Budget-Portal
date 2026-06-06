@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, Info,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
-  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus, MapPin, Lock, SendHorizontal, Truck, PackageCheck, PackageX, Copy
+  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus, MapPin, Lock, SendHorizontal, Truck, PackageCheck, PackageX, Copy, Building2
 } from "lucide-react";
 import { CreateTaskFromItemDialog } from "@/components/CreateTaskFromItemDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -21,8 +21,10 @@ import { DataIssueBadges } from "@/components/budget/DataIssueBadges";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useSubEventsApi } from "@/hooks/useSubEventsApi";
 import { useSpacesApi } from "@/hooks/useSpacesApi";
+import { useCatalogsApi } from "@/hooks/useCatalogsApi";
 import { SpaceCell } from "@/components/budget/SpaceCell";
 import { SpacesSheet, type SpaceLoadInfo } from "@/components/budget/SpacesSheet";
+import { CatalogsSheet } from "@/components/budget/CatalogsSheet";
 import { useAuth } from "@/hooks/useAuth";
 import { ComboInput } from "@/components/ComboInput";
 import { BudgetItemDialog } from "@/components/budget/BudgetItemDialog";
@@ -238,6 +240,12 @@ export default function BudgetPage({
   const { items, setItems, loading, error, meta, saveCommentOnly, patchItem, saveFull } = useBudgetApi(seedItems, recalcItem, { apiUrl, syncSeed });
   const { subEvents, setSubEvents } = useSubEventsApi();
   const { spaces, loading: spacesLoading, addSpace, setCapacityById, renameSpaceById, removeSpaceById } = useSpacesApi();
+  const {
+    proveedores: catalogProveedores,
+    centrosCosto: catalogCentros,
+    addProveedor, renameProveedor, removeProveedor,
+    addCentro, renameCentro, removeCentro,
+  } = useCatalogsApi();
   const { permissions, user } = useAuth();
   const canEdit = permissions.canEdit;
   const canComment = permissions.canComment;
@@ -253,6 +261,7 @@ export default function BudgetPage({
   const [filterSubEvents, setFilterSubEvents] = useState<Set<string>>(new Set());
   const [showSubEventsManager, setShowSubEventsManager] = useState(false);
   const [showSpacesSheet, setShowSpacesSheet] = useState(false);
+  const [showCatalogsSheet, setShowCatalogsSheet] = useState(false);
 
   const subEventMap = useMemo(() => {
     const m = new Map<string, SubEvent>();
@@ -428,6 +437,19 @@ export default function BudgetPage({
 
   const allAreas = useMemo(() => Array.from(new Set(items.map(i => i.area).filter(v => v && v.trim()))).sort(), [items]);
   const allCentros = useMemo(() => Array.from(new Set(items.map(i => i.centroCosto).filter(v => v && v.trim()))).sort(), [items]);
+  // Usage counts (keyed by lowercased name) so the Catálogos sheet can warn
+  // before deleting a proveedor / centro de costo that items still reference.
+  const catalogUsage = useMemo(() => {
+    const proveedorCounts: Record<string, number> = {};
+    const centroCounts: Record<string, number> = {};
+    for (const i of items) {
+      const p = (i.proveedor || "").trim().toLowerCase();
+      if (p) proveedorCounts[p] = (proveedorCounts[p] || 0) + 1;
+      const c = (i.centroCosto || "").trim().toLowerCase();
+      if (c) centroCounts[c] = (centroCounts[c] || 0) + 1;
+    }
+    return { proveedorCounts, centroCounts };
+  }, [items]);
   // Zonas from the Espacios catalog (both days, de-duplicated) — used to populate
   // the Area / Zona picker in the item dialogs so it mirrors the venue layout.
   const allZones = useMemo(() => {
@@ -1412,6 +1434,10 @@ export default function BudgetPage({
             <SelectContent>{centros.map(c => <SelectItem key={c} value={c}>{c === "ALL" ? "All Centers" : c}</SelectItem>)}</SelectContent>
           </Select>
           <div className="flex gap-2 ml-auto">
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowCatalogsSheet(true)}>
+              <Building2 className="w-4 h-4" />
+              Catálogos
+            </Button>
             <Button variant="outline" size="sm" className="gap-2" onClick={() => setShowSpacesSheet(true)}>
               {overCapacity.length > 0 ? <AlertTriangle className="w-4 h-4 text-destructive" /> : <MapPin className="w-4 h-4" />}
               Espacios
@@ -1969,7 +1995,11 @@ export default function BudgetPage({
                         </div>
                       </td>
                       <td data-col="centroCosto" className="px-2 py-1.5 align-top">
-                        <EditableCell value={item.centroCosto} onSave={v => updateItem(item.id, "centroCosto", v)} className="text-muted-foreground text-xs" disabled={!canEdit} />
+                        {canEdit ? (
+                          <ComboInput value={item.centroCosto || ""} onChange={v => updateItem(item.id, "centroCosto", v)} options={catalogCentros} allowCreate={false} placeholder="—" className="h-7 text-xs min-w-[110px]" />
+                        ) : (
+                          <span className="text-muted-foreground text-xs">{item.centroCosto}</span>
+                        )}
                       </td>
                       <td data-col="qty" className="px-1 py-1.5 text-center align-top">
                         <EditableCell value={String(item.qty)} onSave={v => updateItem(item.id, "qty", v)} className="text-center font-mono text-xs" type="number" disabled={!canEdit} />
@@ -2367,7 +2397,11 @@ export default function BudgetPage({
                         </Tooltip>
                       </td>
                       <td data-col="proveedor" className="px-2 py-1.5 align-top">
-                        <EditableCell value={item.proveedor || ""} onSave={v => updateItem(item.id, "proveedor", v)} className="text-muted-foreground text-xs" placeholder="proveedor..." disabled={!canEdit} />
+                        {canEdit ? (
+                          <ComboInput value={item.proveedor || ""} onChange={v => updateItem(item.id, "proveedor", v)} options={catalogProveedores} allowCreate={false} placeholder="—" className="h-7 text-xs min-w-[110px]" />
+                        ) : (
+                          <span className="text-muted-foreground text-xs">{item.proveedor}</span>
+                        )}
                       </td>
                       <td data-col="assigned" className="px-2 py-1.5 align-top">
                         {canEdit ? (
@@ -2539,7 +2573,8 @@ export default function BudgetPage({
         onSave={addItem}
         subEvents={subEvents}
         allZones={allZones}
-        allCentros={allCentros}
+        allCentros={catalogCentros}
+        allProveedores={catalogProveedores}
         spaces={spaces}
         portalUsers={portalUsers}
         statusOptions={STATUS_COTIZACION_OPTIONS}
@@ -2556,7 +2591,8 @@ export default function BudgetPage({
         onSave={saveEditItem}
         subEvents={subEvents}
         allZones={allZones}
-        allCentros={allCentros}
+        allCentros={catalogCentros}
+        allProveedores={catalogProveedores}
         spaces={spaces}
         portalUsers={portalUsers}
         statusOptions={STATUS_COTIZACION_OPTIONS}
@@ -2615,9 +2651,9 @@ export default function BudgetPage({
           setSelectedIds(new Set());
         } : undefined}
         statusOptions={STATUS_COTIZACION_OPTIONS.filter(Boolean)}
-        proveedorOptions={proveedores.filter(p => p !== "ALL")}
+        proveedorOptions={catalogProveedores}
         areaOptions={areas.filter(a => a !== "ALL")}
-        centroOptions={Array.from(new Set(items.map(i => i.centroCosto).filter(Boolean))).sort()}
+        centroOptions={catalogCentros}
         cotizacionOptions={Array.from(new Set(items.map(i => i.cotizacion).filter((v): v is string => !!v))).sort()}
         assignedToOptions={Array.from(new Set(items.map(i => i.assignedTo).filter((v): v is string => !!v))).sort()}
         transportOptions={items.filter(i => i.isTransport).map(i => ({ id: i.id, label: i.item || i.descripcion || "(transporte)" }))}
@@ -2643,6 +2679,21 @@ export default function BudgetPage({
         onRename={handleRenameSpace}
         onDelete={handleDeleteSpace}
         onSetCapacity={setCapacityById}
+      />
+
+      <CatalogsSheet
+        open={showCatalogsSheet}
+        onOpenChange={setShowCatalogsSheet}
+        canEdit={canEditTaxonomy}
+        proveedores={catalogProveedores}
+        centrosCosto={catalogCentros}
+        usage={{ proveedorCounts: catalogUsage.proveedorCounts, centroCounts: catalogUsage.centroCounts }}
+        onAddProveedor={addProveedor}
+        onRenameProveedor={renameProveedor}
+        onRemoveProveedor={removeProveedor}
+        onAddCentro={addCentro}
+        onRenameCentro={renameCentro}
+        onRemoveCentro={removeCentro}
       />
 
       <SplitByDayDialog

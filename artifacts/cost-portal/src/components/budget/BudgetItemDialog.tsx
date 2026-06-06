@@ -49,6 +49,7 @@ interface BudgetItemDialogProps {
   subEvents: SubEvent[];
   allZones: string[];
   allCentros: string[];
+  allProveedores: string[];
   spaces: SpacesCatalog;
   portalUsers: PortalUserLite[];
   statusOptions: string[];
@@ -71,6 +72,7 @@ export function BudgetItemDialog({
   subEvents,
   allZones,
   allCentros,
+  allProveedores,
   spaces,
   portalUsers,
   statusOptions,
@@ -285,15 +287,15 @@ export function BudgetItemDialog({
           {/* Centro de costo */}
           <div>
             <FieldLabel>Centro de Costo *</FieldLabel>
-            <ComboInput value={value.centroCosto || ""} onChange={v => set("centroCosto", v)} options={allCentros} placeholder="SELECCIONAR O CREAR..." className={cn(errors.centroCosto && "border-destructive")} />
+            <ComboInput value={value.centroCosto || ""} onChange={v => set("centroCosto", v)} options={allCentros} allowCreate={false} placeholder="SELECCIONAR..." className={cn(errors.centroCosto && "border-destructive")} />
             {errors.centroCosto && <p className="text-[10px] text-destructive mt-1">{errors.centroCosto}</p>}
           </div>
 
           {/* Proveedor */}
           <div className="col-span-2">
             <FieldLabel>Proveedor *</FieldLabel>
-            <Input value={value.proveedor || ""} onChange={e => set("proveedor", e.target.value)} placeholder="EJ. AURORA 360"
-              className={cn(errors.proveedor && "border-destructive focus-visible:ring-destructive")} />
+            <ComboInput value={value.proveedor || ""} onChange={v => set("proveedor", v)} options={allProveedores} allowCreate={false} placeholder="SELECCIONAR..."
+              className={cn(errors.proveedor && "border-destructive")} />
             {errors.proveedor && <p className="text-[10px] text-destructive mt-1">{errors.proveedor}</p>}
           </div>
 

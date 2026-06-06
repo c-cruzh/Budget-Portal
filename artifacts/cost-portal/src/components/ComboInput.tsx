@@ -10,9 +10,11 @@ interface ComboInputProps {
   options: string[];
   placeholder?: string;
   className?: string;
+  /** When false, hides the "Crear" entry and disables Enter-to-create (select-only). Defaults to true. */
+  allowCreate?: boolean;
 }
 
-export function ComboInput({ value, onChange, options, placeholder, className }: ComboInputProps) {
+export function ComboInput({ value, onChange, options, placeholder, className, allowCreate = true }: ComboInputProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -21,7 +23,7 @@ export function ComboInput({ value, onChange, options, placeholder, className }:
     o.toLowerCase().includes(search.toLowerCase())
   );
 
-  const isNew = search.trim() && !options.some(o => o.toLowerCase() === search.trim().toLowerCase());
+  const isNew = allowCreate && search.trim() && !options.some(o => o.toLowerCase() === search.trim().toLowerCase());
 
   useEffect(() => {
     if (open) {
@@ -57,8 +59,17 @@ export function ComboInput({ value, onChange, options, placeholder, className }:
             onKeyDown={e => {
               if (e.key === "Enter") {
                 e.preventDefault();
-                if (search.trim()) {
-                  onChange(search.trim().toUpperCase());
+                const q = search.trim();
+                if (!q) return;
+                if (allowCreate) {
+                  onChange(q.toUpperCase());
+                  setOpen(false);
+                  return;
+                }
+                const exact = options.find(o => o.toLowerCase() === q.toLowerCase())
+                  || (filtered.length === 1 ? filtered[0] : undefined);
+                if (exact) {
+                  onChange(exact);
                   setOpen(false);
                 }
               }

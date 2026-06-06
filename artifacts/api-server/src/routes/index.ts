@@ -13,6 +13,7 @@ import tasksBoardRouter from "./tasks-board";
 import spacesRouter from "./spaces";
 import montajeRouter from "./montaje";
 import volunteersRouter from "./volunteers";
+import catalogsRouter from "./catalogs";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(tasksBoardRouter);
 router.use(spacesRouter);
 router.use(montajeRouter);
 router.use(volunteersRouter);
+router.use(catalogsRouter);
 
 export default router;
