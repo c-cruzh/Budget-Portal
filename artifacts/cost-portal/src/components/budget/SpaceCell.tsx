@@ -15,12 +15,14 @@ interface DayPickerProps {
   optionGroups: SpaceOptionGroup[];
   canEdit: boolean;
   over?: boolean;
+  /** Lugar/Sede label of the assigned room, e.g. "ESEN — Día 1" or "Hotel". */
+  placeLabel?: string;
   onAssign: (day: SpaceDayKey, id: string) => void;
   onAddSpace: (day: SpaceDayKey, name: string) => void;
   showDayPrefix?: boolean;
 }
 
-function DaySpacePicker({ day, dayLabel, value, valueId, optionGroups, canEdit, over, onAssign, onAddSpace, showDayPrefix }: DayPickerProps) {
+function DaySpacePicker({ day, dayLabel, value, valueId, optionGroups, canEdit, over, placeLabel, onAssign, onAddSpace, showDayPrefix }: DayPickerProps) {
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -29,22 +31,36 @@ function DaySpacePicker({ day, dayLabel, value, valueId, optionGroups, canEdit, 
     ? (showDayPrefix ? `${dayLabel}: ${value}` : value)
     : (showDayPrefix ? `${dayLabel}: —` : "Sin asignar");
 
+  // Short Lugar/Sede chip text: first segment before an em/en dash ("ESEN — Día 1" → "ESEN").
+  const place = (placeLabel || "").trim();
+  const shortPlace = place ? (place.split(/—|–/)[0].trim() || place) : "";
+
   const trigger = (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border font-medium max-w-[130px]",
-        over && value
-          ? "bg-destructive/10 text-destructive border-destructive/30"
-          : value
-          ? "bg-primary/10 text-primary border-primary/20"
-          : "bg-muted/40 text-muted-foreground/50 border-border/50"
+    <span className="inline-flex flex-col items-start gap-0.5">
+      <span
+        className={cn(
+          "inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border font-medium max-w-[130px]",
+          over && value
+            ? "bg-destructive/10 text-destructive border-destructive/30"
+            : value
+            ? "bg-primary/10 text-primary border-primary/20"
+            : "bg-muted/40 text-muted-foreground/50 border-border/50"
+        )}
+        title={over && value ? `${value} — supera el aforo` : (value || "Sin asignar")}
+      >
+        {over && value
+          ? <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+          : <MapPin className="w-2.5 h-2.5 shrink-0" />}
+        <span className="truncate">{label}</span>
+      </span>
+      {value && shortPlace && (
+        <span
+          className="text-[9px] leading-none text-muted-foreground/80 max-w-[130px] truncate pl-1.5"
+          title={place}
+        >
+          {shortPlace}
+        </span>
       )}
-      title={over && value ? `${value} — supera el aforo` : (value || "Sin asignar")}
-    >
-      {over && value
-        ? <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
-        : <MapPin className="w-2.5 h-2.5 shrink-0" />}
-      <span className="truncate">{label}</span>
     </span>
   );
 
@@ -146,15 +162,17 @@ interface SpaceCellProps {
   options: SpaceOptionGroup[];
   canEdit: boolean;
   over?: boolean;
+  /** Lugar/Sede label of the assigned room, e.g. "ESEN — Día 1" or "Hotel". */
+  placeLabel?: string;
   onAssign: (day: SpaceDayKey, id: string) => void;
   onAddSpace: (day: SpaceDayKey, name: string) => void;
 }
 
-export function SpaceCell({ day, value, valueId, options, canEdit, over, onAssign, onAddSpace }: SpaceCellProps) {
+export function SpaceCell({ day, value, valueId, options, canEdit, over, placeLabel, onAssign, onAddSpace }: SpaceCellProps) {
   return (
     <DaySpacePicker
       day={day} dayLabel={day === "dia-2" ? "D2" : "D1"} value={value} valueId={valueId} optionGroups={options}
-      canEdit={canEdit} over={over} onAssign={onAssign} onAddSpace={onAddSpace}
+      canEdit={canEdit} over={over} placeLabel={placeLabel} onAssign={onAssign} onAddSpace={onAddSpace}
     />
   );
 }

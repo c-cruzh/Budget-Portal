@@ -362,6 +362,13 @@ export default function BudgetPage({
   // All resolvable rooms across ESEN days + day-independent venues (by stable id).
   const spaceRefs = useMemo(() => allSpaceRefs(spaces), [spaces]);
 
+  // Stable room id → Lugar/Sede label, for showing the place under each item's space.
+  const placeLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of spaceRefs) if (!map.has(r.id)) map.set(r.id, r.placeLabel);
+    return map;
+  }, [spaceRefs]);
+
   // Effective display name set for the filter dropdown: every catalog room name
   // plus any orphan legacy name still carried by an item.
   const allSpaces = useMemo(() => {
@@ -1898,6 +1905,7 @@ export default function BudgetPage({
                               day={spaceDay}
                               value={itemSpaceName(spaces, item)}
                               valueId={spaceId}
+                              placeLabel={spaceId ? placeLabelById.get(spaceId) : undefined}
                               options={spaceOptionGroupsForItem(spaces, itemPhaseId, spaceDay)}
                               canEdit={canEdit}
                               over={!!(spaceId && overSpaceIds.has(spaceId))}
