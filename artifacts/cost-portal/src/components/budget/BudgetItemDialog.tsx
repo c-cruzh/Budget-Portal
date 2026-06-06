@@ -208,6 +208,9 @@ export function BudgetItemDialog({
             {errors.subEventId && <p className="text-[10px] text-destructive mt-1">{errors.subEventId}</p>}
           </div>
 
+          {/* Place fields (Área/Zona, Lugar, Espacio) don't apply to transport lines. */}
+          {!isTransport && (
+          <>
           {/* Area / zona */}
           <div>
             <FieldLabel>Área / Zona *</FieldLabel>
@@ -276,6 +279,8 @@ export function BudgetItemDialog({
               </SelectContent>
             </Select>
           </div>
+          </>
+          )}
 
           {/* Centro de costo */}
           <div>
@@ -507,10 +512,13 @@ export function BudgetItemDialog({
                 checked={isTransport}
                 onChange={e => {
                   const on = e.target.checked;
+                  // Transport lines aren't tied to a place: clear any place fields.
+                  if (on) setLugarFilter(LUGAR_ALL);
                   onChange(p => ({
                     ...p,
                     isTransport: on,
                     transportMode: on ? (p.transportMode === "allocation" ? "allocation" : "association") : p.transportMode,
+                    ...(on ? { area: "", espacioId: "", espacioDia1: "", espacioDia2: "" } : {}),
                   }));
                 }}
                 className="rounded border-border"

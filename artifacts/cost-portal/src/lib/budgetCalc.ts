@@ -272,6 +272,8 @@ const qtyInvalid = (v: unknown) => v === undefined || v === null || Number.isNaN
 export function requiredFieldErrors(item: Partial<BudgetItem>): Record<string, string> {
   const e: Record<string, string> = {};
   for (const r of REQUIRED_TEXT_FIELDS) {
+    // Transport/delivery lines are not tied to a place, so Área/Zona is optional.
+    if (r.field === "area" && item.isTransport) continue;
     if (isBlank(item[r.field])) e[r.field as string] = r.msg;
   }
   if (qtyInvalid(item.qty)) e.qty = "Cantidad inválida.";
@@ -284,6 +286,8 @@ export function requiredFieldErrors(item: Partial<BudgetItem>): Record<string, s
 export function missingRequiredLabels(item: Partial<BudgetItem>): string[] {
   const labels: string[] = [];
   for (const r of REQUIRED_TEXT_FIELDS) {
+    // Transport/delivery lines are not tied to a place, so Área/Zona is optional.
+    if (r.field === "area" && item.isTransport) continue;
     if (isBlank(item[r.field])) labels.push(r.label);
   }
   if (qtyInvalid(item.qty)) labels.push("Cantidad");
