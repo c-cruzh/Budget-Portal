@@ -13,7 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ComboInput } from "@/components/ComboInput";
 import { CostBreakdown } from "@/components/budget/CostBreakdown";
 import { cn, formatUSD } from "@/lib/utils";
-import { Truck, X, Search, Check } from "lucide-react";
+import { Truck, X, Search, Check, PackageX } from "lucide-react";
 import { requiredFieldErrors } from "@/lib/budgetCalc";
 import {
   phaseSpaceDay,
@@ -518,6 +518,21 @@ export function BudgetItemDialog({
               <Truck className="w-3.5 h-3.5 text-sky-500" />
               ES TRANSPORTE / ENTREGA (MONTAJE)
             </label>
+            {!isTransport && (
+              <label className="flex items-center gap-2 text-xs font-semibold mt-2">
+                <input
+                  type="checkbox"
+                  checked={value.transporteNoAplica || false}
+                  onChange={e => set("transporteNoAplica", e.target.checked)}
+                  className="rounded border-border"
+                />
+                <PackageX className="w-3.5 h-3.5 text-sky-500" />
+                TRANSPORTE NO APLICA (N/A)
+                <span className="font-normal text-muted-foreground">
+                  — quita la alerta "Sin transporte" en ítems que no se trasladan (servicios, personal, digitales).
+                </span>
+              </label>
+            )}
             {isTransport && (
               <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border border-sky-500/20 bg-sky-500/5 p-3">
                 <div className="sm:col-span-2">

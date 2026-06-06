@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, Info,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
-  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus, MapPin, Lock, SendHorizontal, Truck, PackageCheck
+  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus, MapPin, Lock, SendHorizontal, Truck, PackageCheck, PackageX
 } from "lucide-react";
 import { CreateTaskFromItemDialog } from "@/components/CreateTaskFromItemDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -933,6 +933,7 @@ export default function BudgetPage({
           isTransport: editItem.isTransport ?? i.isTransport ?? false,
           transportMode: editItem.transportMode ?? i.transportMode,
           coveredItemIds: editItem.coveredItemIds ?? i.coveredItemIds,
+          transporteNoAplica: editItem.transporteNoAplica ?? i.transporteNoAplica ?? false,
         };
         return recalcItem(updated);
       });
@@ -983,6 +984,7 @@ export default function BudgetPage({
       isTransport: newItem.isTransport || false,
       transportMode: newItem.transportMode,
       coveredItemIds: newItem.coveredItemIds,
+      transporteNoAplica: newItem.transporteNoAplica || false,
     };
     setItems(prev => {
       const next = [...prev, recalc(base)];
@@ -1000,7 +1002,7 @@ export default function BudgetPage({
       return nextSet;
     });
     setShowAddModal(false);
-    setNewItem({ evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, ivaMode: "raw", aplicaTurismo: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "", isTransport: false, transportMode: undefined, coveredItemIds: [] });
+    setNewItem({ evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, ivaMode: "raw", aplicaTurismo: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "", isTransport: false, transportMode: undefined, coveredItemIds: [], transporteNoAplica: false });
   }, [newItem, setItems, saveFull]);
 
   const updateComment = useCallback((id: string, field: "notas" | "descripcion", value: string) => {
@@ -1789,6 +1791,21 @@ export default function BudgetPage({
                         </div>
                         <EditableCell value={item.item} onSave={v => updateItem(item.id, "item", v)} className="font-medium text-foreground text-xs" disabled={!canEdit} />
                         <DataIssueBadges issues={issuesByItem.get(item.id) || []} />
+                        {!item.isTransport && item.transporteNoAplica && (
+                          <div className="flex flex-wrap gap-1 mt-0.5">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-muted-foreground/30 bg-muted text-muted-foreground">
+                                  <PackageX className="w-2.5 h-2.5" />
+                                  Transp. N/A
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="bottom" className="max-w-[280px] text-xs">
+                                Marcado como "transporte no aplica": este ítem no se traslada, por eso no muestra la alerta "Sin transporte".
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        )}
                         {(() => {
                           const covers = item.isTransport ? (transportInfo.coveredByTransport.get(item.id) || []) : [];
                           const sources = transportInfo.sourcesForItem.get(item.id) || [];

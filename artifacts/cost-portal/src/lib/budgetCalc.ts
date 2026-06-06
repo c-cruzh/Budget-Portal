@@ -334,7 +334,7 @@ export function getItemDataIssues(item: BudgetItem, info: TransportAllocationInf
 
   const isTransport = !!item.isTransport;
   const sources = info.sourcesForItem.get(item.id) || [];
-  if (!isTransport && sources.length === 0) {
+  if (!isTransport && !item.transporteNoAplica && sources.length === 0) {
     issues.push({
       key: "notransport",
       label: "Sin transporte",

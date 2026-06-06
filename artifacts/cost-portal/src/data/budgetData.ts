@@ -270,6 +270,12 @@ export interface BudgetItem {
   transportMode?: TransportMode;
   /** IDs of the budget items this transport delivers/installs (one transport → many items). */
   coveredItemIds?: string[];
+  /**
+   * Marks this line as one where transport/delivery simply does not apply
+   * (services, staffing, digital/in-kind items that don't get moved). When true,
+   * the "Sin transporte" data-quality alert is suppressed for this item.
+   */
+  transporteNoAplica?: boolean;
 }
 
 export type SpaceDayKey = "dia-1" | "dia-2";
