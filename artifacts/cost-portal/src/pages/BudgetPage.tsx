@@ -978,6 +978,7 @@ export default function BudgetPage({
           isTransport: editItem.isTransport ?? i.isTransport ?? false,
           transportMode: editItem.transportMode ?? i.transportMode,
           coveredItemIds: editItem.coveredItemIds ?? i.coveredItemIds,
+          centrosCosto: editItem.centrosCosto ?? i.centrosCosto,
           transporteNoAplica: editItem.transporteNoAplica ?? i.transporteNoAplica ?? false,
         };
         return recalcItem(updated);
@@ -1030,6 +1031,7 @@ export default function BudgetPage({
       isTransport: newItem.isTransport || false,
       transportMode: newItem.transportMode,
       coveredItemIds: newItem.coveredItemIds,
+      centrosCosto: newItem.centrosCosto,
       transporteNoAplica: newItem.transporteNoAplica || false,
     };
     setItems(prev => {
@@ -1259,6 +1261,7 @@ export default function BudgetPage({
       isTransport: true,
       transportMode: "association",
       coveredItemIds: covered.map(i => i.id),
+      centrosCosto: Array.from(new Set(covered.map(i => (i.centroCosto || "").trim()).filter(Boolean))),
       transporteNoAplica: false,
     });
     setItems(prev => {

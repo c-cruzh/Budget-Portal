@@ -570,6 +570,17 @@ export function BudgetItemDialog({
                     onChange={(ids) => set("coveredItemIds", ids)}
                   />
                 </div>
+                <div className="sm:col-span-2">
+                  <FieldLabel>Centros de costo que cubre</FieldLabel>
+                  <TransportCentrosField
+                    options={allCentros}
+                    selected={value.centrosCosto ?? []}
+                    onChange={(cs) => set("centrosCosto", cs)}
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Un transporte puede entregar ítems de varios centros de costo. Solo organizativo; no cambia los totales.
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -737,6 +748,102 @@ function TransportLinksField({ allItems, currentId, selectedIds, onChange }: Tra
                         {i.total > 0 ? ` · ${formatUSD(i.total)}` : ""}
                       </span>
                     </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
+interface TransportCentrosFieldProps {
+  options: string[];
+  selected: string[];
+  onChange: (centros: string[]) => void;
+}
+
+/** Multi-select of catalog cost centers a transport line serves. */
+function TransportCentrosField({ options, selected, onChange }: TransportCentrosFieldProps) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const base = options.filter(c => !!c && !!c.trim());
+    return (q ? base.filter(c => c.toLowerCase().includes(q)) : base);
+  }, [options, query]);
+
+  const toggle = (c: string) => {
+    if (selectedSet.has(c)) onChange(selected.filter(x => x !== c));
+    else onChange([...selected, c]);
+  };
+
+  return (
+    <div>
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2">
+          {selected.map(c => (
+            <span
+              key={c}
+              className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+            >
+              <span className="truncate max-w-[160px]">{c}</span>
+              <button type="button" onClick={() => toggle(c)} className="hover:text-destructive">
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="outline" size="sm" className="w-full justify-between font-normal">
+            <span className="text-muted-foreground">
+              {selected.length === 0 ? "Seleccionar centros..." : `${selected.length} centro${selected.length === 1 ? "" : "s"} seleccionado${selected.length === 1 ? "" : "s"}`}
+            </span>
+            <Search className="w-3.5 h-3.5 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+          <div className="p-2 border-b border-border">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Buscar centro de costo..."
+                className="pl-7 h-8 text-xs"
+              />
+            </div>
+          </div>
+          <div className="max-h-[260px] overflow-auto p-1">
+            {filtered.length === 0 ? (
+              <div className="text-xs text-muted-foreground px-2 py-3 text-center">Sin resultados</div>
+            ) : (
+              filtered.map(c => {
+                const checked = selectedSet.has(c);
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => toggle(c)}
+                    className={cn(
+                      "w-full flex items-center gap-2 px-2 py-1.5 rounded text-left text-xs hover:bg-muted transition-colors",
+                      checked && "bg-sky-500/10"
+                    )}
+                  >
+                    <span className={cn(
+                      "w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0",
+                      checked ? "bg-sky-500 border-sky-500 text-white" : "border-border"
+                    )}>
+                      {checked && <Check className="w-2.5 h-2.5" />}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-foreground">{c}</span>
                   </button>
                 );
               })

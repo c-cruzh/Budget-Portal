@@ -8,3 +8,4 @@
 - [Spaces catalog structured](spaces-catalog-structured.md) — Espacios tab stores structured entries (zone+aforo) as source of truth; legacy picker arrays derived; reseed when empty OR legacy (no `entries` key); curated non-empty entries preserved. New seed reaches prod only via republish.
 - [Budget seed/backfill persistence](budget-seed-persistence.md) — DB is sole source of truth for legacy budget; never backfill subEventId or overwrite from seed; deriveDia "ambos" fallback must not double porDias cost.
 - [Venue (Lugar/Sede) hierarchy](venue-lugar-hierarchy.md) — Espacios has ESEN day-keyed `entries` (sole Budget source) + additive day-independent `venues[]`; never wire venues into Budget.
+- [Cotización-required exemptions](cotizacion-required-rule.md) — items whose statusCotizacion is a "No Aplica (In-Kind/Voluntario)" value are exempt from the cotización required-field check (no "incompleto" flag).

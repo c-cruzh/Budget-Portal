@@ -262,6 +262,16 @@ const REQUIRED_TEXT_FIELDS: RequiredFieldDef[] = [
   { field: "cotizacion", label: "Cotización", msg: "Indica la cotización (o N/A)." },
 ];
 
+/**
+ * Statuses where a cotización is not expected because there is no purchase to
+ * quote (donated/in-kind or volunteer-provided). Items with these statuses must
+ * NOT require a cotización nor be flagged as "incompletos".
+ */
+export const STATUS_COTIZACION_NO_APLICA = new Set([
+  "Cotización - No Aplica (In-Kind)",
+  "Cotización - No Aplica (Voluntario)",
+]);
+
 const isBlank = (v: unknown) => v === undefined || v === null || String(v).trim() === "";
 const qtyInvalid = (v: unknown) => v === undefined || v === null || Number.isNaN(Number(v)) || Number(v) < 0;
 
@@ -271,9 +281,12 @@ const qtyInvalid = (v: unknown) => v === undefined || v === null || Number.isNaN
  */
 export function requiredFieldErrors(item: Partial<BudgetItem>): Record<string, string> {
   const e: Record<string, string> = {};
+  const cotizacionNA = STATUS_COTIZACION_NO_APLICA.has((item.statusCotizacion || "").trim());
   for (const r of REQUIRED_TEXT_FIELDS) {
     // Transport/delivery lines are not tied to a place, so Área/Zona is optional.
     if (r.field === "area" && item.isTransport) continue;
+    // In-kind / volunteer items have no purchase to quote → cotización optional.
+    if (r.field === "cotizacion" && cotizacionNA) continue;
     if (isBlank(item[r.field])) e[r.field as string] = r.msg;
   }
   if (qtyInvalid(item.qty)) e.qty = "Cantidad inválida.";
@@ -285,9 +298,12 @@ export function requiredFieldErrors(item: Partial<BudgetItem>): Record<string, s
 /** Short labels of the required fields an item is missing (for row tooltips). */
 export function missingRequiredLabels(item: Partial<BudgetItem>): string[] {
   const labels: string[] = [];
+  const cotizacionNA = STATUS_COTIZACION_NO_APLICA.has((item.statusCotizacion || "").trim());
   for (const r of REQUIRED_TEXT_FIELDS) {
     // Transport/delivery lines are not tied to a place, so Área/Zona is optional.
     if (r.field === "area" && item.isTransport) continue;
+    // In-kind / volunteer items have no purchase to quote → cotización optional.
+    if (r.field === "cotizacion" && cotizacionNA) continue;
     if (isBlank(item[r.field])) labels.push(r.label);
   }
   if (qtyInvalid(item.qty)) labels.push("Cantidad");

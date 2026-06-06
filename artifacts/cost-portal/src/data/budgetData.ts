@@ -273,6 +273,12 @@ export interface BudgetItem {
   /** IDs of the budget items this transport delivers/installs (one transport → many items). */
   coveredItemIds?: string[];
   /**
+   * For transport lines: the cost centers this transport serves. A transport can
+   * deliver items across several centros de costo, so it may carry more than the
+   * single primary `centroCosto`. Display/organizational only — does not affect totals.
+   */
+  centrosCosto?: string[];
+  /**
    * Marks this line as one where transport/delivery simply does not apply
    * (services, staffing, digital/in-kind items that don't get moved). When true,
    * the "Sin transporte" data-quality alert is suppressed for this item.
