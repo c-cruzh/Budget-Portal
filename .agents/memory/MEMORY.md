@@ -9,3 +9,4 @@
 - [Budget seed/backfill persistence](budget-seed-persistence.md) — DB is sole source of truth for legacy budget; never backfill subEventId or overwrite from seed; deriveDia "ambos" fallback must not double porDias cost.
 - [Venue (Lugar/Sede) hierarchy](venue-lugar-hierarchy.md) — Espacios has ESEN day-keyed `entries` (sole Budget source) + additive day-independent `venues[]`; never wire venues into Budget.
 - [Cotización-required exemptions](cotizacion-required-rule.md) — items whose statusCotizacion is a "No Aplica (In-Kind/Voluntario)" value are exempt from the cotización required-field check (no "incompleto" flag).
+- [Concurrent budget editing](concurrent-budget-editing.md) — rev counter + atomic POST /batch under advisory lock; PUT optimistic-locked (409) for migration only; ~5s poll refresh; structural mutations must use applyBatch not saveFull.

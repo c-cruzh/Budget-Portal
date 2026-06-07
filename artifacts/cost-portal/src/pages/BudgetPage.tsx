@@ -237,7 +237,18 @@ export default function BudgetPage({
   seedItems = SEED_ITEMS,
   deprecated = false,
 }: BudgetPageProps = {}) {
-  const { items, setItems, loading, error, meta, saveCommentOnly, patchItem, saveFull } = useBudgetApi(seedItems, recalcItem, { apiUrl, syncSeed });
+  const { permissions, user } = useAuth();
+  const { items, setItems, loading, error, meta, saveCommentOnly, patchItem, saveFull, applyBatch } = useBudgetApi(seedItems, recalcItem, {
+    apiUrl,
+    syncSeed,
+    currentUserEmail: user?.email,
+    onRemoteRefresh: (remoteMeta) => {
+      toast({
+        title: "Presupuesto actualizado",
+        description: `Actualizado por ${remoteMeta.lastEditedBy || "otro usuario"}`,
+      });
+    },
+  });
   const { subEvents, setSubEvents } = useSubEventsApi();
   const { spaces, loading: spacesLoading, addSpace, setCapacityById, renameSpaceById, removeSpaceById } = useSpacesApi();
   const {
@@ -246,7 +257,6 @@ export default function BudgetPage({
     addProveedor, renameProveedor, removeProveedor,
     addCentro, renameCentro, removeCentro,
   } = useCatalogsApi();
-  const { permissions, user } = useAuth();
   const canEdit = permissions.canEdit;
   const canComment = permissions.canComment;
   const canEditTaxonomy = (user?.organization || "") === "C2 LABS";
@@ -856,26 +866,24 @@ export default function BudgetPage({
   }, [setItems, patchItem]);
 
   const deleteItem = useCallback((id: string) => {
-    setItems(prev => {
-      const next = prev.filter(i => i.id !== id);
-      saveFull(next);
-      return next;
-    });
-  }, [setItems, saveFull]);
+    setItems(prev => prev.filter(i => i.id !== id));
+    applyBatch({ deletes: [id] });
+  }, [setItems, applyBatch]);
 
   const duplicateItem = useCallback((id: string) => {
     const newId = (typeof crypto !== "undefined" && crypto.randomUUID)
       ? `custom-${crypto.randomUUID()}`
       : `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const src = items.find(i => i.id === id);
+    if (!src) return;
+    const copy = recalc({ ...src, id: newId });
     setItems(prev => {
       const idx = prev.findIndex(i => i.id === id);
       if (idx === -1) return prev;
-      const copy = recalc({ ...prev[idx], id: newId });
-      const next = [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)];
-      saveFull(next);
-      return next;
+      return [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)];
     });
-  }, [setItems, saveFull]);
+    applyBatch({ adds: [copy] });
+  }, [items, recalc, setItems, applyBatch]);
 
   const sendToFinal = useCallback(async (itemsToSend: BudgetItem[]) => {
     if (itemsToSend.length === 0) return;
@@ -885,17 +893,13 @@ export default function BudgetPage({
       ? crypto.randomUUID()
       : `item-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     try {
-      const res = await fetch("/api/budget-items-final", { credentials: "include" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const existing: BudgetItem[] = Array.isArray(data.items) ? data.items : [];
       const cloned = itemsToSend.map(it => ({ ...it, id: genId() }));
-      const next = [...existing, ...cloned];
-      const saveRes = await fetch("/api/budget-items-final", {
-        method: "PUT",
+      // Atomic granular add — never clobbers concurrent edits on the Final budget.
+      const saveRes = await fetch("/api/budget-items-final/batch", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ items: next }),
+        body: JSON.stringify({ adds: cloned }),
       });
       if (!saveRes.ok) {
         const errData = await saveRes.json().catch(() => ({}));
@@ -937,6 +941,7 @@ export default function BudgetPage({
 
   const saveEditItem = useCallback(() => {
     if (!editItem.id) return;
+    let updatedItem: BudgetItem | null = null;
     setItems(prev => {
       const next = prev.map(i => {
         if (i.id !== editItem.id) return i;
@@ -981,13 +986,14 @@ export default function BudgetPage({
           centrosCosto: editItem.centrosCosto ?? i.centrosCosto,
           transporteNoAplica: editItem.transporteNoAplica ?? i.transporteNoAplica ?? false,
         };
-        return recalcItem(updated);
+        updatedItem = recalcItem(updated);
+        return updatedItem;
       });
-      saveFull(next);
       return next;
     });
+    if (updatedItem) applyBatch({ sets: [updatedItem] });
     setShowEditModal(false);
-  }, [editItem, setItems, saveFull]);
+  }, [editItem, setItems, applyBatch]);
 
   const addItem = useCallback(() => {
     const id = `custom-${Date.now()}`;
@@ -1034,11 +1040,9 @@ export default function BudgetPage({
       centrosCosto: newItem.centrosCosto,
       transporteNoAplica: newItem.transporteNoAplica || false,
     };
-    setItems(prev => {
-      const next = [...prev, recalc(base)];
-      saveFull(next);
-      return next;
-    });
+    const created = recalc(base);
+    setItems(prev => [...prev, created]);
+    applyBatch({ adds: [created] });
     // Auto-expand the group the new item lands in so it's immediately visible
     // (groups are collapsed by default; important when starting from an empty table).
     const seId = derivePhase(base);
@@ -1051,7 +1055,7 @@ export default function BudgetPage({
     });
     setShowAddModal(false);
     setNewItem({ evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, ivaMode: "raw", aplicaTurismo: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "", isTransport: false, transportMode: undefined, coveredItemIds: [], transporteNoAplica: false });
-  }, [newItem, setItems, saveFull]);
+  }, [newItem, recalc, setItems, applyBatch]);
 
   const updateComment = useCallback((id: string, field: "notas" | "descripcion", value: string) => {
     setItems(prev => prev.map(item => {
@@ -1065,18 +1069,15 @@ export default function BudgetPage({
   // empty id to unassign. Never touches monetary fields.
   const assignSpace = useCallback((itemId: string, spaceId: string) => {
     const id = (spaceId || "").trim();
-    setItems(prev => {
-      let changed = false;
-      const next = prev.map(it => {
-        if (it.id !== itemId) return it;
-        if ((it.espacioId || "") === id && !(it.espacioDia1 || "") && !(it.espacioDia2 || "")) return it;
-        changed = true;
-        return { ...it, espacioId: id, espacioDia1: "", espacioDia2: "" };
-      });
-      if (changed) saveFull(next);
-      return next;
-    });
-  }, [setItems, saveFull]);
+    let changedItem: BudgetItem | null = null;
+    setItems(prev => prev.map(it => {
+      if (it.id !== itemId) return it;
+      if ((it.espacioId || "") === id && !(it.espacioDia1 || "") && !(it.espacioDia2 || "")) return it;
+      changedItem = { ...it, espacioId: id, espacioDia1: "", espacioDia2: "" };
+      return changedItem;
+    }));
+    if (changedItem) applyBatch({ sets: [changedItem] });
+  }, [setItems, applyBatch]);
 
   const handleRenameSpace = useCallback((id: string, newName: string) => {
     // Catalog rename only — items reference the room by stable id, so no item edits.
@@ -1085,19 +1086,17 @@ export default function BudgetPage({
 
   const handleDeleteSpace = useCallback((id: string) => {
     removeSpaceById(id);
-    setItems(prev => {
-      let changed = false;
-      const next = prev.map(it => {
-        if ((it.espacioId || "").trim() === id) {
-          changed = true;
-          return { ...it, espacioId: "" };
-        }
-        return it;
-      });
-      if (changed) saveFull(next);
-      return next;
-    });
-  }, [removeSpaceById, setItems, saveFull]);
+    const changedItems: BudgetItem[] = [];
+    setItems(prev => prev.map(it => {
+      if ((it.espacioId || "").trim() === id) {
+        const updated = { ...it, espacioId: "" };
+        changedItems.push(updated);
+        return updated;
+      }
+      return it;
+    }));
+    if (changedItems.length) applyBatch({ sets: changedItems });
+  }, [removeSpaceById, setItems, applyBatch]);
 
   // One-shot migration: collapse legacy name-based space assignments to stable
   // `espacioId` references once both items and the spaces catalog have loaded.
@@ -1172,40 +1171,46 @@ export default function BudgetPage({
   }, []);
 
   const bulkUpdate = useCallback((mutator: (item: BudgetItem) => BudgetItem) => {
-    setItems(prev => {
-      const next = prev.map(it => selectedIds.has(it.id) ? recalcItem(mutator(it)) : it);
-      saveFull(next);
-      return next;
-    });
-  }, [setItems, saveFull, selectedIds]);
+    const changedItems: BudgetItem[] = [];
+    setItems(prev => prev.map(it => {
+      if (!selectedIds.has(it.id)) return it;
+      const updated = recalcItem(mutator(it));
+      changedItems.push(updated);
+      return updated;
+    }));
+    if (changedItems.length) applyBatch({ sets: changedItems });
+  }, [setItems, applyBatch, selectedIds]);
 
   const bulkDelete = useCallback(() => {
-    setItems(prev => {
-      const next = prev.filter(i => !selectedIds.has(i.id));
-      saveFull(next);
-      return next;
-    });
+    const ids = Array.from(selectedIds);
+    setItems(prev => prev.filter(i => !selectedIds.has(i.id)));
+    if (ids.length) applyBatch({ deletes: ids });
     setSelectedIds(new Set());
-    toast({ title: "Items borrados", description: `${selectedIds.size} items eliminados` });
-  }, [setItems, saveFull, selectedIds]);
+    toast({ title: "Items borrados", description: `${ids.length} items eliminados` });
+  }, [setItems, applyBatch, selectedIds]);
 
   const bulkDuplicate = useCallback(() => {
     const genId = () => (typeof crypto !== "undefined" && crypto.randomUUID)
       ? `custom-${crypto.randomUUID()}`
       : `custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const count = selectedIds.size;
+    const copies: BudgetItem[] = [];
     setItems(prev => {
       const next: BudgetItem[] = [];
       for (const it of prev) {
         next.push(it);
-        if (selectedIds.has(it.id)) next.push(recalc({ ...it, id: genId() }));
+        if (selectedIds.has(it.id)) {
+          const copy = recalc({ ...it, id: genId() });
+          copies.push(copy);
+          next.push(copy);
+        }
       }
-      saveFull(next);
       return next;
     });
+    if (copies.length) applyBatch({ adds: copies });
     setSelectedIds(new Set());
     toast({ title: "Items duplicados", description: `${count} item${count === 1 ? "" : "s"} duplicado${count === 1 ? "" : "s"}` });
-  }, [setItems, saveFull, selectedIds]);
+  }, [setItems, recalc, applyBatch, selectedIds]);
 
   const bulkCreateTasks = useCallback(() => {
     const links = items
@@ -1223,16 +1228,16 @@ export default function BudgetPage({
     const existing = (Array.isArray(transport.coveredItemIds) ? transport.coveredItemIds : []).filter(id => id !== transportId);
     const merged = Array.from(new Set([...existing, ...ids]));
     const added = merged.length - existing.length;
-    setItems(prev => {
-      const next = prev.map(it =>
-        it.id === transportId ? recalcItem({ ...it, coveredItemIds: merged }) : it
-      );
-      saveFull(next);
-      return next;
-    });
+    let updatedTransport: BudgetItem | null = null;
+    setItems(prev => prev.map(it => {
+      if (it.id !== transportId) return it;
+      updatedTransport = recalcItem({ ...it, coveredItemIds: merged });
+      return updatedTransport;
+    }));
+    if (updatedTransport) applyBatch({ sets: [updatedTransport] });
     setSelectedIds(new Set());
     toast({ title: "Items vinculados a transporte", description: `${added} item${added === 1 ? "" : "s"} → ${transport.item || "transporte"}` });
-  }, [selectedIds, setItems, saveFull, items]);
+  }, [selectedIds, setItems, applyBatch, items]);
 
   const bulkCreateTransport = useCallback(() => {
     const covered = items.filter(i => selectedIds.has(i.id) && !i.isTransport);
@@ -1280,18 +1285,15 @@ export default function BudgetPage({
       centrosCosto: Array.from(new Set(covered.map(i => (i.centroCosto || "").trim()).filter(Boolean))),
       transporteNoAplica: false,
     });
-    setItems(prev => {
-      const next = [...prev, newTransport];
-      saveFull(next);
-      return next;
-    });
+    setItems(prev => [...prev, newTransport]);
+    applyBatch({ adds: [newTransport] });
     const groupKey = `${derivePhase(newTransport)}__${newTransport.area}__${newTransport.centroCosto || "(Sin centro)"}`;
     setExpandedAreas(prev => new Set(prev).add(groupKey));
     setSelectedIds(new Set());
     // Open the new transport so the user can name it and set its cost right away.
     openEditModal(newTransport);
     toast({ title: "Transporte creado", description: `Cubre ${covered.length} item${covered.length === 1 ? "" : "s"}. Ponle nombre y costo.` });
-  }, [items, selectedIds, recalc, setItems, saveFull, openEditModal]);
+  }, [items, selectedIds, recalc, setItems, applyBatch, openEditModal]);
 
   const bulkExportCsv = useCallback(() => {
     const rows = items.filter(i => selectedIds.has(i.id));
@@ -2851,11 +2853,8 @@ export default function BudgetPage({
         onApprove={(newItems) => {
           if (!splitItem) return;
           const originalId = splitItem.id;
-          setItems(prev => {
-            const next = prev.filter(i => i.id !== originalId).concat(newItems);
-            saveFull(next);
-            return next;
-          });
+          setItems(prev => prev.filter(i => i.id !== originalId).concat(newItems));
+          applyBatch({ deletes: [originalId], adds: newItems });
           setSplitItem(null);
           toast({ title: "Item dividido en 2 filas por día" });
         }}
@@ -2875,8 +2874,11 @@ export default function BudgetPage({
               if (repl) next.push(...repl);
               else next.push(it);
             }
-            saveFull(next);
             return next;
+          });
+          applyBatch({
+            deletes: replacements.map(r => r.originalId),
+            adds: replacements.flatMap(r => r.newItems),
           });
           setBulkSplitOpen(false);
           setSelectedIds(new Set());

@@ -3,12 +3,22 @@ import type { BudgetItem } from "@/data/budgetData";
 
 const DEFAULT_API_URL = "/api/budget-items";
 const SEED_VERSION = "2026-04-10T07:30:00Z";
+const POLL_INTERVAL_MS = 5000;
 
 export interface BudgetMeta {
   lastEditedBy: string;
   lastEditedByEmail: string;
   lastEditedByOrg: string;
   lastEditedAt: string;
+  /** Monotonic revision counter from the server. */
+  rev?: number;
+}
+
+/** Granular structural operations applied atomically on the server. */
+export interface BudgetBatch {
+  adds?: BudgetItem[];
+  deletes?: string[];
+  sets?: BudgetItem[];
 }
 
 export interface BudgetApiOptions {
@@ -19,6 +29,13 @@ export interface BudgetApiOptions {
    * or outdated. The "Final" budget starts empty, so it disables this.
    */
   syncSeed?: boolean;
+  /** Current user's email — used to suppress "updated by" notices for own edits. */
+  currentUserEmail?: string;
+  /**
+   * Called when another user's change is detected and the local items have
+   * been refreshed from the server. Lets the page show a discreet notice.
+   */
+  onRemoteRefresh?: (meta: BudgetMeta) => void;
 }
 
 export function useBudgetApi(
@@ -36,9 +53,13 @@ export function useBudgetApi(
   saveCommentOnly: (items: BudgetItem[]) => void;
   patchItem: (id: string, field: string, value: any, commentOnly?: boolean) => void;
   saveFull: (items: BudgetItem[]) => void;
+  applyBatch: (batch: BudgetBatch) => void;
 } {
   const apiUrl = options?.apiUrl ?? DEFAULT_API_URL;
   const syncSeed = options?.syncSeed ?? true;
+  const currentUserEmail = options?.currentUserEmail ?? "";
+  const onRemoteRefreshRef = useRef(options?.onRemoteRefresh);
+  onRemoteRefreshRef.current = options?.onRemoteRefresh;
 
   const [items, setItemsState] = useState<BudgetItem[]>(fallbackItems);
   const [loading, setLoading] = useState(true);
@@ -47,8 +68,22 @@ export function useBudgetApi(
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<BudgetMeta | null>(null);
   const initialLoadDone = useRef(false);
-  const pendingPatches = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  // Pending debounced field patches: key `${id}:${field}` -> timer + value, so
+  // a live refresh can re-apply not-yet-flushed local edits on top of server data.
+  const pendingPatches = useRef<Map<string, { timer: ReturnType<typeof setTimeout>; id: string; field: string; value: any }>>(new Map());
   const savingCount = useRef(0);
+  // Highest revision we know the server is at because of our own writes. Polling
+  // compares the server's rev against this to detect other users' changes.
+  const revRef = useRef<number>(0);
+  // Count of in-flight structural writes; skip live refresh while we are mid-write
+  // so a poll doesn't transiently revert our optimistic update.
+  const inFlightWrites = useRef(0);
+
+  function recordRev(m: BudgetMeta | null | undefined) {
+    if (m && typeof m.rev === "number" && m.rev > revRef.current) {
+      revRef.current = m.rev;
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -58,7 +93,7 @@ export function useBudgetApi(
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (!cancelled) {
-          if (data.meta) setMeta(data.meta);
+          if (data.meta) { setMeta(data.meta); recordRev(data.meta); }
           const hasServerItems = data.items && Array.isArray(data.items) && data.items.length > 0;
 
           // When seed sync is disabled (e.g. the "Final" budget), never pull
@@ -115,22 +150,95 @@ export function useBudgetApi(
     return () => { cancelled = true; };
   }, []);
 
+  // Re-apply not-yet-flushed local field patches on top of a freshly fetched
+  // server array, so a live refresh never drops an edit in progress.
+  function mergePendingPatches(serverItems: BudgetItem[]): BudgetItem[] {
+    if (pendingPatches.current.size === 0) return serverItems;
+    const byId = new Map<string, { field: string; value: any }[]>();
+    for (const { id, field, value } of pendingPatches.current.values()) {
+      const arr = byId.get(id) ?? [];
+      arr.push({ field, value });
+      byId.set(id, arr);
+    }
+    return serverItems.map((it) => {
+      const patches = byId.get(it.id);
+      if (!patches) return it;
+      let merged: any = { ...it };
+      for (const { field, value } of patches) merged[field] = value;
+      return recalcFn ? recalcFn(merged) : merged;
+    });
+  }
+
+  // Pull the latest items from the server and replace local state (merging any
+  // pending local patches). Used by live-refresh polling and on conflict.
+  async function refreshFromServer(notifyRemote: boolean) {
+    const res = await fetch(apiUrl, { credentials: "include" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.meta) { setMeta(data.meta); recordRev(data.meta); }
+    const serverItems: BudgetItem[] = Array.isArray(data.items) ? data.items : [];
+    const recalced = recalcFn ? serverItems.map(recalcFn) : serverItems;
+    setItemsState(mergePendingPatches(recalced));
+    if (
+      notifyRemote &&
+      data.meta &&
+      data.meta.lastEditedByEmail &&
+      data.meta.lastEditedByEmail !== currentUserEmail
+    ) {
+      onRemoteRefreshRef.current?.(data.meta);
+    }
+  }
+
+  // Live-refresh polling: ask the server for its current revision; if it has
+  // advanced past what our own writes produced, another editor changed the
+  // budget — reload and (when it's someone else) surface a discreet notice.
+  useEffect(() => {
+    const tick = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      if (!initialLoadDone.current) return;
+      if (inFlightWrites.current > 0) return;
+      try {
+        const res = await fetch(`${apiUrl}/rev`, { credentials: "include" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const serverRev = typeof data.rev === "number" ? data.rev : 0;
+        if (serverRev > revRef.current) {
+          await refreshFromServer(true);
+        }
+      } catch {
+        // ignore transient polling errors
+      }
+    };
+    const interval = setInterval(tick, POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [apiUrl, currentUserEmail]);
+
   async function saveFullToServer(data: BudgetItem[], commentOnly = false) {
     try {
       savingCount.current++;
+      inFlightWrites.current++;
       setSaving(true);
       const res = await fetch(apiUrl, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ items: data, commentOnly }),
+        body: JSON.stringify({ items: data, commentOnly, baseRev: revRef.current }),
       });
+      if (res.status === 409) {
+        // Someone else advanced the document — reload the latest instead of
+        // overwriting, and notify the user.
+        const errData = await res.json().catch(() => ({}));
+        if (errData.meta) { setMeta(errData.meta); recordRev(errData.meta); }
+        await refreshFromServer(true).catch(() => {});
+        setError(null);
+        return;
+      }
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || `HTTP ${res.status}`);
       }
       const result = await res.json();
-      if (result.meta) setMeta(result.meta);
+      if (result.meta) { setMeta(result.meta); recordRev(result.meta); }
       setLastSaved(new Date());
       setError(null);
     } catch (err: any) {
@@ -138,6 +246,39 @@ export function useBudgetApi(
       setError(err.message || "Failed to save");
     } finally {
       savingCount.current--;
+      inFlightWrites.current = Math.max(0, inFlightWrites.current - 1);
+      if (savingCount.current <= 0) {
+        savingCount.current = 0;
+        setSaving(false);
+      }
+    }
+  }
+
+  async function applyBatchToServer(batch: BudgetBatch) {
+    try {
+      savingCount.current++;
+      inFlightWrites.current++;
+      setSaving(true);
+      const res = await fetch(`${apiUrl}/batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(batch),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP ${res.status}`);
+      }
+      const result = await res.json();
+      if (result.meta) { setMeta(result.meta); recordRev(result.meta); }
+      setLastSaved(new Date());
+      setError(null);
+    } catch (err: any) {
+      console.error("Failed to apply budget batch:", err);
+      setError(err.message || "Failed to save");
+    } finally {
+      savingCount.current--;
+      inFlightWrites.current = Math.max(0, inFlightWrites.current - 1);
       if (savingCount.current <= 0) {
         savingCount.current = 0;
         setSaving(false);
@@ -160,6 +301,7 @@ export function useBudgetApi(
         throw new Error(errData.error || `HTTP ${res.status}`);
       }
       const result = await res.json();
+      if (result.meta) recordRev(result.meta);
       const now = Date.now();
       if (now - lastSavedRef.current > 5000) {
         lastSavedRef.current = now;
@@ -179,12 +321,12 @@ export function useBudgetApi(
     ));
     const key = `${id}:${field}`;
     const existing = pendingPatches.current.get(key);
-    if (existing) clearTimeout(existing);
+    if (existing) clearTimeout(existing.timer);
     const timer = setTimeout(() => {
       pendingPatches.current.delete(key);
       patchFieldOnServer(id, field, value, commentOnly);
     }, 0);
-    pendingPatches.current.set(key, timer);
+    pendingPatches.current.set(key, { timer, id, field, value });
   }, []);
 
   const setItems = useCallback(
@@ -203,9 +345,19 @@ export function useBudgetApi(
     }
   }, []);
 
+  const applyBatch = useCallback((batch: BudgetBatch) => {
+    if (!initialLoadDone.current) return;
+    const hasOps =
+      (batch.adds && batch.adds.length) ||
+      (batch.deletes && batch.deletes.length) ||
+      (batch.sets && batch.sets.length);
+    if (!hasOps) return;
+    applyBatchToServer(batch);
+  }, []);
+
   const saveCommentOnly = useCallback((data: BudgetItem[]) => {
     setItemsState(data);
   }, []);
 
-  return { items, setItems, loading, saving, lastSaved, error, meta, saveCommentOnly, patchItem, saveFull };
+  return { items, setItems, loading, saving, lastSaved, error, meta, saveCommentOnly, patchItem, saveFull, applyBatch };
 }
