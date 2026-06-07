@@ -1155,6 +1155,22 @@ export default function BudgetPage({
     });
   }, [filtered]);
 
+  // Select / deselect every item of a section (sub-evento + área + centro de
+  // costo). `ids` already includes the nested children of multi-day parent rows
+  // because grouped.items is the flattened list of section items.
+  const toggleSection = useCallback((ids: string[]) => {
+    setSelectedIds(prev => {
+      const allSelected = ids.length > 0 && ids.every(id => prev.has(id));
+      const next = new Set(prev);
+      if (allSelected) {
+        for (const id of ids) next.delete(id);
+      } else {
+        for (const id of ids) next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
   const bulkUpdate = useCallback((mutator: (item: BudgetItem) => BudgetItem) => {
     setItems(prev => {
       const next = prev.map(it => selectedIds.has(it.id) ? recalcItem(mutator(it)) : it);
@@ -1878,6 +1894,10 @@ export default function BudgetPage({
                 const isExpanded = expandedAreas.has(key);
                 const groupTotal = group.items.reduce((s, i) => s + i.total, 0);
                 const hasInKind = group.items.some(i => i.inKind);
+                const sectionIds = group.items.map(i => i.id);
+                const selectedCount = sectionIds.reduce((n, id) => n + (selectedIds.has(id) ? 1 : 0), 0);
+                const sectionChecked: boolean | "indeterminate" =
+                  selectedCount === 0 ? false : selectedCount === sectionIds.length ? true : "indeterminate";
 
                 return [
                   <tr
@@ -1886,12 +1906,21 @@ export default function BudgetPage({
                     onClick={() => toggleArea(key)}
                   >
                     <td className="sticky-col-0 px-2 py-2 bg-muted/30" colSpan={1}>
-                      <motion.div animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.15 }} className="w-3.5 h-3.5 text-muted-foreground">
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </motion.div>
+                      {canEdit && (
+                        <span onClick={(e) => e.stopPropagation()} className="inline-flex">
+                          <Checkbox
+                            checked={sectionChecked}
+                            onCheckedChange={() => toggleSection(sectionIds)}
+                            aria-label="Seleccionar sección"
+                          />
+                        </span>
+                      )}
                     </td>
                     <td className="sticky-col-1 px-2 py-2 bg-muted/30" colSpan={2}>
                       <div className="flex items-center gap-2 flex-wrap">
+                        <motion.div animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.15 }} className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0">
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </motion.div>
                         <span
                           className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-white"
                           style={{ backgroundColor: subEventColor(group.subEventId) }}
