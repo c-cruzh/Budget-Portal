@@ -7,6 +7,7 @@
     "hello": "tsx ./src/hello.ts",
     "seed:main-event-agenda": "tsx src/seed-main-event-agenda.ts",
     "seed:agenda-prod": "tsx src/seed-agenda-prod.ts",
+    "test:budget-concurrency": "tsx src/test-budget-concurrency.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
