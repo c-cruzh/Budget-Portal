@@ -34,8 +34,10 @@ export interface BudgetApiOptions {
   /**
    * Called when another user's change is detected and the local items have
    * been refreshed from the server. Lets the page show a discreet notice.
+   * `changedIds` lists the item ids whose values changed (or were added) in
+   * this refresh, so the page can briefly highlight those specific rows.
    */
-  onRemoteRefresh?: (meta: BudgetMeta) => void;
+  onRemoteRefresh?: (meta: BudgetMeta, changedIds: string[]) => void;
 }
 
 export function useBudgetApi(
@@ -62,6 +64,9 @@ export function useBudgetApi(
   onRemoteRefreshRef.current = options?.onRemoteRefresh;
 
   const [items, setItemsState] = useState<BudgetItem[]>(fallbackItems);
+  // Always-current snapshot of items, used to diff against a freshly fetched
+  // server array without depending on the async-scheduled state value.
+  const itemsRef = useRef<BudgetItem[]>(fallbackItems);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -83,6 +88,27 @@ export function useBudgetApi(
     if (m && typeof m.rev === "number" && m.rev > revRef.current) {
       revRef.current = m.rev;
     }
+  }
+
+  // Keep itemsRef in lockstep with React state so diffs always see the latest.
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  // Ids whose serialized value changed (or that are newly present) between the
+  // previous local items and a freshly fetched server array.
+  function diffChangedIds(oldItems: BudgetItem[], newItems: BudgetItem[]): string[] {
+    const oldById = new Map(oldItems.map((it) => [it.id, it]));
+    const changed: string[] = [];
+    for (const it of newItems) {
+      const prev = oldById.get(it.id);
+      if (!prev) {
+        changed.push(it.id);
+        continue;
+      }
+      if (JSON.stringify(prev) !== JSON.stringify(it)) changed.push(it.id);
+    }
+    return changed;
   }
 
   useEffect(() => {
@@ -178,14 +204,17 @@ export function useBudgetApi(
     if (data.meta) { setMeta(data.meta); recordRev(data.meta); }
     const serverItems: BudgetItem[] = Array.isArray(data.items) ? data.items : [];
     const recalced = recalcFn ? serverItems.map(recalcFn) : serverItems;
-    setItemsState(mergePendingPatches(recalced));
+    const merged = mergePendingPatches(recalced);
+    const changedIds = diffChangedIds(itemsRef.current, merged);
+    itemsRef.current = merged;
+    setItemsState(merged);
     if (
       notifyRemote &&
       data.meta &&
       data.meta.lastEditedByEmail &&
       data.meta.lastEditedByEmail !== currentUserEmail
     ) {
-      onRemoteRefreshRef.current?.(data.meta);
+      onRemoteRefreshRef.current?.(data.meta, changedIds);
     }
   }
 

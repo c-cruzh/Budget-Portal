@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, Info,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
-  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus, MapPin, Lock, SendHorizontal, Truck, PackageCheck, PackageX, Copy, Building2
+  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus, MapPin, Lock, SendHorizontal, Truck, PackageCheck, PackageX, Copy, Building2, RefreshCw
 } from "lucide-react";
 import { CreateTaskFromItemDialog } from "@/components/CreateTaskFromItemDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -34,6 +34,9 @@ import { SplitByDayDialog } from "@/components/SplitByDayDialog";
 import { BulkSplitByDayDialog } from "@/components/BulkSplitByDayDialog";
 import { toast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+// How long a row stays highlighted after another user's change arrives.
+const REMOTE_EDIT_HIGHLIGHT_MS = 6000;
 
 interface PortalUser {
   id: number;
@@ -238,15 +241,47 @@ export default function BudgetPage({
   deprecated = false,
 }: BudgetPageProps = {}) {
   const { permissions, user } = useAuth();
+  // Transient per-row awareness: id -> name of the editor whose remote change
+  // just arrived via live refresh. Cleared automatically after a few seconds.
+  const [remoteEdits, setRemoteEdits] = useState<Map<string, string>>(new Map());
+  const remoteEditTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  useEffect(() => {
+    const timers = remoteEditTimers.current;
+    return () => {
+      timers.forEach((t) => clearTimeout(t));
+      timers.clear();
+    };
+  }, []);
   const { items, setItems, loading, error, meta, saveCommentOnly, patchItem, saveFull, applyBatch } = useBudgetApi(seedItems, recalcItem, {
     apiUrl,
     syncSeed,
     currentUserEmail: user?.email,
-    onRemoteRefresh: (remoteMeta) => {
+    onRemoteRefresh: (remoteMeta, changedIds) => {
       toast({
         title: "Presupuesto actualizado",
         description: `Actualizado por ${remoteMeta.lastEditedBy || "otro usuario"}`,
       });
+      if (changedIds && changedIds.length) {
+        const by = remoteMeta.lastEditedBy || "otro usuario";
+        setRemoteEdits((prev) => {
+          const next = new Map(prev);
+          for (const id of changedIds) next.set(id, by);
+          return next;
+        });
+        for (const id of changedIds) {
+          const existing = remoteEditTimers.current.get(id);
+          if (existing) clearTimeout(existing);
+          const t = setTimeout(() => {
+            setRemoteEdits((prev) => {
+              const n = new Map(prev);
+              n.delete(id);
+              return n;
+            });
+            remoteEditTimers.current.delete(id);
+          }, REMOTE_EDIT_HIGHLIGHT_MS);
+          remoteEditTimers.current.set(id, t);
+        }
+      }
     },
   });
   const { subEvents, setSubEvents } = useSubEventsApi();
@@ -1947,12 +1982,14 @@ export default function BudgetPage({
                   ...(isExpanded ? (renderRowsByGroup.get(key) ?? []).flatMap(__row => {
                     const renderItemTr = (item: BudgetItem) => {
                     const itemPhaseId = derivePhase(item);
+                    const remoteEditor = remoteEdits.get(item.id);
                     return (
                     <tr
                       key={item.id}
                       className={cn(
                         "border-b border-border/50 transition-colors text-xs",
-                        item.inKind ? "bg-amber-500/5" : "hover:bg-muted/20"
+                        item.inKind ? "bg-amber-500/5" : "hover:bg-muted/20",
+                        remoteEditor && "remote-edited-row"
                       )}
                     >
                       <td className={cn("sticky-col-0 px-2 py-1.5 align-top text-center", item.inKind ? "row-inkind-bg" : "bg-background")}>
@@ -2037,6 +2074,12 @@ export default function BudgetPage({
                           )}
                         </div>
                         <EditableCell value={item.item} onSave={v => updateItem(item.id, "item", v)} className="font-medium text-foreground text-xs" disabled={!canEdit} />
+                        {remoteEditor && (
+                          <span className="mt-0.5 inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-blue-500/40 bg-blue-500/15 text-blue-600 dark:text-blue-300">
+                            <RefreshCw className="w-2.5 h-2.5" />
+                            Editado por {remoteEditor}
+                          </span>
+                        )}
                         <DataIssueBadges issues={issuesByItem.get(item.id) || []} />
                         {!item.isTransport && item.transporteNoAplica && (
                           <div className="flex flex-wrap gap-1 mt-0.5">

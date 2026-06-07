@@ -237,6 +237,18 @@
   background-color: hsl(40 20% 95%);
 }
 
+@keyframes remoteEditFlash {
+  0% {
+    background-color: hsl(217 91% 60% / 0.28);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.remote-edited-row > td {
+  animation: remoteEditFlash 3s ease-out;
+}
+
 .brand-gradient-text {
   background: var(--brand-gradient);
   -webkit-background-clip: text;
