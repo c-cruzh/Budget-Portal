@@ -30,3 +30,12 @@ Separate app_state keys = independent JSONB blobs.
   until you add an item — `addItem` auto-expands the new item's group (key
   `${subEventId||"__unassigned__"}__${area}__${centroCosto||"(Sin centro)"}`) so
   the first item is visible. Don't remove that or the empty Final tab feels broken.
+
+**Final tab is the ONLY surface that renders raw stored old-shape rows** —
+backfills OFF and `syncSeed:false`, so nothing upgrades its rows on load. Any new
+render path in `BudgetPage` must tolerate missing/old-shape fields, or a single
+row can throw. The app is now guarded by `ErrorBoundary` (page-wide, wired in
+`App.tsx` Layout keyed by location) + `RowErrorBoundary` (per budget row via the
+`safeRow` wrapper) so a bad row degrades to an inline error instead of blanking
+the tab — but the underlying old-shape exposure is structural, not a bug to
+"fix" by re-seeding.

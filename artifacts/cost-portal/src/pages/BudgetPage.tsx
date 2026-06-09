@@ -17,6 +17,7 @@ import { BUDGET_COLUMNS, DEFAULT_VISIBLE } from "@/components/budget/columns";
 import type { LinkedBudgetItem } from "@/data/tasksBoardData";
 import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, STATUS_COLORS, STATUS_SHORT_LABELS, derivePhase, phaseSpaceDay, spaceOptionGroupsForItem, allSpaceRefs, itemSpaceName, itemLugar, allLugares, migrateItems, type BudgetItem, type QuoteOption, type SubEvent, type SpaceDayKey } from "@/data/budgetData";
 import { recalcItem, computeTransportAllocations, getItemDataIssues } from "@/lib/budgetCalc";
+import { RowErrorBoundary } from "@/components/ErrorBoundary";
 import { DataIssueBadges } from "@/components/budget/DataIssueBadges";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { useSubEventsApi } from "@/hooks/useSubEventsApi";
@@ -2705,7 +2706,25 @@ export default function BudgetPage({
                     </tr>
                     );
                     };
-                    if (__row.kind === "single") return [renderItemTr(__row.item)];
+                    // Wrap each row so a single malformed item degrades to an
+                    // inline error row instead of blanking the whole table.
+                    const safeRow = (item: BudgetItem) => (
+                      <RowErrorBoundary
+                        key={item.id}
+                        render={() => renderItemTr(item)}
+                        fallback={
+                          <tr className="border-b border-border/50 bg-red-500/5 text-xs">
+                            <td colSpan={30} className="px-3 py-2 text-red-600">
+                              <span className="inline-flex items-center gap-1.5">
+                                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                                No se pudo mostrar este ítem ({item.item || item.id}). El resto de la tabla sigue disponible.
+                              </span>
+                            </td>
+                          </tr>
+                        }
+                      />
+                    );
+                    if (__row.kind === "single") return [safeRow(__row.item)];
                     const __pex = expandedParents.has(__row.key);
                     const __parentRow = (
                       <tr
@@ -2731,7 +2750,7 @@ export default function BudgetPage({
                         </td>
                       </tr>
                     );
-                    return [__parentRow, ...(__pex ? __row.children.map(renderItemTr) : [])];
+                    return [__parentRow, ...(__pex ? __row.children.map(safeRow) : [])];
                   }) : [])
                 ];
               })}

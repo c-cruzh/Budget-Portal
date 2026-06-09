@@ -12,6 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { DocumentationDialog } from "@/components/DocumentationDialog";
 import DashboardPage from "@/pages/DashboardPage";
 import BudgetPage from "@/pages/BudgetPage";
@@ -342,7 +343,9 @@ function Layout({ children }: { children: React.ReactNode }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}
           >
-            {children}
+            <ErrorBoundary key={location}>
+              {children}
+            </ErrorBoundary>
           </motion.div>
         </main>
       </div>
