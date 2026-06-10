@@ -1,4 +1,10 @@
-import { Router, type IRouter } from "express";
+import {
+  Router,
+  type IRouter,
+  type NextFunction,
+  type Request,
+  type Response,
+} from "express";
 import healthRouter from "./health";
 import budgetRouter from "./budget";
 import authRouter from "./auth";
@@ -18,8 +24,22 @@ import storageRouter from "./storage";
 
 const router: IRouter = Router();
 
+function requireAuthenticatedSession(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  const session = req.session as any;
+  if (!session?.userId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+  next();
+}
+
 router.use(healthRouter);
 router.use(authRouter);
+router.use(requireAuthenticatedSession);
 router.use(budgetRouter);
 router.use(sponsorsRouter);
 router.use(auditRouter);
