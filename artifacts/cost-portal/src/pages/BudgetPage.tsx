@@ -617,12 +617,12 @@ export default function BudgetPage({
     if (search.trim()) {
       const q = search.toLowerCase();
       out = out.filter(i =>
-        i.item.toLowerCase().includes(q) ||
-        i.descripcion.toLowerCase().includes(q) ||
-        i.area.toLowerCase().includes(q) ||
-        i.centroCosto.toLowerCase().includes(q) ||
-        i.notas.toLowerCase().includes(q) ||
-        i.cotizacion.toLowerCase().includes(q) ||
+        (i.item || "").toLowerCase().includes(q) ||
+        (i.descripcion || "").toLowerCase().includes(q) ||
+        (i.area || "").toLowerCase().includes(q) ||
+        (i.centroCosto || "").toLowerCase().includes(q) ||
+        (i.notas || "").toLowerCase().includes(q) ||
+        (i.cotizacion || "").toLowerCase().includes(q) ||
         (i.proveedor || "").toLowerCase().includes(q) ||
         (i.assignedTo || "").toLowerCase().includes(q)
       );
