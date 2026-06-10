@@ -247,6 +247,10 @@ export interface BudgetItem {
   assignedTo?: string;
   soloPresupuestado?: boolean;
   accionRequerida?: boolean;
+  /** Final-only: physical logistics follow-up (recoger / comprar / montar algo físico). */
+  logisticaFisica?: boolean;
+  /** Final-only: management/pending follow-up (definir / cotizar / dar seguimiento). */
+  gestionPendiente?: boolean;
   reviewedBy?: string;
   statusCotizacion?: string;
   mitigable?: boolean;

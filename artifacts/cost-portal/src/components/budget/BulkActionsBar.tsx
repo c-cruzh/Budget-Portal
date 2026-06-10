@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trash2, X, Download, Tag, ShieldAlert, AlertTriangle, MoveRight, ChevronDown, Columns2, SendHorizontal, CheckCircle2, Percent, CalendarDays, Zap, FileText, Copy, ListPlus, Truck, Link2 } from "lucide-react";
+import { Trash2, X, Download, Tag, ShieldAlert, AlertTriangle, MoveRight, ChevronDown, Columns2, SendHorizontal, CheckCircle2, Percent, CalendarDays, Zap, FileText, Copy, ListPlus, Truck, Link2, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -21,7 +21,9 @@ export type BulkFlag =
   | "porDias"
   | "accionRequerida"
   | "soloPresupuestado"
-  | "costoEnOtroItem";
+  | "costoEnOtroItem"
+  | "logisticaFisica"
+  | "gestionPendiente";
 
 export interface BulkActionsProps {
   count: number;
@@ -49,6 +51,8 @@ export interface BulkActionsProps {
   cotizacionOptions: string[];
   assignedToOptions: string[];
   transportOptions: { id: string; label: string }[];
+  /** Budget Final instance — enables the "Acción requerida" subtype flags. */
+  isFinal?: boolean;
 }
 
 export function BulkActionsBar(props: BulkActionsProps) {
@@ -145,7 +149,7 @@ export function BulkActionsBar(props: BulkActionsProps) {
                 <Truck className="w-3.5 h-3.5" /> Crear transporte
               </Button>
 
-              <FlagPicker onToggle={props.onToggleFlag} />
+              <FlagPicker onToggle={props.onToggleFlag} isFinal={props.isFinal} />
 
               <Button
                 size="sm"
@@ -344,9 +348,26 @@ function TransportPicker({
 
 function FlagPicker({
   onToggle,
+  isFinal = false,
 }: {
   onToggle: (flag: BulkFlag, on: boolean) => void;
+  isFinal?: boolean;
 }) {
+  const flags: { key: BulkFlag; label: string; Icon: typeof Tag }[] = [
+    { key: "inKind", label: "In-Kind", Icon: Tag },
+    { key: "validarCosto", label: "Validar costo", Icon: AlertTriangle },
+    { key: "contratarAparte", label: "Contratar aparte", Icon: ShieldAlert },
+    { key: "reviewed", label: "Reviewed", Icon: CheckCircle2 },
+    { key: "aplicaFee", label: "Aplica Fee", Icon: Percent },
+    { key: "porDias", label: "Por Días", Icon: CalendarDays },
+    { key: "accionRequerida", label: "Acción Requerida", Icon: Zap },
+    ...(isFinal ? [
+      { key: "logisticaFisica" as BulkFlag, label: "Logística física", Icon: Truck },
+      { key: "gestionPendiente" as BulkFlag, label: "Gestión / Pendiente", Icon: ClipboardList },
+    ] : []),
+    { key: "soloPresupuestado", label: "Solo Presupuestado", Icon: FileText },
+    { key: "costoEnOtroItem", label: "Costo en otro item", Icon: Link2 },
+  ];
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -357,17 +378,7 @@ function FlagPicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-60 p-1" align="start">
-        {([
-          { key: "inKind", label: "In-Kind", Icon: Tag },
-          { key: "validarCosto", label: "Validar costo", Icon: AlertTriangle },
-          { key: "contratarAparte", label: "Contratar aparte", Icon: ShieldAlert },
-          { key: "reviewed", label: "Reviewed", Icon: CheckCircle2 },
-          { key: "aplicaFee", label: "Aplica Fee", Icon: Percent },
-          { key: "porDias", label: "Por Días", Icon: CalendarDays },
-          { key: "accionRequerida", label: "Acción Requerida", Icon: Zap },
-          { key: "soloPresupuestado", label: "Solo Presupuestado", Icon: FileText },
-          { key: "costoEnOtroItem", label: "Costo en otro item", Icon: Link2 },
-        ] as const).map(({ key, label, Icon }) => (
+        {flags.map(({ key, label, Icon }) => (
           <div key={key} className="flex items-center justify-between px-2 py-1 text-xs">
             <span className="flex items-center gap-1.5">
               <Icon className="w-3 h-3" />

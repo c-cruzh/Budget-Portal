@@ -1,8 +1,8 @@
-import { AlertTriangle, ShieldAlert, Flag, Star, Tag, Link2 } from "lucide-react";
+import { AlertTriangle, ShieldAlert, Flag, Star, Tag, Link2, Truck, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-export type FlagKey = "inKind" | "validarCosto" | "contratarAparte" | "accionRequerida" | "niceToHave" | "costoEnOtroItem";
+export type FlagKey = "inKind" | "validarCosto" | "contratarAparte" | "accionRequerida" | "niceToHave" | "costoEnOtroItem" | "logisticaFisica" | "gestionPendiente";
 
 interface ItemFlags {
   inKind?: boolean;
@@ -11,6 +11,8 @@ interface ItemFlags {
   accionRequerida?: boolean;
   niceToHave?: boolean;
   costoEnOtroItem?: boolean;
+  logisticaFisica?: boolean;
+  gestionPendiente?: boolean;
 }
 
 const FLAG_DEFS: { key: FlagKey; label: string; Icon: typeof Tag; activeCls: string }[] = [
@@ -22,18 +24,27 @@ const FLAG_DEFS: { key: FlagKey; label: string; Icon: typeof Tag; activeCls: str
   { key: "costoEnOtroItem", label: "Costo $0 — ya contemplado en otro item", Icon: Link2, activeCls: "bg-sky-500/15 text-sky-600 border-sky-500/30" },
 ];
 
+// Acción-requerida subtypes — rendered only in the Budget Final instance.
+const FINAL_FLAG_DEFS: { key: FlagKey; label: string; Icon: typeof Tag; activeCls: string }[] = [
+  { key: "logisticaFisica", label: "Logística física — hay que recoger, comprar o montar/hacer algo físico con el ítem", Icon: Truck, activeCls: "bg-teal-500/15 text-teal-600 border-teal-500/30" },
+  { key: "gestionPendiente", label: "Gestión / Pendiente — falta definir, cotizar, dar seguimiento o corregir algo del ítem", Icon: ClipboardList, activeCls: "bg-indigo-500/15 text-indigo-600 border-indigo-500/30" },
+];
+
 export function FlagsChips({
   item,
   onToggle,
   canEdit,
+  isFinal = false,
 }: {
   item: ItemFlags;
   onToggle: (key: FlagKey) => void;
   canEdit: boolean;
+  isFinal?: boolean;
 }) {
+  const defs = isFinal ? [...FLAG_DEFS, ...FINAL_FLAG_DEFS] : FLAG_DEFS;
   return (
     <div className="flex items-center gap-0.5 flex-wrap">
-      {FLAG_DEFS.map(f => {
+      {defs.map(f => {
         const active = !!item[f.key];
         return (
           <Tooltip key={f.key}>

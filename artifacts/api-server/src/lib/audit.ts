@@ -51,7 +51,7 @@ const TRACKED_BUDGET_FIELDS = [
   "proveedor", "cotizacion", "cotizacionLink", "documento",
   "inKind", "aplicaFee", "validarCosto", "contratarAparte", "agencyFee",
   "aplicaTurismo", "exentoIva", "niceToHave", "approvedQuoteId",
-  "assignedTo", "soloPresupuestado", "accionRequerida", "reviewedBy",
+  "assignedTo", "soloPresupuestado", "accionRequerida", "logisticaFisica", "gestionPendiente", "reviewedBy",
   "statusCotizacion", "mitigable", "mitigNote", "subEventId",
 ];
 

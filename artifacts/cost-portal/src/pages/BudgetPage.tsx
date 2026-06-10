@@ -241,6 +241,9 @@ export default function BudgetPage({
   seedItems = SEED_ITEMS,
   deprecated = false,
 }: BudgetPageProps = {}) {
+  // The "Acción requerida" subtypes (Logística física / Gestión-Pendiente) only
+  // exist in the Budget Final instance; derive that from the configured endpoint.
+  const isFinal = apiUrl.includes("budget-items-final");
   const { permissions, user } = useAuth();
   // Transient per-row awareness: id -> name of the editor whose remote change
   // just arrived via live refresh. Cleared automatically after a few seconds.
@@ -366,6 +369,8 @@ export default function BudgetPage({
   const [filterPhase, setFilterPhase] = useState<string>("ALL");
   const [filterPending, setFilterPending] = useState(false);
   const [filterAccionReq, setFilterAccionReq] = useState(false);
+  const [filterLogistica, setFilterLogistica] = useState(false);
+  const [filterGestion, setFilterGestion] = useState(false);
   const [filterValidar, setFilterValidar] = useState(false);
   const [filterAparte, setFilterAparte] = useState(false);
   const [filterNiceToHave, setFilterNiceToHave] = useState(false);
@@ -400,7 +405,7 @@ export default function BudgetPage({
     evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "",
     inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1,
     precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0,
-    cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, ivaMode: "raw", soloPresupuestado: false, accionRequerida: false, statusCotizacion: "",
+    cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, ivaMode: "raw", soloPresupuestado: false, accionRequerida: false, logisticaFisica: false, gestionPendiente: false, statusCotizacion: "",
   });
 
   const subEventFilteredItems = useMemo(() => {
@@ -611,6 +616,8 @@ export default function BudgetPage({
     if (filterPhase !== "ALL") out = out.filter(i => derivePhase(i) === filterPhase);
     if (filterPending) out = out.filter(i => i.cotizacion === "PENDING");
     if (filterAccionReq) out = out.filter(i => i.accionRequerida);
+    if (filterLogistica) out = out.filter(i => i.logisticaFisica);
+    if (filterGestion) out = out.filter(i => i.gestionPendiente);
     if (filterValidar) out = out.filter(i => i.validarCosto);
     if (filterAparte) out = out.filter(i => i.contratarAparte);
     if (filterNiceToHave) out = out.filter(i => i.niceToHave);
@@ -628,7 +635,7 @@ export default function BudgetPage({
       );
     }
     return out;
-  }, [items, spaces, issuesByItem, filterSubEvents, filterArea, filterLugar, filterEspacio, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterReviewed, filterPrecio, filterIssue, filterQtyDias, filterPhase, filterPending, filterAccionReq, filterValidar, filterAparte, filterNiceToHave, search]);
+  }, [items, spaces, issuesByItem, filterSubEvents, filterArea, filterLugar, filterEspacio, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterReviewed, filterPrecio, filterIssue, filterQtyDias, filterPhase, filterPending, filterAccionReq, filterLogistica, filterGestion, filterValidar, filterAparte, filterNiceToHave, search]);
 
   const sorted = useMemo(() => {
     if (!sortKey) return filtered;
@@ -780,7 +787,7 @@ export default function BudgetPage({
     });
   }, [setItems, patchItem]);
 
-  const toggleField = useCallback((id: string, field: "inKind" | "agencyFee" | "validarCosto" | "contratarAparte" | "soloPresupuestado" | "accionRequerida" | "niceToHave" | "costoEnOtroItem") => {
+  const toggleField = useCallback((id: string, field: "inKind" | "agencyFee" | "validarCosto" | "contratarAparte" | "soloPresupuestado" | "accionRequerida" | "niceToHave" | "costoEnOtroItem" | "logisticaFisica" | "gestionPendiente") => {
     setItems(prev => {
       const next = prev.map(item => {
         if (item.id !== id) return item;
@@ -1012,6 +1019,8 @@ export default function BudgetPage({
           validarCosto: editItem.validarCosto ?? i.validarCosto ?? false,
           contratarAparte: editItem.contratarAparte ?? i.contratarAparte ?? false,
           accionRequerida: editItem.accionRequerida ?? i.accionRequerida ?? false,
+          logisticaFisica: editItem.logisticaFisica ?? i.logisticaFisica ?? false,
+          gestionPendiente: editItem.gestionPendiente ?? i.gestionPendiente ?? false,
           niceToHave: editItem.niceToHave ?? i.niceToHave ?? false,
           costoEnOtroItem: editItem.costoEnOtroItem ?? i.costoEnOtroItem ?? false,
           soloPresupuestado: editItem.soloPresupuestado ?? i.soloPresupuestado ?? false,
@@ -1067,6 +1076,8 @@ export default function BudgetPage({
       aplicaTurismo: newItem.aplicaTurismo || false,
       soloPresupuestado: newItem.soloPresupuestado || false,
       accionRequerida: newItem.accionRequerida || false,
+      logisticaFisica: newItem.logisticaFisica || false,
+      gestionPendiente: newItem.gestionPendiente || false,
       niceToHave: newItem.niceToHave || false,
       costoEnOtroItem: newItem.costoEnOtroItem || false,
       statusCotizacion: newItem.statusCotizacion || "",
@@ -1090,7 +1101,7 @@ export default function BudgetPage({
       return nextSet;
     });
     setShowAddModal(false);
-    setNewItem({ evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, ivaMode: "raw", aplicaTurismo: false, soloPresupuestado: false, accionRequerida: false, statusCotizacion: "", isTransport: false, transportMode: undefined, coveredItemIds: [], transporteNoAplica: false });
+    setNewItem({ evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "", inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1, precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0, cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, ivaMode: "raw", aplicaTurismo: false, soloPresupuestado: false, accionRequerida: false, logisticaFisica: false, gestionPendiente: false, statusCotizacion: "", isTransport: false, transportMode: undefined, coveredItemIds: [], transporteNoAplica: false });
   }, [newItem, recalc, setItems, applyBatch]);
 
   const updateComment = useCallback((id: string, field: "notas" | "descripcion", value: string) => {
@@ -1312,6 +1323,8 @@ export default function BudgetPage({
       aplicaTurismo: false,
       soloPresupuestado: false,
       accionRequerida: false,
+      logisticaFisica: false,
+      gestionPendiente: false,
       niceToHave: false,
       costoEnOtroItem: false,
       statusCotizacion: "",
@@ -1351,6 +1364,8 @@ export default function BudgetPage({
   const contratarAparteCount = useMemo(() => filtered.filter(i => i.contratarAparte).length, [filtered]);
   const soloPresupuestadoSum = useMemo(() => filtered.filter(i => i.soloPresupuestado).reduce((s, i) => s + i.total, 0), [filtered]);
   const accionRequeridaCount = useMemo(() => filtered.filter(i => i.accionRequerida).length, [filtered]);
+  const logisticaCount = useMemo(() => filtered.filter(i => i.logisticaFisica).length, [filtered]);
+  const gestionCount = useMemo(() => filtered.filter(i => i.gestionPendiente).length, [filtered]);
   const feeProductoraSum = useMemo(() => filtered.reduce((s, i) => s + getFeeProductora(i), 0), [filtered]);
   const feeExplicitSum = useMemo(() => filtered.reduce((s, i) => s + i.fee, 0), [filtered]);
   const feeIncluidoSum = useMemo(() => filtered.reduce((s, i) => s + (i.feeIncluido || 0), 0), [filtered]);
@@ -1363,7 +1378,9 @@ export default function BudgetPage({
       "IN-KIND?", "AURORA 360?", "QTY", "UoM", "DIA APLICABLE", "ESPACIO DIA 1", "ESPACIO DIA 2", "CONTRATACION POR DIAS?", "QTY DIAS",
       "PRECIO UNITARIO", "SUBTOTAL", "VIA PRODUCTORA (AURORA 360)?", "FEE INCL. EN COTIZACION?",
       "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "SOLO PRESUPUESTADO?", "IMAGEN DE REFERENCIA", "PROVEEDOR",
-      "REVIEWED BY", "VALIDAR COSTO?", "CONTRATAR APARTE?", "ACCIÓN REQUERIDA?", "NICE TO HAVE?", "COSTO EN OTRO ITEM?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO", "STATUS COTIZACION"
+      "REVIEWED BY", "VALIDAR COSTO?", "CONTRATAR APARTE?", "ACCIÓN REQUERIDA?",
+      ...(isFinal ? ["LOGÍSTICA FÍSICA?", "GESTIÓN / PENDIENTE?"] : []),
+      "NICE TO HAVE?", "COSTO EN OTRO ITEM?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO", "STATUS COTIZACION"
     ];
     const rows = filtered.map(i => {
       const redact = redactMode && !isAuroraOwned(i);
@@ -1375,7 +1392,9 @@ export default function BudgetPage({
         i.porDias, i.qtyDias, redact ? "" : i.precioUnitario, redact ? "" : i.subtotal, i.agencyFee ? "SI" : "NO",
         i.aplicaFee, redact ? "" : i.fee, redact ? "" : i.subtotalConFee, redact ? "" : i.iva, redact ? "" : i.total, i.cotizacion, i.soloPresupuestado ? "SI" : "NO", i.documento,
         i.proveedor || "", i.reviewedBy || "", i.validarCosto ? "SI" : "NO", i.contratarAparte ? "SI" : "NO",
-        i.accionRequerida ? "SI" : "NO", i.niceToHave ? "SI" : "NO", i.costoEnOtroItem ? "SI" : "NO", i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || "", i.statusCotizacion || "",
+        i.accionRequerida ? "SI" : "NO",
+        ...(isFinal ? [i.logisticaFisica ? "SI" : "NO", i.gestionPendiente ? "SI" : "NO"] : []),
+        i.niceToHave ? "SI" : "NO", i.costoEnOtroItem ? "SI" : "NO", i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || "", i.statusCotizacion || "",
         i.aplicaTurismo ? "SI" : "NO", redact ? "" : (i.turismo || 0), redact ? "" : (i.feeIncluido || 0)
       ];
     });
@@ -1597,12 +1616,14 @@ export default function BudgetPage({
             if (filterEspacio !== "ALL") chips.push({ key: "esp", label: `Espacio: ${filterEspacio}`, onClear: () => setFilterEspacio("ALL") });
             if (filterPending) chips.push({ key: "pn", label: "Pending Quotes", onClear: () => setFilterPending(false) });
             if (filterAccionReq) chips.push({ key: "ar", label: "Acción Req.", onClear: () => setFilterAccionReq(false) });
+            if (filterLogistica) chips.push({ key: "lf", label: "Logística física", onClear: () => setFilterLogistica(false) });
+            if (filterGestion) chips.push({ key: "gp", label: "Gestión / Pendiente", onClear: () => setFilterGestion(false) });
             if (filterValidar) chips.push({ key: "vl", label: "A Validar", onClear: () => setFilterValidar(false) });
             if (filterAparte) chips.push({ key: "ap", label: "Aparte", onClear: () => setFilterAparte(false) });
             if (filterNiceToHave) chips.push({ key: "nh", label: "Nice to Have", onClear: () => setFilterNiceToHave(false) });
             return chips;
           })()}
-          onClearAll={() => { setFilterProveedor(new Set()); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterReviewed("ALL"); setFilterPrecio("ALL"); setFilterIssue("ALL"); setFilterQtyDias(new Set()); setFilterPhase("ALL"); setFilterLugar("ALL"); setFilterEspacio("ALL"); setFilterPending(false); setFilterAccionReq(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
+          onClearAll={() => { setFilterProveedor(new Set()); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterReviewed("ALL"); setFilterPrecio("ALL"); setFilterIssue("ALL"); setFilterQtyDias(new Set()); setFilterPhase("ALL"); setFilterLugar("ALL"); setFilterEspacio("ALL"); setFilterPending(false); setFilterAccionReq(false); setFilterLogistica(false); setFilterGestion(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
         >
           <div className="flex flex-wrap gap-3 items-center">
           <Popover>
@@ -1813,6 +1834,10 @@ export default function BudgetPage({
           {([
             { active: filterPending, set: setFilterPending, label: "Pending Quotes", count: pendingCount, cls: "bg-orange-500/10 text-orange-600 border-orange-500/30" },
             { active: filterAccionReq, set: setFilterAccionReq, label: "Accion Req.", count: accionRequeridaCount, cls: "bg-orange-500/10 text-orange-600 border-orange-500/30" },
+            ...(isFinal ? [
+              { active: filterLogistica, set: setFilterLogistica, label: "Logística física", count: logisticaCount, cls: "bg-teal-500/10 text-teal-600 border-teal-500/30" },
+              { active: filterGestion, set: setFilterGestion, label: "Gestión / Pendiente", count: gestionCount, cls: "bg-indigo-500/10 text-indigo-600 border-indigo-500/30" },
+            ] : []),
             { active: filterValidar, set: setFilterValidar, label: "A Validar", count: validarCount, cls: "bg-red-500/10 text-red-600 border-red-500/30" },
             { active: filterAparte, set: setFilterAparte, label: "Aparte", count: contratarAparteCount, cls: "bg-amber-500/10 text-amber-600 border-amber-500/30" },
             { active: filterNiceToHave, set: setFilterNiceToHave, label: "Nice to Have", count: niceToHaveCount, cls: "bg-purple-500/10 text-purple-600 border-purple-500/30" },
@@ -2642,7 +2667,7 @@ export default function BudgetPage({
                         )}
                       </td>
                       <td data-col="flags" className="px-2 py-1.5 align-top">
-                        <FlagsChips item={item} canEdit={canEdit} onToggle={(k) => toggleField(item.id, k as any)} />
+                        <FlagsChips item={item} canEdit={canEdit} isFinal={isFinal} onToggle={(k) => toggleField(item.id, k as any)} />
                       </td>
                       {canEdit && (
                         <td className="px-1 py-1.5 align-top">
@@ -2790,6 +2815,7 @@ export default function BudgetPage({
         statusOptions={STATUS_COTIZACION_OPTIONS}
         statusLabels={STATUS_SHORT_LABELS}
         allItems={items}
+        isFinal={isFinal}
       />
 
       <BudgetItemDialog
@@ -2808,6 +2834,7 @@ export default function BudgetPage({
         statusOptions={STATUS_COTIZACION_OPTIONS}
         statusLabels={STATUS_SHORT_LABELS}
         allItems={items}
+        isFinal={isFinal}
       />
 
       <BulkActionsBar
@@ -2839,6 +2866,8 @@ export default function BudgetPage({
             aplicaFee: "Aplica Fee",
             porDias: "Por Días",
             accionRequerida: "Acción Requerida",
+            logisticaFisica: "Logística física",
+            gestionPendiente: "Gestión / Pendiente",
             soloPresupuestado: "Solo Presupuestado",
             costoEnOtroItem: "Costo en otro item",
           };
@@ -2868,6 +2897,7 @@ export default function BudgetPage({
         cotizacionOptions={Array.from(new Set(items.map(i => i.cotizacion).filter((v): v is string => !!v))).sort()}
         assignedToOptions={Array.from(new Set(items.map(i => i.assignedTo).filter((v): v is string => !!v))).sort()}
         transportOptions={items.filter(i => i.isTransport).map(i => ({ id: i.id, label: i.item || i.descripcion || "(transporte)" }))}
+        isFinal={isFinal}
       />
 
       <SubEventsManagerDialog

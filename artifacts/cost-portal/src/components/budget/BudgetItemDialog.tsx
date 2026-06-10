@@ -56,6 +56,8 @@ interface BudgetItemDialogProps {
   statusLabels: Record<string, string>;
   /** All budget items, used to pick which items a transport line covers. */
   allItems: BudgetItem[];
+  /** Budget Final instance — enables the "Acción requerida" subtype flags. */
+  isFinal?: boolean;
 }
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
@@ -78,6 +80,7 @@ export function BudgetItemDialog({
   statusOptions,
   statusLabels,
   allItems,
+  isFinal = false,
 }: BudgetItemDialogProps) {
   const byDias = value.porDias === "SI";
   const ivaMode = value.ivaMode ?? (value.exentoIva ? "exento" : "raw");
@@ -599,6 +602,18 @@ export function BudgetItemDialog({
               <input type="checkbox" checked={value.accionRequerida || false} onChange={e => set("accionRequerida", e.target.checked)} className="rounded border-border" />
               ACCIÓN REQUERIDA
             </label>
+            {isFinal && (
+              <>
+                <label className="flex items-center gap-2 text-xs" title="Hay que recoger, comprar o montar/hacer algo físico con el ítem.">
+                  <input type="checkbox" checked={value.logisticaFisica || false} onChange={e => set("logisticaFisica", e.target.checked)} className="rounded border-border" />
+                  LOGÍSTICA FÍSICA
+                </label>
+                <label className="flex items-center gap-2 text-xs" title="Falta definir, cotizar, dar seguimiento o corregir algo del ítem.">
+                  <input type="checkbox" checked={value.gestionPendiente || false} onChange={e => set("gestionPendiente", e.target.checked)} className="rounded border-border" />
+                  GESTIÓN / PENDIENTE
+                </label>
+              </>
+            )}
             <label className="flex items-center gap-2 text-xs">
               <input type="checkbox" checked={value.niceToHave || false} onChange={e => set("niceToHave", e.target.checked)} className="rounded border-border" />
               NICE TO HAVE
