@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { SpaceDayKey, SpaceEntry, SpacesCatalog, Venue } from "@/data/budgetData";
+import type { SpaceDayKey, SpaceEntry, SpaceMedia, SpacesCatalog, Venue } from "@/data/budgetData";
 import { EMPTY_SPACES_CATALOG, buildSpacesCatalog } from "@/data/budgetData";
 
 export interface SpacesMeta {
@@ -19,6 +19,32 @@ function newVenueId(): string {
   return `venue-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function newMediaId(): string {
+  if (typeof crypto !== "undefined" && (crypto as any).randomUUID) return `med-${(crypto as any).randomUUID()}`;
+  return `med-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeMedia(input: unknown): SpaceMedia[] {
+  if (!Array.isArray(input)) return [];
+  const out: SpaceMedia[] = [];
+  const used = new Set<string>();
+  for (const raw of input) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    const objectPath = String(r.objectPath ?? "").trim();
+    if (!objectPath) continue;
+    let id = String(r.id ?? "").trim();
+    if (!id || used.has(id)) id = newMediaId();
+    used.add(id);
+    const kind = String(r.kind ?? "").trim() === "video" ? "video" : "photo";
+    const media: SpaceMedia = { id, objectPath, kind };
+    const name = String(r.name ?? "").trim();
+    if (name) media.name = name;
+    out.push(media);
+  }
+  return out;
+}
+
 function normalizeEntries(input: unknown): SpaceEntry[] {
   if (!Array.isArray(input)) return [];
   const out: SpaceEntry[] = [];
@@ -36,6 +62,8 @@ function normalizeEntries(input: unknown): SpaceEntry[] {
     if (Number.isFinite(a) && a > 0) entry.aforo = a;
     const image = String(r.image ?? "").trim();
     if (image) entry.image = image;
+    const media = normalizeMedia(r.media);
+    if (media.length) entry.media = media;
     out.push(entry);
   }
   return out;
@@ -87,6 +115,8 @@ function normalizeVenueEntries(input: unknown): SpaceEntry[] {
     if (Number.isFinite(a) && a > 0) entry.aforo = a;
     const image = String(r.image ?? "").trim();
     if (image) entry.image = image;
+    const media = normalizeMedia(r.media);
+    if (media.length) entry.media = media;
     out.push(entry);
   }
   return out;
@@ -468,11 +498,39 @@ export function useSpacesApi() {
     mutateEntryById(id, () => null);
   }, [mutateEntryById]);
 
+  // ---- Media (photos/videos) operations, by space id (ESEN or venue) ----
+
+  // Appends one media item to a space's gallery. Returns the new media id.
+  const addMedia = useCallback(
+    (entryId: string, media: { objectPath: string; kind: "photo" | "video"; name?: string }): string => {
+      const objectPath = (media.objectPath || "").trim();
+      if (!objectPath) return "";
+      const id = newMediaId();
+      const item: SpaceMedia = { id, objectPath, kind: media.kind === "video" ? "video" : "photo" };
+      const name = (media.name || "").trim();
+      if (name) item.name = name;
+      mutateEntryById(entryId, en => ({ ...en, media: [...(en.media ?? []), item] }));
+      return id;
+    },
+    [mutateEntryById],
+  );
+
+  // Removes one media item from a space's gallery by media id.
+  const removeMedia = useCallback((entryId: string, mediaId: string) => {
+    mutateEntryById(entryId, en => {
+      const next = (en.media ?? []).filter(m => m.id !== mediaId);
+      const out: SpaceEntry = { ...en };
+      if (next.length) out.media = next; else delete out.media;
+      return out;
+    });
+  }, [mutateEntryById]);
+
   return {
     spaces, loading, saving, error, meta,
     addEntry, updateEntry, removeEntry, renameZone, removeZone,
     addVenue, updateVenue, removeVenue,
     addVenueEntry, updateVenueEntry, removeVenueEntry, renameVenueZone, removeVenueZone,
     addSpace, setCapacityById, renameSpaceById, removeSpaceById,
+    addMedia, removeMedia,
   };
 }

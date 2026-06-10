@@ -1,14 +1,26 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import {
   MapPin, Cloud, CloudOff, Loader2, Trash2, Plus, Users, Layers, CalendarDays, Info,
-  Building2, Pencil, Check, X,
+  Building2, Pencil, Check, X, ImagePlus, Play, ChevronLeft, ChevronRight, Film,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { useSpacesApi } from "@/hooks/useSpacesApi";
 import { useSubEventsApi } from "@/hooks/useSubEventsApi";
-import { groupSpacesByZone, type SpaceDayKey, type SpaceEntry, type Venue, type SubEvent } from "@/data/budgetData";
+import { groupSpacesByZone, type SpaceDayKey, type SpaceEntry, type SpaceMedia, type Venue, type SubEvent } from "@/data/budgetData";
+
+const STORAGE_BASE = "/api/storage";
+/** Builds the serving URL for an uploaded object path. */
+function mediaUrl(objectPath: string): string {
+  return `${STORAGE_BASE}${objectPath}`;
+}
+
+const MAX_UPLOAD_BYTES = 200 * 1024 * 1024; // 200 MB per file
+
+type AddMediaFn = (entryId: string, media: { objectPath: string; kind: "photo" | "video"; name?: string }) => string;
+type RemoveMediaFn = (entryId: string, mediaId: string) => void;
 
 const DAYS: { key: SpaceDayKey; label: string }[] = [
   { key: "dia-1", label: "Día 1" },
@@ -25,6 +37,7 @@ export default function EspaciosPage() {
     addEntry, updateEntry, removeEntry, renameZone, removeZone,
     addVenue, updateVenue, removeVenue,
     addVenueEntry, updateVenueEntry, removeVenueEntry, renameVenueZone, removeVenueZone,
+    addMedia, removeMedia,
   } = useSpacesApi();
   const { subEvents } = useSubEventsApi();
 
@@ -153,6 +166,8 @@ export default function EspaciosPage() {
               onRemove={removeEntry}
               onRenameZone={renameZone}
               onRemoveZone={removeZone}
+              onAddMedia={addMedia}
+              onRemoveMedia={removeMedia}
             />
           ))}
         </div>
@@ -172,6 +187,8 @@ export default function EspaciosPage() {
           onRemoveEntry={removeVenueEntry}
           onRenameZone={renameVenueZone}
           onRemoveZone={removeVenueZone}
+          onAddMedia={addMedia}
+          onRemoveMedia={removeMedia}
         />
       ))}
 
@@ -185,7 +202,7 @@ export default function EspaciosPage() {
 /* -------------------------------------------------------------------------- */
 
 function DaySection({
-  day, label, entries, canEdit, onAdd, onUpdate, onRemove, onRenameZone, onRemoveZone,
+  day, label, entries, canEdit, onAdd, onUpdate, onRemove, onRenameZone, onRemoveZone, onAddMedia, onRemoveMedia,
 }: {
   day: SpaceDayKey;
   label: string;
@@ -196,6 +213,8 @@ function DaySection({
   onRemove: (day: SpaceDayKey, id: string) => void;
   onRenameZone: (day: SpaceDayKey, oldZone: string, newZone: string) => void;
   onRemoveZone: (day: SpaceDayKey, zone: string) => void;
+  onAddMedia: AddMediaFn;
+  onRemoveMedia: RemoveMediaFn;
 }) {
   const grouped = useMemo(() => groupSpacesByZone(entries), [entries]);
   const zones = useMemo(
@@ -231,6 +250,8 @@ function DaySection({
               onRemoveEntry={id => onRemove(day, id)}
               onRenameZone={(oldZone, newZone) => onRenameZone(day, oldZone, newZone)}
               onRemoveZone={zoneName => onRemoveZone(day, zoneName)}
+              onAddMedia={onAddMedia}
+              onRemoveMedia={onRemoveMedia}
             />
           ))}
         </div>
@@ -251,7 +272,7 @@ function DaySection({
 /* -------------------------------------------------------------------------- */
 
 function VenueSection({
-  venue, subEvents, canEdit, onUpdateVenue, onRemoveVenue, onAddEntry, onUpdateEntry, onRemoveEntry, onRenameZone, onRemoveZone,
+  venue, subEvents, canEdit, onUpdateVenue, onRemoveVenue, onAddEntry, onUpdateEntry, onRemoveEntry, onRenameZone, onRemoveZone, onAddMedia, onRemoveMedia,
 }: {
   venue: Venue;
   subEvents: SubEvent[];
@@ -263,6 +284,8 @@ function VenueSection({
   onRemoveEntry: (venueId: string, entryId: string) => void;
   onRenameZone: (venueId: string, oldZone: string, newZone: string) => void;
   onRemoveZone: (venueId: string, zone: string) => void;
+  onAddMedia: AddMediaFn;
+  onRemoveMedia: RemoveMediaFn;
 }) {
   const grouped = useMemo(() => groupSpacesByZone(venue.entries), [venue.entries]);
   const zones = useMemo(
@@ -367,6 +390,8 @@ function VenueSection({
               onRemoveEntry={id => onRemoveEntry(venue.id, id)}
               onRenameZone={(oldZone, newZone) => onRenameZone(venue.id, oldZone, newZone)}
               onRemoveZone={zoneName => onRemoveZone(venue.id, zoneName)}
+              onAddMedia={onAddMedia}
+              onRemoveMedia={onRemoveMedia}
             />
           ))}
         </div>
@@ -449,11 +474,318 @@ function VenueSubEventPicker({
 }
 
 /* -------------------------------------------------------------------------- */
+/* Media gallery + upload (per space)                                          */
+/* -------------------------------------------------------------------------- */
+
+interface UploadJob {
+  id: string;
+  name: string;
+  progress: number; // 0..1
+  error?: string;
+}
+
+/** Detects whether a File is an accepted image/video and returns its kind. */
+function detectKind(file: File): "photo" | "video" | null {
+  const t = (file.type || "").toLowerCase();
+  if (t.startsWith("image/")) return "photo";
+  if (t.startsWith("video/")) return "video";
+  return null;
+}
+
+/** Requests a signed upload URL from the server for the given file. */
+async function requestUploadUrl(file: File): Promise<{ uploadURL: string; objectPath: string }> {
+  const res = await fetch(`${STORAGE_BASE}/uploads/request-url`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      name: file.name,
+      size: file.size,
+      contentType: file.type || "application/octet-stream",
+    }),
+  });
+  if (!res.ok) {
+    let msg = `No se pudo iniciar la subida (${res.status})`;
+    try { const j = await res.json(); if (j?.error?.message) msg = j.error.message; } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+/** PUTs the file bytes to the signed URL, reporting byte progress. */
+function putWithProgress(url: string, file: File, onProgress: (p: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+    xhr.upload.onprogress = ev => { if (ev.lengthComputable) onProgress(ev.loaded / ev.total); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`Error al subir (${xhr.status})`));
+    };
+    xhr.onerror = () => reject(new Error("Error de red al subir el archivo"));
+    xhr.send(file);
+  });
+}
+
+function SpaceMediaGallery({
+  entryId, media, canEdit, onAddMedia, onRemoveMedia,
+}: {
+  entryId: string;
+  media: SpaceMedia[];
+  canEdit: boolean;
+  onAddMedia: AddMediaFn;
+  onRemoveMedia: RemoveMediaFn;
+}) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [jobs, setJobs] = useState<UploadJob[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  const handleFiles = useCallback(async (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    for (const file of files) {
+      const kind = detectKind(file);
+      const jobId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      if (!kind) {
+        setJobs(prev => [...prev, { id: jobId, name: file.name, progress: 0, error: "Tipo no admitido (solo imágenes o videos)" }]);
+        continue;
+      }
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setJobs(prev => [...prev, { id: jobId, name: file.name, progress: 0, error: "Archivo demasiado grande (máx. 200 MB)" }]);
+        continue;
+      }
+      setJobs(prev => [...prev, { id: jobId, name: file.name, progress: 0 }]);
+      try {
+        const { uploadURL, objectPath } = await requestUploadUrl(file);
+        await putWithProgress(uploadURL, file, p =>
+          setJobs(prev => prev.map(j => (j.id === jobId ? { ...j, progress: p } : j))),
+        );
+        onAddMedia(entryId, { objectPath, kind, name: file.name });
+        setJobs(prev => prev.filter(j => j.id !== jobId));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Error al subir";
+        setJobs(prev => prev.map(j => (j.id === jobId ? { ...j, error: message } : j)));
+      }
+    }
+  }, [entryId, onAddMedia]);
+
+  const onPick = () => fileInputRef.current?.click();
+
+  const confirmRemove = (m: SpaceMedia) => {
+    const ok = window.confirm(`¿Eliminar este ${m.kind === "video" ? "video" : "foto"}? Esta acción no se puede deshacer.`);
+    if (ok) onRemoveMedia(entryId, m.id);
+  };
+
+  if (!canEdit && media.length === 0) return null;
+
+  return (
+    <div className="pl-5">
+      {(media.length > 0 || jobs.length > 0 || canEdit) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {media.map((m, idx) => (
+            <div key={m.id} className="relative group">
+              <button
+                type="button"
+                onClick={() => setLightboxIndex(idx)}
+                className="block w-14 h-14 rounded-md overflow-hidden border border-border bg-muted hover:border-primary transition-colors"
+                title={m.name || (m.kind === "video" ? "Video" : "Foto")}
+              >
+                {m.kind === "video" ? (
+                  <div className="relative w-full h-full">
+                    <video src={mediaUrl(m.objectPath)} className="w-full h-full object-cover" muted preload="metadata" />
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                      <Play className="w-4 h-4 text-white" fill="white" />
+                    </span>
+                  </div>
+                ) : (
+                  <img src={mediaUrl(m.objectPath)} alt={m.name || "Foto"} className="w-full h-full object-cover" loading="lazy" />
+                )}
+              </button>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => confirmRemove(m)}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                  title="Eliminar"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          ))}
+
+          {jobs.map(j => (
+            <div
+              key={j.id}
+              className={`w-14 h-14 rounded-md border flex flex-col items-center justify-center px-1 text-center ${j.error ? "border-red-400 bg-red-50" : "border-border bg-muted"}`}
+              title={j.error || j.name}
+            >
+              {j.error ? (
+                <>
+                  <X className="w-3.5 h-3.5 text-red-500" />
+                  <button onClick={() => setJobs(prev => prev.filter(x => x.id !== j.id))} className="text-[8px] text-red-500 mt-0.5 underline">cerrar</button>
+                </>
+              ) : (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                  <span className="text-[9px] tabular-nums text-muted-foreground mt-1">{Math.round(j.progress * 100)}%</span>
+                </>
+              )}
+            </div>
+          ))}
+
+          {canEdit && (
+            <button
+              type="button"
+              onClick={onPick}
+              className="w-14 h-14 rounded-md border border-dashed border-border hover:border-primary text-muted-foreground hover:text-primary flex flex-col items-center justify-center gap-0.5 transition-colors"
+              title="Subir fotos o videos"
+            >
+              <ImagePlus className="w-4 h-4" />
+              <span className="text-[8px]">Subir</span>
+            </button>
+          )}
+
+          {canEdit && (
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              className="hidden"
+              onChange={ev => { handleFiles(ev.target.files); ev.target.value = ""; }}
+            />
+          )}
+        </div>
+      )}
+
+      {lightboxIndex !== null && media.length > 0 && (
+        <MediaLightbox
+          items={media}
+          index={Math.min(lightboxIndex, media.length - 1)}
+          onIndex={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Fullscreen lightbox viewer                                                  */
+/* -------------------------------------------------------------------------- */
+
+function MediaLightbox({
+  items, index, onIndex, onClose,
+}: {
+  items: SpaceMedia[];
+  index: number;
+  onIndex: (i: number) => void;
+  onClose: () => void;
+}) {
+  const count = items.length;
+  const current = items[index];
+
+  const go = useCallback((delta: number) => {
+    onIndex((index + delta + count) % count);
+  }, [index, count, onIndex]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft") go(-1);
+      else if (e.key === "ArrowRight") go(1);
+    };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [go, onClose]);
+
+  if (!current) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center"
+      onClick={onClose}
+    >
+      {/* Counter */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 text-white/90 text-sm tabular-nums flex items-center gap-1.5">
+        {current.kind === "video" ? <Film className="w-4 h-4" /> : <ImagePlus className="w-4 h-4" />}
+        {index + 1} / {count}
+      </div>
+
+      {/* Close */}
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute top-3 right-3 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+        title="Cerrar (Esc)"
+      >
+        <X className="w-5 h-5" />
+      </button>
+
+      {/* Prev */}
+      {count > 1 && (
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); go(-1); }}
+          className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+          title="Anterior (←)"
+        >
+          <ChevronLeft className="w-6 h-6" />
+        </button>
+      )}
+
+      {/* Media */}
+      <div className="max-w-[90vw] max-h-[85vh] flex flex-col items-center" onClick={e => e.stopPropagation()}>
+        {current.kind === "video" ? (
+          <video
+            key={current.id}
+            src={mediaUrl(current.objectPath)}
+            controls
+            autoPlay
+            className="max-w-[90vw] max-h-[80vh] rounded-lg"
+          />
+        ) : (
+          <img
+            key={current.id}
+            src={mediaUrl(current.objectPath)}
+            alt={current.name || "Foto"}
+            className="max-w-[90vw] max-h-[80vh] object-contain rounded-lg"
+          />
+        )}
+        {current.name && (
+          <p className="text-white/70 text-xs mt-3 max-w-[90vw] truncate">{current.name}</p>
+        )}
+      </div>
+
+      {/* Next */}
+      {count > 1 && (
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); go(1); }}
+          className="absolute right-3 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+          title="Siguiente (→)"
+        >
+          <ChevronRight className="w-6 h-6" />
+        </button>
+      )}
+    </div>,
+    document.body,
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Generic zone group (day/venue-agnostic via closures)                        */
 /* -------------------------------------------------------------------------- */
 
 function ZoneGroup({
-  zone, entries, canEdit, allowEmptyName, onAddSpace, onUpdateEntry, onRemoveEntry, onRenameZone, onRemoveZone,
+  zone, entries, canEdit, allowEmptyName, onAddSpace, onUpdateEntry, onRemoveEntry, onRenameZone, onRemoveZone, onAddMedia, onRemoveMedia,
 }: {
   zone: string;
   entries: SpaceEntry[];
@@ -464,6 +796,8 @@ function ZoneGroup({
   onRemoveEntry: (id: string) => void;
   onRenameZone: (oldZone: string, newZone: string) => void;
   onRemoveZone: (zone: string) => void;
+  onAddMedia: AddMediaFn;
+  onRemoveMedia: RemoveMediaFn;
 }) {
   const [zoneDraft, setZoneDraft] = useState(zone);
   const [adding, setAdding] = useState(false);
@@ -522,11 +856,12 @@ function ZoneGroup({
         )}
       </div>
 
-      <div className="space-y-1 pl-5">
+      <div className="space-y-2 pl-5">
         {entries.map(e => {
           const hasName = !!(e.name || "").trim();
           return (
-            <div key={e.id} className="flex items-center gap-2">
+            <div key={e.id} className="space-y-1.5">
+            <div className="flex items-center gap-2">
               <MapPin className="w-3 h-3 text-muted-foreground/60 flex-shrink-0" />
               {canEdit ? (
                 <input
@@ -567,6 +902,14 @@ function ZoneGroup({
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               )}
+            </div>
+            <SpaceMediaGallery
+              entryId={e.id}
+              media={e.media ?? []}
+              canEdit={canEdit}
+              onAddMedia={onAddMedia}
+              onRemoveMedia={onRemoveMedia}
+            />
             </div>
           );
         })}

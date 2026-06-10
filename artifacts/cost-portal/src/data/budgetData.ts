@@ -299,6 +299,18 @@ export type SpaceDayKey = "dia-1" | "dia-2";
  * layout differs between Día 1 and Día 2. `id` lets the same name appear under
  * different zones (e.g. "Isla Temporal @ Lobby" under two pick-up zones).
  */
+/** A single uploaded photo or video attached to a space. */
+export interface SpaceMedia {
+  /** Stable id for ordering / deletion within a space. */
+  id: string;
+  /** Object storage path, e.g. `/objects/uploads/<uuid>`. Serve via `/api/storage${objectPath}`. */
+  objectPath: string;
+  /** Whether the asset is a still image or a video. */
+  kind: "photo" | "video";
+  /** Optional original file name (for display / download). */
+  name?: string;
+}
+
 export interface SpaceEntry {
   id: string;
   /** Área/Zona heading this space is grouped under. */
@@ -309,6 +321,8 @@ export interface SpaceEntry {
   aforo?: number;
   /** Reserved for a future "Imagen" column. No UI yet. */
   image?: string;
+  /** Uploaded photos/videos for this space (object-storage references). */
+  media?: SpaceMedia[];
 }
 
 /**

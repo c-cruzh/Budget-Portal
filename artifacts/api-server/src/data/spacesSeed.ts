@@ -1,9 +1,23 @@
+/** A single uploaded photo or video attached to a space. */
+export interface SpaceMedia {
+  /** Stable id for ordering / deletion within a space. */
+  id: string;
+  /** Object storage path, e.g. `/objects/uploads/<uuid>`. */
+  objectPath: string;
+  /** Whether the asset is a still image or a video. */
+  kind: "photo" | "video";
+  /** Optional original file name (for display / download). */
+  name?: string;
+}
+
 export interface SpaceEntry {
   id: string;
   zone: string;
   name: string;
   aforo?: number;
   image?: string;
+  /** Uploaded photos/videos for this space (object-storage references). */
+  media?: SpaceMedia[];
 }
 
 /**

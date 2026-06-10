@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, appState, withRetry } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { buildSpacesSeedEntries, buildVenuesSeed, type SpaceEntry, type Venue } from "../data/spacesSeed";
+import { buildSpacesSeedEntries, buildVenuesSeed, type SpaceEntry, type SpaceMedia, type Venue } from "../data/spacesSeed";
 
 const router: IRouter = Router();
 
@@ -70,6 +70,32 @@ function deriveCapacities(entries: SpaceEntry[]): Record<string, number> {
   return out;
 }
 
+/**
+ * Sanitizes the media array of a space entry. Each item must reference a stored
+ * object (`objectPath`); ids are stable and de-duplicated. Idempotent and money-
+ * neutral: items lacking an objectPath are dropped, kind defaults to "photo".
+ */
+function normalizeMedia(input: unknown, ownerId: string): SpaceMedia[] {
+  if (!Array.isArray(input)) return [];
+  const out: SpaceMedia[] = [];
+  const usedIds = new Set<string>();
+  input.forEach((raw, idx) => {
+    if (!raw || typeof raw !== "object") return;
+    const r = raw as Record<string, unknown>;
+    const objectPath = String(r.objectPath ?? "").trim();
+    if (!objectPath) return;
+    let id = String(r.id ?? "").trim();
+    if (!id || usedIds.has(id)) id = `med-${ownerId}-${idx + 1}-${Math.random().toString(36).slice(2, 8)}`;
+    usedIds.add(id);
+    const kind = String(r.kind ?? "").trim() === "video" ? "video" : "photo";
+    const media: SpaceMedia = { id, objectPath, kind };
+    const name = String(r.name ?? "").trim();
+    if (name) media.name = name;
+    out.push(media);
+  });
+  return out;
+}
+
 function normalizeEntries(input: unknown, day: DayKey): SpaceEntry[] {
   if (!Array.isArray(input)) return [];
   const out: SpaceEntry[] = [];
@@ -88,6 +114,8 @@ function normalizeEntries(input: unknown, day: DayKey): SpaceEntry[] {
     if (Number.isFinite(a) && a > 0) entry.aforo = a;
     const image = String(r.image ?? "").trim();
     if (image) entry.image = image;
+    const media = normalizeMedia(r.media, id);
+    if (media.length) entry.media = media;
     out.push(entry);
   });
   return out;
@@ -116,6 +144,8 @@ function normalizeVenueEntries(input: unknown, venueId: string): SpaceEntry[] {
     if (Number.isFinite(a) && a > 0) entry.aforo = a;
     const image = String(r.image ?? "").trim();
     if (image) entry.image = image;
+    const media = normalizeMedia(r.media, id);
+    if (media.length) entry.media = media;
     out.push(entry);
   });
   return out;

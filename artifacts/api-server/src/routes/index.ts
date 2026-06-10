@@ -14,6 +14,7 @@ import spacesRouter from "./spaces";
 import montajeRouter from "./montaje";
 import volunteersRouter from "./volunteers";
 import catalogsRouter from "./catalogs";
+import storageRouter from "./storage";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(spacesRouter);
 router.use(montajeRouter);
 router.use(volunteersRouter);
 router.use(catalogsRouter);
+router.use(storageRouter);
 
 export default router;
