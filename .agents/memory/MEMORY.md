@@ -11,3 +11,4 @@
 - [Cotización-required exemptions](cotizacion-required-rule.md) — items whose statusCotizacion is a "No Aplica (In-Kind/Voluntario)" value are exempt from the cotización required-field check (no "incompleto" flag).
 - [Concurrent budget editing](concurrent-budget-editing.md) — rev counter + atomic POST /batch under advisory lock; PUT optimistic-locked (409) for migration only; ~5s poll refresh; structural mutations must use applyBatch not saveFull.
 - [Space media storage](space-media-storage.md) — Espacios photos/videos store only objectPath in catalog; serve via /api/storage${objectPath}; normalized money-neutrally both ends; C2-edit gated.
+- [Work-stage field](work-stage-field.md) — independent workStage (normal/en-progreso/staged); ONLY staged is excluded from totals/KPIs/dashboard; itemWorkStage default normal; money-neutral (recalcItem spreads it).

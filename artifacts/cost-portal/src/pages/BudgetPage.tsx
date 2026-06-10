@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   Search, Download, Plus, ChevronRight, ChevronDown, ChevronUp, ChevronsUpDown, Info,
   Tag, Trash2, AlertTriangle, ShieldAlert, MessageSquare, ExternalLink,
-  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus, MapPin, Lock, SendHorizontal, Truck, PackageCheck, PackageX, Copy, Building2, RefreshCw
+  Cloud, CloudOff, Loader2, Pencil, UserCircle, FileText, Flag, CheckCircle2, Star, Settings, Columns2, ListPlus, MapPin, Lock, SendHorizontal, Truck, PackageCheck, PackageX, Copy, Building2, RefreshCw, Layers
 } from "lucide-react";
 import { CreateTaskFromItemDialog } from "@/components/CreateTaskFromItemDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,10 +12,11 @@ import { FlagsChips, type FlagKey } from "@/components/budget/FlagsChips";
 import { ColumnsMenu } from "@/components/budget/ColumnsMenu";
 import { FiltersPopover, type ActiveFilterChip } from "@/components/budget/FiltersPopover";
 import { BulkActionsBar } from "@/components/budget/BulkActionsBar";
+import { StageBadge } from "@/components/budget/StageBadge";
 import { BudgetHelpGuide } from "@/components/budget/BudgetHelpGuide";
 import { BUDGET_COLUMNS, DEFAULT_VISIBLE } from "@/components/budget/columns";
 import type { LinkedBudgetItem } from "@/data/tasksBoardData";
-import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, STATUS_COLORS, STATUS_SHORT_LABELS, derivePhase, phaseSpaceDay, spaceOptionGroupsForItem, allSpaceRefs, itemSpaceName, itemLugar, allLugares, migrateItems, type BudgetItem, type QuoteOption, type SubEvent, type SpaceDayKey } from "@/data/budgetData";
+import { INITIAL_BUDGET_ITEMS, DEFAULT_SUB_EVENT_ID, STATUS_COLORS, STATUS_SHORT_LABELS, derivePhase, phaseSpaceDay, spaceOptionGroupsForItem, allSpaceRefs, itemSpaceName, itemLugar, allLugares, migrateItems, isStaged, itemWorkStage, WORK_STAGE_VALUES, WORK_STAGE_SHORT, WORK_STAGE_LABELS, type BudgetItem, type QuoteOption, type SubEvent, type SpaceDayKey, type WorkStage } from "@/data/budgetData";
 import { recalcItem, computeTransportAllocations, getItemDataIssues } from "@/lib/budgetCalc";
 import { RowErrorBoundary } from "@/components/ErrorBoundary";
 import { DataIssueBadges } from "@/components/budget/DataIssueBadges";
@@ -367,6 +368,7 @@ export default function BudgetPage({
   const [filterIssue, setFilterIssue] = useState("ALL");
   const [filterQtyDias, setFilterQtyDias] = useState<Set<number>>(new Set());
   const [filterPhase, setFilterPhase] = useState<string>("ALL");
+  const [filterStage, setFilterStage] = useState<string>("ALL");
   const [filterPending, setFilterPending] = useState(false);
   const [filterAccionReq, setFilterAccionReq] = useState(false);
   const [filterLogistica, setFilterLogistica] = useState(false);
@@ -405,7 +407,7 @@ export default function BudgetPage({
     evento: "MAIN EVENT", subEventId: DEFAULT_SUB_EVENT_ID, area: "", centroCosto: "", item: "", descripcion: "", notas: "",
     inKind: false, agencyFee: false, qty: 1, uom: "", porDias: "NO", qtyDias: 1,
     precioUnitario: 0, subtotal: 0, aplicaFee: "NO", fee: 0, subtotalConFee: 0, iva: 0, total: 0,
-    cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, ivaMode: "raw", soloPresupuestado: false, accionRequerida: false, logisticaFisica: false, gestionPendiente: false, statusCotizacion: "",
+    cotizacion: "", cotizacionLink: "", documento: "", proveedor: "", validarCosto: false, contratarAparte: false, ivaMode: "raw", soloPresupuestado: false, accionRequerida: false, logisticaFisica: false, gestionPendiente: false, statusCotizacion: "", workStage: "normal",
   });
 
   const subEventFilteredItems = useMemo(() => {
@@ -614,6 +616,7 @@ export default function BudgetPage({
     else if (filterIssue === "NOTRANSPORT") out = out.filter(i => (issuesByItem.get(i.id) || []).some(x => x.key === "notransport"));
     if (filterQtyDias.size > 0) out = out.filter(i => filterQtyDias.has(Number(i.qtyDias)));
     if (filterPhase !== "ALL") out = out.filter(i => derivePhase(i) === filterPhase);
+    if (filterStage !== "ALL") out = out.filter(i => itemWorkStage(i) === filterStage);
     if (filterPending) out = out.filter(i => i.cotizacion === "PENDING");
     if (filterAccionReq) out = out.filter(i => i.accionRequerida);
     if (filterLogistica) out = out.filter(i => i.logisticaFisica);
@@ -635,7 +638,7 @@ export default function BudgetPage({
       );
     }
     return out;
-  }, [items, spaces, issuesByItem, filterSubEvents, filterArea, filterLugar, filterEspacio, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterReviewed, filterPrecio, filterIssue, filterQtyDias, filterPhase, filterPending, filterAccionReq, filterLogistica, filterGestion, filterValidar, filterAparte, filterNiceToHave, search]);
+  }, [items, spaces, issuesByItem, filterSubEvents, filterArea, filterLugar, filterEspacio, filterCentro, filterProveedor, filterProductora, filterFeeEnCotiz, filterCotizacion, filterAsignado, filterStatus, filterInKind, filterReviewed, filterPrecio, filterIssue, filterQtyDias, filterPhase, filterStage, filterPending, filterAccionReq, filterLogistica, filterGestion, filterValidar, filterAparte, filterNiceToHave, search]);
 
   const sorted = useMemo(() => {
     if (!sortKey) return filtered;
@@ -720,7 +723,7 @@ export default function BudgetPage({
               key: `${gKey}::${k}`,
               sample: arr[0],
               children: arr,
-              total: arr.reduce((s, x) => s + x.total, 0),
+              total: arr.reduce((s, x) => s + (isStaged(x) ? 0 : x.total), 0),
               sumQty: arr.reduce((s, x) => s + (Number(x.qty) || 0), 0),
               sumDias: arr.reduce((s, x) => s + (Number(x.qtyDias) || 0), 0),
             });
@@ -752,6 +755,7 @@ export default function BudgetPage({
     };
     for (const s of subEvents) ensure(s.id);
     for (const it of items) {
+      if (isStaged(it)) continue;
       const id = derivePhase(it);
       const b = ensure(id);
       b.count++;
@@ -1025,6 +1029,7 @@ export default function BudgetPage({
           costoEnOtroItem: editItem.costoEnOtroItem ?? i.costoEnOtroItem ?? false,
           soloPresupuestado: editItem.soloPresupuestado ?? i.soloPresupuestado ?? false,
           statusCotizacion: editItem.statusCotizacion ?? i.statusCotizacion ?? "",
+          workStage: editItem.workStage ?? i.workStage ?? "normal",
           isTransport: editItem.isTransport ?? i.isTransport ?? false,
           transportMode: editItem.transportMode ?? i.transportMode,
           coveredItemIds: editItem.coveredItemIds ?? i.coveredItemIds,
@@ -1081,6 +1086,7 @@ export default function BudgetPage({
       niceToHave: newItem.niceToHave || false,
       costoEnOtroItem: newItem.costoEnOtroItem || false,
       statusCotizacion: newItem.statusCotizacion || "",
+      workStage: newItem.workStage || "normal",
       isTransport: newItem.isTransport || false,
       transportMode: newItem.transportMode,
       coveredItemIds: newItem.coveredItemIds,
@@ -1346,8 +1352,8 @@ export default function BudgetPage({
 
   const bulkExportCsv = useCallback(() => {
     const rows = items.filter(i => selectedIds.has(i.id));
-    const headers = ["item", "evento", "area", "centroCosto", "qty", "precioUnitario", "total", "proveedor", "statusCotizacion"];
-    const csv = [headers.join(","), ...rows.map(r => headers.map(h => `"${String((r as any)[h] ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
+    const headers = ["item", "evento", "area", "centroCosto", "qty", "precioUnitario", "total", "proveedor", "statusCotizacion", "workStage"];
+    const csv = [headers.join(","), ...rows.map(r => headers.map(h => `"${String(h === "workStage" ? itemWorkStage(r) : ((r as any)[h] ?? "")).replace(/"/g, '""')}"`).join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1355,22 +1361,36 @@ export default function BudgetPage({
     URL.revokeObjectURL(url);
   }, [items, selectedIds]);
 
-  const totalBudget = useMemo(() => filtered.reduce((s, i) => s + i.total, 0), [filtered]);
-  const cashSinFee = useMemo(() => filtered.filter(i => !i.inKind && i.total > 0).reduce((s, i) => s + i.subtotal + i.iva + (i.turismo || 0), 0), [filtered]);
-  const totalInKindCount = useMemo(() => filtered.filter(i => i.inKind).length, [filtered]);
-  const totalInKindSum = useMemo(() => filtered.filter(i => i.inKind).reduce((s, i) => s + i.total, 0), [filtered]);
-  const pendingCount = useMemo(() => filtered.filter(i => i.cotizacion === "PENDING").length, [filtered]);
-  const validarCount = useMemo(() => filtered.filter(i => i.validarCosto).length, [filtered]);
-  const contratarAparteCount = useMemo(() => filtered.filter(i => i.contratarAparte).length, [filtered]);
-  const soloPresupuestadoSum = useMemo(() => filtered.filter(i => i.soloPresupuestado).reduce((s, i) => s + i.total, 0), [filtered]);
-  const accionRequeridaCount = useMemo(() => filtered.filter(i => i.accionRequerida).length, [filtered]);
-  const logisticaCount = useMemo(() => filtered.filter(i => i.logisticaFisica).length, [filtered]);
-  const gestionCount = useMemo(() => filtered.filter(i => i.gestionPendiente).length, [filtered]);
-  const feeProductoraSum = useMemo(() => filtered.reduce((s, i) => s + getFeeProductora(i), 0), [filtered]);
-  const feeExplicitSum = useMemo(() => filtered.reduce((s, i) => s + i.fee, 0), [filtered]);
-  const feeIncluidoSum = useMemo(() => filtered.reduce((s, i) => s + (i.feeIncluido || 0), 0), [filtered]);
-  const niceToHaveCount = useMemo(() => filtered.filter(i => i.niceToHave).length, [filtered]);
-  const niceToHaveSum = useMemo(() => filtered.filter(i => i.niceToHave).reduce((s, i) => s + i.total, 0), [filtered]);
+  // Staged items stay visible in the table but are EXCLUDED from every total,
+  // KPI and chart. "En progreso" still counts. `counted` is the money-bearing
+  // subset of the current filter; `stagedItems` drives the discreet excluded
+  // indicator. All KPI aggregations below derive from `counted`, never `filtered`.
+  const stagedItems = useMemo(() => filtered.filter(i => isStaged(i)), [filtered]);
+  const counted = useMemo(() => filtered.filter(i => !isStaged(i)), [filtered]);
+  const stagedCount = stagedItems.length;
+  const stagedSum = useMemo(() => stagedItems.reduce((s, i) => s + i.total, 0), [stagedItems]);
+  const stageCounts = useMemo(() => {
+    const m: Record<WorkStage, number> = { normal: 0, "en-progreso": 0, staged: 0 };
+    for (const it of items) m[itemWorkStage(it)]++;
+    return m;
+  }, [items]);
+
+  const totalBudget = useMemo(() => counted.reduce((s, i) => s + i.total, 0), [counted]);
+  const cashSinFee = useMemo(() => counted.filter(i => !i.inKind && i.total > 0).reduce((s, i) => s + i.subtotal + i.iva + (i.turismo || 0), 0), [counted]);
+  const totalInKindCount = useMemo(() => counted.filter(i => i.inKind).length, [counted]);
+  const totalInKindSum = useMemo(() => counted.filter(i => i.inKind).reduce((s, i) => s + i.total, 0), [counted]);
+  const pendingCount = useMemo(() => counted.filter(i => i.cotizacion === "PENDING").length, [counted]);
+  const validarCount = useMemo(() => counted.filter(i => i.validarCosto).length, [counted]);
+  const contratarAparteCount = useMemo(() => counted.filter(i => i.contratarAparte).length, [counted]);
+  const soloPresupuestadoSum = useMemo(() => counted.filter(i => i.soloPresupuestado).reduce((s, i) => s + i.total, 0), [counted]);
+  const accionRequeridaCount = useMemo(() => counted.filter(i => i.accionRequerida).length, [counted]);
+  const logisticaCount = useMemo(() => counted.filter(i => i.logisticaFisica).length, [counted]);
+  const gestionCount = useMemo(() => counted.filter(i => i.gestionPendiente).length, [counted]);
+  const feeProductoraSum = useMemo(() => counted.reduce((s, i) => s + getFeeProductora(i), 0), [counted]);
+  const feeExplicitSum = useMemo(() => counted.reduce((s, i) => s + i.fee, 0), [counted]);
+  const feeIncluidoSum = useMemo(() => counted.reduce((s, i) => s + (i.feeIncluido || 0), 0), [counted]);
+  const niceToHaveCount = useMemo(() => counted.filter(i => i.niceToHave).length, [counted]);
+  const niceToHaveSum = useMemo(() => counted.filter(i => i.niceToHave).reduce((s, i) => s + i.total, 0), [counted]);
 
   const exportCSV = () => {
     const headers = [
@@ -1380,7 +1400,7 @@ export default function BudgetPage({
       "FEE 20%", "SUBTOTAL CON FEE", "IVA", "TOTAL", "COTIZACION", "SOLO PRESUPUESTADO?", "IMAGEN DE REFERENCIA", "PROVEEDOR",
       "REVIEWED BY", "VALIDAR COSTO?", "CONTRATAR APARTE?", "ACCIÓN REQUERIDA?",
       ...(isFinal ? ["LOGÍSTICA FÍSICA?", "GESTIÓN / PENDIENTE?"] : []),
-      "NICE TO HAVE?", "COSTO EN OTRO ITEM?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO", "STATUS COTIZACION"
+      "NICE TO HAVE?", "COSTO EN OTRO ITEM?", "COTIZACION LINK", "EXENTO IVA?", "ASSIGNED TO", "STATUS COTIZACION", "ETAPA"
     ];
     const rows = filtered.map(i => {
       const redact = redactMode && !isAuroraOwned(i);
@@ -1394,7 +1414,7 @@ export default function BudgetPage({
         i.proveedor || "", i.reviewedBy || "", i.validarCosto ? "SI" : "NO", i.contratarAparte ? "SI" : "NO",
         i.accionRequerida ? "SI" : "NO",
         ...(isFinal ? [i.logisticaFisica ? "SI" : "NO", i.gestionPendiente ? "SI" : "NO"] : []),
-        i.niceToHave ? "SI" : "NO", i.costoEnOtroItem ? "SI" : "NO", i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || "", i.statusCotizacion || "",
+        i.niceToHave ? "SI" : "NO", i.costoEnOtroItem ? "SI" : "NO", i.cotizacionLink || "", i.exentoIva ? "SI" : "NO", i.assignedTo || "", i.statusCotizacion || "", WORK_STAGE_SHORT[itemWorkStage(i)],
         i.aplicaTurismo ? "SI" : "NO", redact ? "" : (i.turismo || 0), redact ? "" : (i.feeIncluido || 0)
       ];
     });
@@ -1522,7 +1542,7 @@ export default function BudgetPage({
         totalInKindCount={totalInKindCount}
         totalInKindSum={totalInKindSum}
         pendingCount={pendingCount}
-        itemCount={filtered.length}
+        itemCount={counted.length}
         validarCount={validarCount}
         contratarAparteCount={contratarAparteCount}
         soloPresupuestadoSum={soloPresupuestadoSum}
@@ -1612,6 +1632,7 @@ export default function BudgetPage({
             }
             if (filterQtyDias.size > 0) chips.push({ key: "qd", label: `Días: ${Array.from(filterQtyDias).sort().join(",")}`, onClear: () => setFilterQtyDias(new Set()) });
             if (filterPhase !== "ALL") chips.push({ key: "dia", label: `Día: ${subEventName(filterPhase)}`, onClear: () => setFilterPhase("ALL") });
+            if (filterStage !== "ALL") chips.push({ key: "stage", label: `Etapa: ${WORK_STAGE_LABELS[filterStage as WorkStage] || filterStage}`, onClear: () => setFilterStage("ALL") });
             if (filterLugar !== "ALL") chips.push({ key: "lug", label: `Lugar: ${filterLugar}`, onClear: () => setFilterLugar("ALL") });
             if (filterEspacio !== "ALL") chips.push({ key: "esp", label: `Espacio: ${filterEspacio}`, onClear: () => setFilterEspacio("ALL") });
             if (filterPending) chips.push({ key: "pn", label: "Pending Quotes", onClear: () => setFilterPending(false) });
@@ -1623,7 +1644,7 @@ export default function BudgetPage({
             if (filterNiceToHave) chips.push({ key: "nh", label: "Nice to Have", onClear: () => setFilterNiceToHave(false) });
             return chips;
           })()}
-          onClearAll={() => { setFilterProveedor(new Set()); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterReviewed("ALL"); setFilterPrecio("ALL"); setFilterIssue("ALL"); setFilterQtyDias(new Set()); setFilterPhase("ALL"); setFilterLugar("ALL"); setFilterEspacio("ALL"); setFilterPending(false); setFilterAccionReq(false); setFilterLogistica(false); setFilterGestion(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
+          onClearAll={() => { setFilterProveedor(new Set()); setFilterProductora("ALL"); setFilterFeeEnCotiz("ALL"); setFilterCotizacion("ALL"); setFilterAsignado("ALL"); setFilterStatus("ALL"); setFilterInKind("ALL"); setFilterReviewed("ALL"); setFilterPrecio("ALL"); setFilterIssue("ALL"); setFilterQtyDias(new Set()); setFilterPhase("ALL"); setFilterStage("ALL"); setFilterLugar("ALL"); setFilterEspacio("ALL"); setFilterPending(false); setFilterAccionReq(false); setFilterLogistica(false); setFilterGestion(false); setFilterValidar(false); setFilterAparte(false); setFilterNiceToHave(false); }}
         >
           <div className="flex flex-wrap gap-3 items-center">
           <Popover>
@@ -1757,6 +1778,15 @@ export default function BudgetPage({
               ))}
             </SelectContent>
           </Select>
+          <Select value={filterStage} onValueChange={setFilterStage}>
+            <SelectTrigger className="w-[170px] bg-card border-card-border text-xs"><SelectValue placeholder="Etapa" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Etapa: Todas</SelectItem>
+              {WORK_STAGE_VALUES.map(s => (
+                <SelectItem key={s} value={s}>{WORK_STAGE_LABELS[s]} ({stageCounts[s]})</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={filterLugar} onValueChange={setFilterLugar}>
             <SelectTrigger className="w-[180px] bg-card border-card-border text-xs"><SelectValue placeholder="Lugar / Sede" /></SelectTrigger>
             <SelectContent>
@@ -1854,6 +1884,21 @@ export default function BudgetPage({
               <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-semibold", p.active ? "bg-white/40" : "bg-muted text-muted-foreground")}>{p.count}</span>
             </button>
           ))}
+          {stagedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilterStage(filterStage === "staged" ? "ALL" : "staged")}
+              title={`${stagedCount} ítem(s) en Staged excluidos de totales · ${formatUSD(stagedSum)}`}
+              className={cn(
+                "h-8 px-2.5 rounded-md border text-xs flex items-center gap-1.5 transition-colors",
+                filterStage === "staged" ? "bg-slate-200 border-slate-400 text-slate-700" : "bg-card border-dashed border-slate-300 text-muted-foreground hover:border-slate-400"
+              )}
+            >
+              <Layers className="w-3 h-3" />
+              <span>Staged excluidos</span>
+              <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-semibold", filterStage === "staged" ? "bg-white/60" : "bg-muted text-muted-foreground")}>{stagedCount} · {formatUSD(stagedSum)}</span>
+            </button>
+          )}
           <span className="text-xs text-muted-foreground ml-auto">{filtered.length} of {items.length} items</span>
         </div>
       </div>
@@ -1955,7 +2000,7 @@ export default function BudgetPage({
             <tbody>
               {Array.from(grouped.entries()).map(([key, group]) => {
                 const isExpanded = expandedAreas.has(key);
-                const groupTotal = group.items.reduce((s, i) => s + i.total, 0);
+                const groupTotal = group.items.reduce((s, i) => s + (isStaged(i) ? 0 : i.total), 0);
                 const hasInKind = group.items.some(i => i.inKind);
                 const sectionIds = group.items.map(i => i.id);
                 const selectedCount = sectionIds.reduce((n, id) => n + (selectedIds.has(id) ? 1 : 0), 0);
@@ -2015,6 +2060,8 @@ export default function BudgetPage({
                       className={cn(
                         "border-b border-border/50 transition-colors text-xs",
                         item.inKind ? "bg-amber-500/5" : "hover:bg-muted/20",
+                        itemWorkStage(item) === "staged" && "opacity-50",
+                        itemWorkStage(item) === "en-progreso" && "opacity-75",
                         remoteEditor && "remote-edited-row"
                       )}
                     >
@@ -2100,6 +2147,7 @@ export default function BudgetPage({
                           )}
                         </div>
                         <EditableCell value={item.item} onSave={v => updateItem(item.id, "item", v)} className="font-medium text-foreground text-xs" disabled={!canEdit} />
+                        <StageBadge item={item} />
                         {remoteEditor && (
                           <span className="mt-0.5 inline-flex items-center gap-1 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border border-blue-500/40 bg-blue-500/15 text-blue-600 dark:text-blue-300">
                             <RefreshCw className="w-2.5 h-2.5" />
@@ -2843,6 +2891,7 @@ export default function BudgetPage({
         onDelete={bulkDelete}
         onExportCsv={bulkExportCsv}
         onSetStatus={(s) => bulkUpdate(it => ({ ...it, statusCotizacion: s }))}
+        onSetStage={(stage) => { bulkUpdate(it => ({ ...it, workStage: stage })); toast({ title: "Etapa actualizada", description: `${selectedIds.size} ítem(s) → ${WORK_STAGE_LABELS[stage]}` }); }}
         onSetProveedor={(p) => bulkUpdate(it => ({ ...it, proveedor: p }))}
         onToggleFlag={(flag, on) => {
           const reviewerName = user?.name || "Unknown";

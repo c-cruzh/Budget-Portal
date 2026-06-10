@@ -23,9 +23,13 @@ import {
   IVA_MODE_LABELS,
   TRANSPORT_MODE_VALUES,
   TRANSPORT_MODE_LABELS,
+  WORK_STAGE_VALUES,
+  WORK_STAGE_LABELS,
+  itemWorkStage,
   type BudgetItem,
   type SubEvent,
   type SpacesCatalog,
+  type WorkStage,
 } from "@/data/budgetData";
 
 /** Sentinel used by Selects to represent the explicit "NO APLICA" / unset choice. */
@@ -484,6 +488,25 @@ export function BudgetItemDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Etapa de trabajo (staging) */}
+          <div>
+            <FieldLabel>Etapa de trabajo</FieldLabel>
+            <Select
+              value={itemWorkStage(value)}
+              onValueChange={v => set("workStage", v as WorkStage)}
+            >
+              <SelectTrigger><SelectValue placeholder="ETAPA..." /></SelectTrigger>
+              <SelectContent>
+                {WORK_STAGE_VALUES.map(s => (
+                  <SelectItem key={s} value={s}>{WORK_STAGE_LABELS[s]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              "Staged / Pending" excluye el ítem de todos los totales y gráficos. "En progreso" sigue contando.
+            </p>
           </div>
 
           {/* Asignado a */}

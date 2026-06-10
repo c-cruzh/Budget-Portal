@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trash2, X, Download, Tag, ShieldAlert, AlertTriangle, MoveRight, ChevronDown, Columns2, SendHorizontal, CheckCircle2, Percent, CalendarDays, Zap, FileText, Copy, ListPlus, Truck, Link2, ClipboardList } from "lucide-react";
+import { Trash2, X, Download, Tag, ShieldAlert, AlertTriangle, MoveRight, ChevronDown, Columns2, SendHorizontal, CheckCircle2, Percent, CalendarDays, Zap, FileText, Copy, ListPlus, Truck, Link2, ClipboardList, Layers } from "lucide-react";
+import { WORK_STAGE_LABELS, type WorkStage } from "@/data/budgetData";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -33,6 +34,7 @@ export interface BulkActionsProps {
   onSetStatus: (status: string) => void;
   onSetProveedor: (proveedor: string) => void;
   onToggleFlag: (flag: BulkFlag, on: boolean) => void;
+  onSetStage: (stage: WorkStage) => void;
   onMoveArea: (area: string) => void;
   onMoveCentro: (centro: string) => void;
   onSetCotizacion: (cotizacion: string) => void;
@@ -150,6 +152,8 @@ export function BulkActionsBar(props: BulkActionsProps) {
               </Button>
 
               <FlagPicker onToggle={props.onToggleFlag} isFinal={props.isFinal} />
+
+              <StagePicker onPick={props.onSetStage} />
 
               <Button
                 size="sm"
@@ -341,6 +345,36 @@ function TransportPicker({
             </button>
           ))}
         </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function StagePicker({ onPick }: { onPick: (stage: WorkStage) => void }) {
+  const stages: { key: WorkStage; label: string }[] = [
+    { key: "normal", label: WORK_STAGE_LABELS.normal },
+    { key: "en-progreso", label: WORK_STAGE_LABELS["en-progreso"] },
+    { key: "staged", label: WORK_STAGE_LABELS.staged },
+  ];
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button size="sm" variant="outline" className="h-8 gap-1 text-xs">
+          <Layers className="w-3 h-3" />
+          Etapa
+          <ChevronDown className="w-3 h-3" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-1" align="start">
+        {stages.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => onPick(key)}
+            className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-muted"
+          >
+            {label}
+          </button>
+        ))}
       </PopoverContent>
     </Popover>
   );

@@ -4,7 +4,7 @@ import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartTooltip,
   ResponsiveContainer
 } from "recharts";
-import { INITIAL_BUDGET_ITEMS, EVENT_PHASES, derivePhase, type BudgetItem } from "@/data/budgetData";
+import { INITIAL_BUDGET_ITEMS, EVENT_PHASES, derivePhase, isStaged, type BudgetItem } from "@/data/budgetData";
 import { recalcItem } from "@/lib/budgetCalc";
 import { useBudgetApi } from "@/hooks/useBudgetApi";
 import { formatUSD } from "@/lib/utils";
@@ -21,7 +21,8 @@ function getFeeProductora(item: BudgetItem): number {
 }
 
 export default function DashboardPage() {
-  const { items, loading, patchItem } = useBudgetApi(SEED_ITEMS, recalcItem);
+  const { items: allItems, loading, patchItem } = useBudgetApi(SEED_ITEMS, recalcItem);
+  const items = useMemo(() => allItems.filter(i => !isStaged(i)), [allItems]);
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [editingNote, setEditingNote] = useState<string | null>(null);
   const [noteValue, setNoteValue] = useState("");

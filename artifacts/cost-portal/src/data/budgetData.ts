@@ -118,6 +118,45 @@ export function isIvaMode(v: unknown): v is IvaMode {
 }
 
 /**
+ * Work-stage of a budget line — an independent staging axis, orthogonal to
+ * `statusCotizacion` and every boolean flag.
+ *  - "normal": confirmed / counts normally (the default; also the value used for
+ *    rows where `workStage` is undefined).
+ *  - "en-progreso": still being worked on. Visual mark only — STILL counts in
+ *    every total, KPI and chart.
+ *  - "staged": parked / pending. EXCLUDED from all totals, KPIs and charts.
+ */
+export type WorkStage = "normal" | "en-progreso" | "staged";
+
+export const WORK_STAGE_VALUES: WorkStage[] = ["normal", "en-progreso", "staged"];
+
+export const WORK_STAGE_LABELS: Record<WorkStage, string> = {
+  normal: "Normal / Confirmado",
+  "en-progreso": "En progreso",
+  staged: "Staged / Pending",
+};
+
+export const WORK_STAGE_SHORT: Record<WorkStage, string> = {
+  normal: "Normal",
+  "en-progreso": "En progreso",
+  staged: "Staged",
+};
+
+export function isWorkStage(v: unknown): v is WorkStage {
+  return v === "normal" || v === "en-progreso" || v === "staged";
+}
+
+/** Normalized work-stage for an item (undefined / unknown → "normal"). */
+export function itemWorkStage(it: { workStage?: WorkStage }): WorkStage {
+  return it.workStage === "en-progreso" || it.workStage === "staged" ? it.workStage : "normal";
+}
+
+/** True when an item is staged and must be excluded from totals/KPIs/charts. */
+export function isStaged(it: { workStage?: WorkStage }): boolean {
+  return it.workStage === "staged";
+}
+
+/**
  * How a transport/delivery (montaje) budget line is treated for display:
  *  - "association": traceability only — the cost stays whole on the transport
  *    line; covered items just show who delivers/installs them.
@@ -258,6 +297,13 @@ export interface BudgetItem {
   niceToHave?: boolean;
   /** Marks this line as cost $0 because its economic cost is already contemplated in another item. */
   costoEnOtroItem?: boolean;
+  /**
+   * Work-stage of the line, independent of `statusCotizacion` and every flag.
+   * - "normal" (or undefined): confirmed / counts normally (default).
+   * - "en-progreso": still being worked on; STILL counts in all totals (visual mark only).
+   * - "staged": parked / pending; EXCLUDED from every total, KPI and chart.
+   */
+  workStage?: WorkStage;
   /**
    * Stable reference to exactly ONE catalog room (SpaceEntry.id), across ESEN
    * Día 1 / Día 2 and every Lugar/Sede venue. Source of truth for the assigned

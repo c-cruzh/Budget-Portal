@@ -52,7 +52,7 @@ const TRACKED_BUDGET_FIELDS = [
   "inKind", "aplicaFee", "validarCosto", "contratarAparte", "agencyFee",
   "aplicaTurismo", "exentoIva", "niceToHave", "approvedQuoteId",
   "assignedTo", "soloPresupuestado", "accionRequerida", "logisticaFisica", "gestionPendiente", "reviewedBy",
-  "statusCotizacion", "mitigable", "mitigNote", "subEventId",
+  "statusCotizacion", "mitigable", "mitigNote", "subEventId", "workStage",
 ];
 
 export function diffSubEvents(
