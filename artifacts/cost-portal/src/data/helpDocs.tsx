@@ -223,7 +223,7 @@ export const HELP_DOCS: HelpCategory[] = [
           { term: "In-Kind Total", desc: "Valor de las contribuciones en especie: donaciones, venue y patrocinios que no se pagan en efectivo." },
           { term: "Presupuestado", desc: "Monto de items 'solo presupuestado' — estimados internos sin cotización formal." },
           { term: "Pending Quotes", desc: "Cantidad de items con cotización PENDING (sin respuesta del proveedor)." },
-          { term: "Acción Req. / A Validar / Aparte / Nice to Have", desc: "Banderas de seguimiento: requieren acción, conviene validar costo, conviene contratar directo (evitar fee), o son deseables pero recortables." },
+          { term: "Acción Req. / A Validar / Aparte / Nice to Have", desc: "Banderas de seguimiento: requieren acción, no hay visibilidad de un costo final (la cotización sufrió varianzas o faltan datos por llenar, reflejados como $0), conviene contratar directo (evitar fee), o son deseables pero recortables." },
         ],
       },
       {
@@ -366,7 +366,7 @@ export const HELP_DOCS: HelpCategory[] = [
           { term: "Casilla de selección", desc: "Marca uno o varios items para aplicarles acciones en lote desde la barra inferior." },
           { term: "Cotización aprobada", desc: "Cuando un item tiene varias cotizaciones, marca cuál es la aprobada; esa define el precio que entra al total." },
           { term: "Enlaces y tareas", desc: "Abre el documento o cotización en una pestaña nueva, edita el enlace, o crea una tarea de seguimiento ligada al item." },
-          { term: "Banderas", desc: "Activa/desactiva 'Validar costo', 'Contratar aparte' (evitar fee) y 'Acción requerida'. Alimentan los KPIs y los filtros." },
+          { term: "Banderas", desc: "Activa/desactiva 'Validar costo' (sin visibilidad de un costo final: la cotización sufrió varianzas o faltan datos por llenar, reflejados como $0), 'Contratar aparte' (evitar fee) y 'Acción requerida'. Alimentan los KPIs y los filtros." },
         ],
       },
       {

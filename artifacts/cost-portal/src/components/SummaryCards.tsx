@@ -85,10 +85,10 @@ export function SummaryCards({ totalBudget, cashSinFee, totalInKindCount, totalI
     {
       label: "A Validar",
       value: String(validarCount),
-      sub: "Posible costo inflado",
+      sub: "Sin costo final visible",
       icon: AlertTriangle,
       color: validarCount > 0 ? "bg-red-500/10 text-red-500" : "bg-emerald-500/10 text-emerald-500",
-      info: "Items con posible costo inflado. Validar con otros proveedores.",
+      info: "Items sin visibilidad de un costo final: la cotización original sufrió varianzas, o hay datos pendientes de llenar que hoy se reflejan como $0.",
     },
     {
       label: "Aparte",

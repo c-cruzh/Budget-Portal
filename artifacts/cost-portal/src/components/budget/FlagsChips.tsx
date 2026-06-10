@@ -15,7 +15,7 @@ interface ItemFlags {
 
 const FLAG_DEFS: { key: FlagKey; label: string; Icon: typeof Tag; activeCls: string }[] = [
   { key: "inKind", label: "In-Kind (donado o sponsor)", Icon: Tag, activeCls: "bg-amber-500/15 text-amber-600 border-amber-500/30" },
-  { key: "validarCosto", label: "Validar costo (posible costo inflado)", Icon: AlertTriangle, activeCls: "bg-red-500/15 text-red-500 border-red-500/30" },
+  { key: "validarCosto", label: "Validar costo — sin visibilidad de un costo final (la cotización sufrió varianzas o hay datos pendientes de llenar, reflejados como $0)", Icon: AlertTriangle, activeCls: "bg-red-500/15 text-red-500 border-red-500/30" },
   { key: "contratarAparte", label: "Contratar aparte (evitar fee 20%)", Icon: ShieldAlert, activeCls: "bg-amber-500/15 text-amber-600 border-amber-500/30" },
   { key: "accionRequerida", label: "Acción requerida", Icon: Flag, activeCls: "bg-orange-500/15 text-orange-500 border-orange-500/30" },
   { key: "niceToHave", label: "Nice to Have", Icon: Star, activeCls: "bg-purple-500/15 text-purple-500 border-purple-500/30" },
